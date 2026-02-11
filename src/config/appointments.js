@@ -16,7 +16,7 @@ export const APPOINTMENT_TYPES = [
 ];
 
 // Lunes (1) a Jueves (4)
-export const WORK_DAYS = [1, 2, 3, 4];
+export const WORK_DAYS = [1, 2, 3, 4, 5, 6];
 
 export const WORK_HOURS = {
   start: 9,
