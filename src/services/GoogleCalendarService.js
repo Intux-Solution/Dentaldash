@@ -27,11 +27,11 @@ export class GoogleCalendarService {
             description: appointment.notes || '',
             start: {
                 dateTime: appointment.start_time, // ISO string
-                timeZone: 'brandy', // Will be ignored by Google if dateTime has offset, but good practice
+                timeZone: 'America/Argentina/Buenos_Aires', // Will be ignored by Google if dateTime has offset, but good practice
             },
             end: {
                 dateTime: appointment.end_time,
-                timeZone: 'brandy',
+                timeZone: 'America/Argentina/Buenos_Aires',
             },
             // Check if we have patient email to add as attendee
             attendees: appointment.patientEmail ? [{ email: appointment.patientEmail }] : [],

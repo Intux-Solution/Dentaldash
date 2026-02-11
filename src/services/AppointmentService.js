@@ -150,7 +150,7 @@ export class AppointmentService {
                 .from('patients')
                 .select('id, email')
                 .eq('dni', data.dni)
-                .single();
+                .maybeSingle();
 
             if (existingPatient) {
                 patientId = existingPatient.id;
