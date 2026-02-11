@@ -22,6 +22,8 @@ export default function LoginView({ onSuccess }) {
 
 
 
+  const [isRegistering, setIsRegistering] = useState(false);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setCredentials((prev) => ({ ...prev, [name]: value }));
@@ -40,14 +42,30 @@ export default function LoginView({ onSuccess }) {
     setSuccess("");
 
     try {
-      // Supabase Login
-      await signIn(credentials.username.trim(), credentials.password);
+      if (isRegistering) {
+        // Supabase Registration
+        const { data, error } = await supabase.auth.signUp({
+          email: credentials.username.trim(),
+          password: credentials.password,
+        });
 
-      setSuccess("¡Bienvenido!");
-      // No necesitamos hacer nada más, App.js detectará el session change automáticamente
+        if (error) throw error;
+
+        if (data?.user?.identities?.length === 0) {
+          throw new Error('Este email ya está registrado. Intenta iniciar sesión.');
+        }
+
+        setSuccess("¡Cuenta creada! Revisa tu email para confirmar tu cuenta (si es necesario) o inicia sesión.");
+        setIsRegistering(false); // Switch back to login
+      } else {
+        // Supabase Login
+        await signIn(credentials.username.trim(), credentials.password);
+        setSuccess("¡Bienvenido!");
+        // No necesitamos hacer nada más, App.js detectará el session change automáticamente
+      }
 
     } catch (err) {
-      console.error("Login error:", err);
+      console.error("Auth error:", err);
       if (err.message === "Invalid login credentials") {
         setError("Usuario o contraseña incorrectos");
       } else {
@@ -59,8 +77,7 @@ export default function LoginView({ onSuccess }) {
   };
 
   const quickFill = (user) => {
-    // Placeholder for dev convenience if needed, otherwise empty
-    // setCredentials({ username: "test@example.com", password: "password" });
+    // Placeholder for dev convenience
   };
 
   // Forgot Password: submit
@@ -145,8 +162,8 @@ export default function LoginView({ onSuccess }) {
         {/* Panel de login */}
         <div className="relative z-10 flex items-center justify-center p-8">
           <div className="w-full max-w-md bg-white border rounded-2xl shadow-sm p-8">
-            <h1 className="text-3xl font-semibold text-gray-900">Login</h1>
-            <p className="text-gray-500 mt-2">Accedé a tu sistema odontológico.</p>
+            <h1 className="text-3xl font-semibold text-gray-900">{isRegistering ? "Crear Cuenta" : "Login"}</h1>
+            <p className="text-gray-500 mt-2">{isRegistering ? "Registrate para comenzar." : "Accedé a tu sistema odontológico."}</p>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               {/* Mensajes de estado */}
@@ -205,7 +222,7 @@ export default function LoginView({ onSuccess }) {
                 </div>
               </div>
 
-              {/* Botón Login */}
+              {/* Botón Login/Register */}
               <button
                 type="submit"
                 disabled={loading || !credentials.username.trim() || !credentials.password.trim()}
@@ -214,22 +231,36 @@ export default function LoginView({ onSuccess }) {
                 {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Ingresando...
+                    {isRegistering ? "Registrando..." : "Ingresando..."}
                   </>
                 ) : (
-                  "Ingresar"
+                  isRegistering ? "Registrarse" : "Ingresar"
                 )}
               </button>
 
-              {/* Olvidaste tu contraseña */}
-              <div className="text-center mt-4">
+              {/* Toggle Login/Register */}
+              <div className="text-center mt-4 space-y-2">
                 <button
                   type="button"
-                  className="text-sm text-gray-400 hover:underline hover:text-teal-700 transition-colors"
-                  onClick={() => { setFpOpen(true); setFpEmail(""); setFpMsg({ type: "", text: "" }); }}
+                  className="text-sm text-teal-600 hover:underline hover:text-teal-700 transition-colors block w-full"
+                  onClick={() => {
+                    setIsRegistering(!isRegistering);
+                    setError("");
+                    setSuccess("");
+                  }}
                 >
-                  ¿Olvidaste tu contraseña?
+                  {isRegistering ? "¿Ya tenés cuenta? Iniciá sesión" : "¿No tenés cuenta? Registrate"}
                 </button>
+
+                {!isRegistering && (
+                  <button
+                    type="button"
+                    className="text-sm text-gray-400 hover:underline hover:text-teal-700 transition-colors"
+                    onClick={() => { setFpOpen(true); setFpEmail(""); setFpMsg({ type: "", text: "" }); }}
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                )}
               </div>
             </form>
 
