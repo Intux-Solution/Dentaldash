@@ -5,9 +5,6 @@ function isPdf(url = "") {
   return typeof url === "string" && url.toLowerCase().endsWith(".pdf");
 }
 
-function isPdf(url = "") {
-  return typeof url === "string" && url.toLowerCase().endsWith(".pdf");
-}
 
 export default function ClinicalRecordModal({ open, patient, onClose }) {
   useEffect(() => {
