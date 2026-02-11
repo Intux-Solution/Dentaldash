@@ -168,19 +168,54 @@ export default function LoginView({ onSuccess }) {
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               {/* Mensajes de estado */}
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 animate-fade-in">
                   <AlertCircle size={16} />
-                  <span>{error}</span>
+                  {error}
                 </div>
               )}
               {success && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm flex items-center gap-2 animate-fade-in">
                   <CheckCircle size={16} />
-                  <span>{success}</span>
+                  {success}
                 </div>
               )}
 
-              {/* Campo Usuario */}
+              {/* Google Sign In */}
+              <button
+                type="button"
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    const { error } = await supabase.auth.signInWithOAuth({
+                      provider: 'google',
+                      options: {
+                        redirectTo: `${window.location.origin}/`,
+                        scopes: 'https://www.googleapis.com/auth/calendar', // Request Calendar access
+                        queryParams: {
+                          access_type: 'offline',
+                          prompt: 'consent',
+                        },
+                      },
+                    });
+                    if (error) throw error;
+                  } catch (err) {
+                    setError(err.message || 'Error al iniciar sesión con Google');
+                    setLoading(false);
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+                Continuar con Google
+              </button>
+
+              <div className="relative flex items-center py-2">
+                <div className="flex-grow border-t border-gray-300"></div>
+                <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">o con email</span>
+                <div className="flex-grow border-t border-gray-300"></div>
+              </div>
+
+              {/* Email */}
               <div>
                 <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                 <input

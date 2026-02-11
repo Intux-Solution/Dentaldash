@@ -18,7 +18,7 @@ export default function ChangePasswordModal({ open, onClose, user }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const n8nBaseUrl = process.env.REACT_APP_N8N_BASE || 'https://n8n-automation.chilldigital.tech';
+
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

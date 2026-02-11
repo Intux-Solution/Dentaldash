@@ -134,15 +134,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
       const freeAndLoad = async () => {
         if (idTurno && !freedRef.current) {
           try {
-            await apiFetch(N8N_ENDPOINTS.DELETE_APPOINTMENT, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                id: idTurno,
-                reason: 'Liberado para reprogramar',
-                canceledAt: new Date().toISOString(),
-              }),
-            });
+            await AppointmentService.deleteAppointment(idTurno);
             freedRef.current = true;
           } catch (e) {
             // Si falla el delete, continuamos pero avisamos

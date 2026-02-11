@@ -2,6 +2,7 @@
 import { supabase } from '../config/supabaseClient';
 import { WORK_HOURS, APPOINTMENT_TYPES } from '../config/appointments';
 import { to24h } from '../utils/appointments';
+import { GoogleCalendarService } from './GoogleCalendarService';
 
 export class AppointmentService {
 
@@ -52,53 +53,83 @@ export class AppointmentService {
      */
     static async getAvailableSlots(date, durationMinutes, excludeId = null) {
         try {
-            // 1. Definir rango del día
-            const dayStart = new Date(date);
-            dayStart.setHours(WORK_HOURS.start, 0, 0, 0);
-            const dayEnd = new Date(date);
-            dayEnd.setHours(WORK_HOURS.end, 0, 0, 0);
+            // 0. Determinar día de la semana
+            const inputDate = new Date(date);
+            // getDay() returns 0 (Sun) to 6 (Sat)
+            const dayOfWeek = inputDate.getDay();
 
-            // 2. Traer turnos existentes ese día
+            // 1. Obtener configuración de horarios para ese día
+            const { data: daySchedules, error: schedError } = await supabase
+                .from('schedules')
+                .select('*')
+                .eq('day_of_week', dayOfWeek)
+                .eq('is_active', true);
+
+            if (schedError) throw schedError;
+
+            if (!daySchedules || daySchedules.length === 0) {
+                return []; // No se trabaja este día
+            }
+
+            // 2. Traer turnos existentes ese día (para collision check)
+            // Definimos el rango total del día para la query (00:00 a 23:59) para estar seguros
+            const dayStartBound = new Date(date);
+            dayStartBound.setHours(0, 0, 0, 0);
+            const dayEndBound = new Date(date);
+            dayEndBound.setHours(23, 59, 59, 999);
+
             const { data: existing, error } = await supabase
                 .from('appointments')
                 .select('id, start_time, end_time')
-                .gte('start_time', dayStart.toISOString())
-                .lte('start_time', dayEnd.toISOString())
-                .neq('status', 'cancelled'); // Ignorar cancelados
+                .gte('start_time', dayStartBound.toISOString())
+                .lte('start_time', dayEndBound.toISOString())
+                .neq('status', 'cancelled');
 
             if (error) throw error;
 
-            // 3. Generar slots
+            // 3. Generar slots para CADA rango horario definido
             const slots = [];
-            let current = new Date(dayStart);
 
-            while (current < dayEnd) {
-                const slotStart = new Date(current);
-                const slotEnd = new Date(current.getTime() + durationMinutes * 60000);
+            for (const schedule of daySchedules) {
+                const [startHour, startMinute] = schedule.start_time.split(':');
+                const [endHour, endMinute] = schedule.end_time.split(':');
 
-                if (slotEnd > dayEnd) break;
+                const rangeStart = new Date(inputDate);
+                rangeStart.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
 
-                // Verificar colisión
-                const isOccupied = existing.some(app => {
-                    if (excludeId && app.id === excludeId) return false;
-                    const appStart = new Date(app.start_time);
-                    const appEnd = new Date(app.end_time);
+                const rangeEnd = new Date(inputDate);
+                rangeEnd.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
 
-                    // Lógica de colisión simple: (StartA < EndB) y (EndA > StartB)
-                    return (slotStart < appEnd && slotEnd > appStart);
-                });
+                let current = new Date(rangeStart);
 
-                if (!isOccupied) {
-                    slots.push(
-                        slotStart.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-                    );
+                while (current < rangeEnd) {
+                    const slotStart = new Date(current);
+                    const slotEnd = new Date(current.getTime() + durationMinutes * 60000);
+
+                    if (slotEnd > rangeEnd) break;
+
+                    // Verificar colisión
+                    const isOccupied = existing.some(app => {
+                        if (excludeId && app.id === excludeId) return false;
+                        const appStart = new Date(app.start_time);
+                        const appEnd = new Date(app.end_time);
+                        return (slotStart < appEnd && slotEnd > appStart);
+                    });
+
+                    if (!isOccupied) {
+                        slots.push(
+                            slotStart.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+                        );
+                    }
+
+                    // Avanzar por intervalo (hardcoded 30 mins o configurable si quisieran)
+                    current.setMinutes(current.getMinutes() + WORK_HOURS.interval);
                 }
-
-                // Avanzar por intervalo (ej. 30 mins)
-                current.setMinutes(current.getMinutes() + WORK_HOURS.interval);
             }
 
+            // Ordenar y eliminar duplicados (por si se solapan rangos configurados)
             return Array.from(new Set(slots)).sort();
+
         } catch (error) {
             console.error('Error getting available slots:', error);
             return [];
@@ -117,7 +148,7 @@ export class AppointmentService {
             // 1. Gestionar paciente
             const { data: existingPatient } = await supabase
                 .from('patients')
-                .select('id')
+                .select('id, email')
                 .eq('dni', data.dni)
                 .single();
 
