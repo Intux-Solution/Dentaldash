@@ -197,6 +197,26 @@ export class AppointmentService {
                 .single();
 
             if (error) throw error;
+
+            // Sync with Google Calendar
+            try {
+                // Determine patient email (existing or from data)
+                const patientEmail = existingPatient ? existingPatient.email : data.email;
+
+                const googleEvent = await GoogleCalendarService.createEvent({
+                    ...result,
+                    title: appointment.title,
+                    patientEmail: patientEmail,
+                    notes: appointment.notes
+                });
+
+                if (googleEvent && googleEvent.id) {
+                    await supabase.from('appointments').update({ google_event_id: googleEvent.id }).eq('id', result.id);
+                }
+            } catch (syncError) {
+                console.error('Google Sync Error:', syncError);
+            }
+
             return result;
 
         } catch (error) {
