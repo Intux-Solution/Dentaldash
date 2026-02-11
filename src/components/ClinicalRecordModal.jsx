@@ -5,12 +5,8 @@ function isPdf(url = "") {
   return typeof url === "string" && url.toLowerCase().endsWith(".pdf");
 }
 
-// Para Drive: usar /preview en iframes
-function toDrivePreview(url = "") {
-  if (!url) return "";
-  return url.includes("drive.google.com/file/d/")
-    ? url.replace("/view", "/preview")
-    : url;
+function isPdf(url = "") {
+  return typeof url === "string" && url.toLowerCase().endsWith(".pdf");
 }
 
 export default function ClinicalRecordModal({ open, patient, onClose }) {
@@ -31,7 +27,7 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
     patient.historiaClinicaUrl ||
     "";
 
-  const url = toDrivePreview(rawUrl);
+  const url = rawUrl; // Supabase only
 
   const ultimaVisita = patient.ultimaVisita || "—";
   const ultimoMotivo =
@@ -60,7 +56,7 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
           <div className="p-4 rounded-lg border bg-gray-50 text-sm text-gray-600">
             No hay historia clínica asociada.
           </div>
-        ) : (isPdf(url) || url.includes("drive.google.com")) ? (
+        ) : (isPdf(url)) ? (
           <div className="h-[60vh] rounded-lg border overflow-hidden">
             <iframe title="Historia Clínica" src={url} className="w-full h-full" />
           </div>
@@ -77,14 +73,25 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
 
       <div className="mt-6 flex justify-end gap-3">
         {url && (
-          <a
-            href={rawUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50"
-          >
-            Abrir en pestaña nueva
-          </a>
+          <>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(url);
+                alert('Link copiado al portapapeles');
+              }}
+              className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50 mr-auto"
+            >
+              Copiar Link
+            </button>
+            <a
+              href={rawUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50"
+            >
+              Abrir en pestaña nueva
+            </a>
+          </>
         )}
         <button
           onClick={onClose}
