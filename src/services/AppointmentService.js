@@ -189,25 +189,26 @@ ${data.notas || 'Sin notas adicionales'}
             let patientId;
 
             // 1. Gestionar paciente
+            const cleanDni = data.dni?.trim();
+
             const { data: existingPatient } = await supabase
                 .from('patients')
                 .select('id, email')
-                .eq('dni', data.dni)
+                .eq('dni', cleanDni)
                 .maybeSingle();
 
             if (existingPatient) {
                 patientId = existingPatient.id;
-                // Podríamos actualizar info si cambió, pero por simplicidad asumimos que usa el servicio de pacientes para eso
             } else {
                 const { data: newPatient, error: createError } = await supabase
                     .from('patients')
                     .insert([{
-                        dni: data.dni,
-                        nombre: data.nombre,
-                        telefono: data.telefono,
-                        email: data.email,
-                        obra_social: data.obraSocial,
-                        numero_afiliado: data.numeroAfiliado,
+                        dni: cleanDni,
+                        nombre: data.nombre?.trim(),
+                        telefono: data.telefono?.trim(),
+                        email: data.email?.trim(),
+                        obra_social: data.obraSocial?.trim(),
+                        numero_afiliado: data.numeroAfiliado?.trim(),
                         alergias: data.alergias,
                         antecedentes: data.antecedentes
                     }])

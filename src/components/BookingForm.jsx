@@ -109,7 +109,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
           antecedentes: ''
         }));
         setPatientFound(false);
-        setPatientNotice('No se encontró el paciente');
+        setPatientNotice('Paciente nuevo: se creará automáticamente al confirmar.');
       }
     } catch (err) {
       setPatientNotice('Error al buscar paciente');

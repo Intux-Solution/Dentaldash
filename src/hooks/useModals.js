@@ -80,12 +80,16 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     if (typeof refreshTurnos === 'function') {
       refreshTurnos();
     }
+    // Si se creó un paciente nuevo en el proceso, necesitamos refrescar la lista de pacientes también
+    if (typeof refreshPatients === 'function') {
+      refreshPatients();
+    }
     // Notificar globalmente para que otras vistas con su propio hook se refresquen
     try {
       window.dispatchEvent(new CustomEvent('turnos:refresh'));
     } catch { }
     closeBookingModal();
-  }, [refreshTurnos, closeBookingModal]);
+  }, [refreshTurnos, refreshPatients, closeBookingModal]);
 
   const onTurnoSaved = useCallback((updatedTurno) => {
     if (typeof refreshTurnos === 'function') refreshTurnos();

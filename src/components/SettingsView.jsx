@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../config/supabaseClient';
-import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader } from 'lucide-react';
+import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X } from 'lucide-react';
 
 const DAYS = [
     { id: 0, name: 'Domingo' },
@@ -26,7 +26,8 @@ export default function SettingsView() {
     const [profile, setProfile] = useState({
         full_name: '',
         avatar_url: null,
-        user_id: null
+        user_id: null,
+        accepted_insurances: []
     });
     const [avatarFile, setAvatarFile] = useState(null);
     const [avatarPreview, setAvatarPreview] = useState(null);
@@ -54,7 +55,8 @@ export default function SettingsView() {
                 setProfile({
                     full_name: profileData.full_name || '',
                     avatar_url: profileData.avatar_url,
-                    user_id: session.user.id
+                    user_id: session.user.id,
+                    accepted_insurances: profileData.accepted_insurances || []
                 });
                 if (profileData.avatar_url) {
                     // Get public URL
@@ -66,7 +68,7 @@ export default function SettingsView() {
                 }
             } else {
                 // Initialize empty profile if not exists
-                setProfile(prev => ({ ...prev, user_id: session.user.id }));
+                setProfile(prev => ({ ...prev, user_id: session.user.id, accepted_insurances: [] }));
             }
 
             // 2. Fetch Schedules
@@ -128,6 +130,7 @@ export default function SettingsView() {
                 id: session.user.id,
                 full_name: profile.full_name,
                 avatar_url: avatarPath,
+                accepted_insurances: profile.accepted_insurances || [],
                 updated_at: new Date(),
             };
 
@@ -345,6 +348,70 @@ export default function SettingsView() {
                                     />
                                     <p className="text-xs text-gray-500 mt-1">
                                         Este nombre será visible para tus pacientes.
+                                    </p>
+                                </div>
+
+                                {/* Obras Sociales */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Obras Sociales Atendidas
+                                    </label>
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        {(profile.accepted_insurances || []).map((ins, index) => (
+                                            <div key={index} className="flex items-center gap-1 bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-sm border border-teal-100">
+                                                <span>{ins}</span>
+                                                <button
+                                                    onClick={() => {
+                                                        const newInsurances = profile.accepted_insurances.filter((_, i) => i !== index);
+                                                        handleProfileChange('accepted_insurances', newInsurances);
+                                                    }}
+                                                    className="hover:text-teal-900 rounded-full p-0.5"
+                                                >
+                                                    <X size={14} className="lucide-x" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Agregar Obra Social (Ej. OSDE)..."
+                                            className="flex-1 px-4 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all text-sm"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const val = e.target.value.trim();
+                                                    if (val) {
+                                                        const current = profile.accepted_insurances || [];
+                                                        if (!current.includes(val)) {
+                                                            handleProfileChange('accepted_insurances', [...current, val]);
+                                                        }
+                                                        e.target.value = '';
+                                                    }
+                                                }
+                                            }}
+                                            id="insurance-input"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const input = document.getElementById('insurance-input');
+                                                const val = input.value.trim();
+                                                if (val) {
+                                                    const current = profile.accepted_insurances || [];
+                                                    if (!current.includes(val)) {
+                                                        handleProfileChange('accepted_insurances', [...current, val]);
+                                                    }
+                                                    input.value = '';
+                                                }
+                                            }}
+                                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium text-sm transition-colors"
+                                        >
+                                            Agregar
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Presiona Enter o el botón para agregar. Estas opciones aparecerán en el formulario de turnos (próximamente).
                                     </p>
                                 </div>
 
