@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Hash - Sistema Dental</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+        .container { background: #f9f9f9; padding: 30px; border-radius: 8px; }
+        input, button { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; }
+        button { background: #0C9488; color: white; cursor: pointer; }
+        button:hover { background: #097C73; }
+        .result { background: #e8f5e8; padding: 15px; border-radius: 5px; margin-top: 20px; word-break: break-all; }
+        .warning { background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Generador de Hash para Contraseña</h1>
+        <p>Genera el hash SHA-256 de tu contraseña para usar en N8N:</p>
+        
+        <div class="warning">
+            <strong>⚠️ Importante:</strong> Usa una contraseña segura con al menos 12 caracteres, números y símbolos.
+        </div>
+        
+        <input type="password" id="password" placeholder="Ingresa tu contraseña segura" />
+        <button onclick="generateHash()">Generar Hash</button>
+        
+        <div id="result" style="display: none;" class="result">
+            <h3>Hash generado:</h3>
+            <code id="hashOutput"></code>
+            <br><br>
+            <strong>Copia este hash y úsalo en tu flujo N8N</strong>
+        </div>
+    </div>
+
+    <script>
+        async function generateHash() {
+            const password = document.getElementById('password').value;
+            
+            if (!password) {
+                alert('Por favor ingresa una contraseña');
+                return;
+            }
+            
+            if (password.length < 8) {
+                alert('La contraseña debe tener al menos 8 caracteres');
+                return;
+            }
+            
+            // Generar hash SHA-256
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            
+            // Mostrar resultado
+            document.getElementById('hashOutput').textContent = hashHex;
+            document.getElementById('result').style.display = 'block';
+        }
+        
+        // Allow Enter key
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                generateHash();
+            }
+        });
+    </script>
+</body>
+</html>

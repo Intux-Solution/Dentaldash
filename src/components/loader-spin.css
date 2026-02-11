@@ -1,0 +1,9 @@
+@keyframes spin-in-place {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.spin-in-place {
+  animation: spin-in-place 1s linear infinite;
+}
