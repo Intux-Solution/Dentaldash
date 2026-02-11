@@ -137,6 +137,29 @@ export class AppointmentService {
     }
 
     /**
+     * Obtener los días laborales activos desde la configuración
+     * @returns {Promise<number[]>} Array de días (0-6)
+     */
+    static async getActiveWorkingDays() {
+        try {
+            const { data, error } = await supabase
+                .from('schedules')
+                .select('day_of_week')
+                .eq('is_active', true);
+
+            if (error) throw error;
+
+            // Extraer días únicos
+            const days = [...new Set(data.map(item => item.day_of_week))].sort();
+            return days;
+        } catch (error) {
+            console.error('Error fetching working days:', error);
+            // Fallback a los días por defecto si falla la DB, pero idealmente debería retornar vacío o error
+            return [1, 2, 3, 4, 5]; // L-V default fallback
+        }
+    }
+
+    /**
      * Helper para formatear la descripción del evento de Google
      */
     static formatEventDescription(data) {

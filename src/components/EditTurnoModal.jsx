@@ -3,7 +3,7 @@ import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loa
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import './loader-spin.css';
-import { APPOINTMENT_TYPES, WORK_DAYS } from '../config/appointments';
+import { APPOINTMENT_TYPES } from '../config/appointments';
 import { combineDateTimeToISO, to24h } from '../utils/appointments';
 
 // ...existing code...
@@ -33,6 +33,18 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [error, setError] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Dynamic Working Days
+  const [activeWorkingDays, setActiveWorkingDays] = useState([]);
+
+  // Fetch working days on mount
+  useEffect(() => {
+    const fetchDays = async () => {
+      const days = await AppointmentService.getActiveWorkingDays();
+      setActiveWorkingDays(days);
+    };
+    fetchDays();
+  }, []);
 
   // Evita borrar el turno más de una vez al abrir el modal
   const freedRef = useRef(false);
@@ -182,12 +194,14 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
 
   // Fechas disponibles (próximas 2 semanas; incluir seleccionada)
   const availableDates = useMemo(() => {
+    if (activeWorkingDays.length === 0) return [];
+
     const dates = [];
     const today = new Date();
     for (let i = 0; i <= 14; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
-      const isWorkDay = WORK_DAYS.includes(d.getDay());
+      const isWorkDay = activeWorkingDays.includes(d.getDay());
       const value = d.toISOString().split('T')[0];
       if (isWorkDay || value === formData.fecha) {
         dates.push({
@@ -197,7 +211,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
       }
     }
     return dates;
-  }, [formData.fecha]);
+  }, [formData.fecha, activeWorkingDays]);
 
   const handleInputChange = (field, value) => {
     // Si cambia fecha o tipo, limpiar hora seleccionada para evitar inconsistencias

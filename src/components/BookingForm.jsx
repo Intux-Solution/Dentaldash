@@ -1,27 +1,13 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import './loader-spin.css';
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
-import { APPOINTMENT_TYPES, WORK_DAYS } from '../config/appointments';
+import { APPOINTMENT_TYPES } from '../config/appointments';
 import { combineDateTimeToISO, to24h } from '../utils/appointments';
 
-const LOCAL_APPOINTMENT_TYPES = [
-  { id: 'consulta', name: 'Consulta', duration: 30 },
-  { id: 'limpieza', name: 'Limpieza', duration: 45 },
-  { id: 'ensenanza', name: 'Enseñanza de técnica de cepillado y flúor en niños', duration: 30 },
-  { id: 'caries_chicos', name: 'Arreglos caries chicos', duration: 45 },
-  { id: 'caries_grandes', name: 'Arreglos caries grandes', duration: 60 },
-  { id: 'molde_blanqueamiento', name: 'Toma de molde para blanqueamiento ambulatorio', duration: 30 },
-  { id: 'molde_relajacion', name: 'Toma de molde para placa de relajación', duration: 30 },
-  { id: 'instalacion_placas', name: 'Instalación de placas de relajación', duration: 45 },
-  { id: 'carillas', name: 'Carillas anteriores', duration: 90 },
-  { id: 'contenciones', name: 'Contenciones', duration: 45 },
-  { id: 'incrustaciones', name: 'Incrustaciones', duration: 75 }
-];
-
-const LOCAL_WORK_DAYS = [1, 2, 3, 4]; // Lunes a Jueves
+// ... (LOCAL_APPOINTMENT_TYPES or other constants if any)
 
 export default function BookingForm({ onSuccess, hideHeader = false, hideInternalSubmit = false, setFormSubmit }) {
   // Form state
@@ -48,6 +34,18 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [patientNotice, setPatientNotice] = useState('');
+
+  // Dynamic Working Days
+  const [activeWorkingDays, setActiveWorkingDays] = useState([]);
+
+  // Fetch working days on mount
+  useEffect(() => {
+    const fetchDays = async () => {
+      const days = await AppointmentService.getActiveWorkingDays();
+      setActiveWorkingDays(days);
+    };
+    fetchDays();
+  }, []);
 
   // Exponer submit del form al contenedor para el botón del footer del modal
   const formRef = React.useRef(null);
@@ -139,6 +137,8 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
 
   // Generate available dates (next 2 weeks, only work days)
   const availableDates = useMemo(() => {
+    if (activeWorkingDays.length === 0) return [];
+
     const dates = [];
     const today = new Date();
 
@@ -154,7 +154,8 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
       const date = new Date(today);
       date.setDate(today.getDate() + i);
 
-      if (WORK_DAYS.includes(date.getDay())) {
+      // Check against dynamic activeWorkingDays
+      if (activeWorkingDays.includes(date.getDay())) {
         dates.push({
           value: toLocalYMD(date),
           label: date.toLocaleDateString('es-AR', {
@@ -167,7 +168,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
     }
 
     return dates;
-  }, []);
+  }, [activeWorkingDays]); // Recompute when activeWorkingDays changes
 
   // Handle form input changes
   const handleInputChange = (field, value) => {
