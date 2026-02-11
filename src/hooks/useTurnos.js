@@ -2,8 +2,7 @@
 // Fetches calendar events from n8n and normalizes them
 
 import { useState, useCallback, useEffect } from 'react';
-import { URL_CALENDAR_EVENTS } from '../config/n8n';
-import { apiFetch } from '../utils/api';
+import { AppointmentService } from '../services/AppointmentService';
 import { normalizeTurno } from '../utils/appointments';
 
 export function useTurnos(fromDate = null, toDate = null) {
@@ -47,27 +46,7 @@ export function useTurnos(fromDate = null, toDate = null) {
         toISO = nextWeek.toISOString();
       }
 
-      const timeZone = 'America/Argentina/Buenos_Aires';
-      const url = `${URL_CALENDAR_EVENTS}?from=${encodeURIComponent(fromISO)}&to=${encodeURIComponent(toISO)}&timeZone=${encodeURIComponent(timeZone)}`;
-
-      const response = await apiFetch(url);
-      if (!response.ok) {
-        // Algunos backends devuelven 400 cuando no hay eventos
-        if (response.status === 400) {
-          setTurnos([]);
-          setError('');
-          return;
-        }
-        let detail = '';
-        try {
-          const errJson = await response.json();
-          detail = errJson?.message || '';
-        } catch {}
-        throw new Error(`Error ${response.status}: ${detail || response.statusText}`);
-      }
-
-      const data = await response.json();
-      const events = data.events || [];
+      const events = await AppointmentService.getAppointments(fromISO, toISO);
       const normalized = Array.isArray(events) ? events.map(normalizeTurno) : [];
       const visible = normalized.filter(ev => (ev?.status || '').toLowerCase() !== 'cancelled' && (ev?.status || '').toLowerCase() !== 'canceled');
       setTurnos(visible);

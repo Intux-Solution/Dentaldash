@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Calendar, Clock, User, Phone, CreditCard, MapPin, FileText, Edit, Trash2, Loader, AlertCircle } from 'lucide-react';
-import { N8N_ENDPOINTS } from '../config/n8n';
-import { apiFetch } from '../utils/api';
+import { PatientService } from '../services/PatientService';
 
 export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDelete }) {
   if (!open || !turno) return null;
@@ -88,15 +87,9 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
       setPatientLoading(true);
       setPatientError('');
       try {
-        const resp = await apiFetch(`${N8N_ENDPOINTS.CHECK_PATIENT}?dni=${encodeURIComponent(dni)}`);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
+        const patientData = await PatientService.getPatientByDni(dni);
         if (!aborted) {
-          if (data && data.found && data.patient) {
-            setPatient(data.patient);
-          } else {
-            setPatient(null);
-          }
+          setPatient(patientData);
         }
       } catch (err) {
         if (!aborted) {
@@ -118,10 +111,10 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
     return {
       name: safe(
         patient?.nombre ||
-          patient?.name ||
-          turno.patientName ||
-          turno.paciente ||
-          nameFromDescription
+        patient?.name ||
+        turno.patientName ||
+        turno.paciente ||
+        nameFromDescription
       ),
       phone: safe(patient?.telefono || patient?.phone || turno.patientPhone),
       email: safe(patient?.email || turno.patientEmail || turno.email),
@@ -250,9 +243,8 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
                 <div className="flex items-start gap-3">
                   <div className="w-6 flex-shrink-0 flex justify-center">
                     <div
-                      className={`w-2.5 h-2.5 mt-2 rounded-full ${
-                        turno.status === 'confirmed' ? 'bg-teal-600' : 'bg-yellow-500'
-                      }`}
+                      className={`w-2.5 h-2.5 mt-2 rounded-full ${turno.status === 'confirmed' ? 'bg-teal-600' : 'bg-yellow-500'
+                        }`}
                     />
                   </div>
                   <div>

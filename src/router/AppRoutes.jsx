@@ -102,6 +102,22 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
           />
         )}
       />
+      <Route
+        path="/pacientes"
+        element={(
+          <PacientesView
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            onAddPatient={openAddPatient}
+            onViewPatient={onViewPatient}
+            onOpenRecord={onOpenRecord}
+            patients={patientsForViews}
+            loading={loading}
+            onDeletePatient={handleDeletePatient}
+          />
+        )}
+      />
+      <Route path="/update-password" element={<Navigate to="/" replace />} /> {/* Handled in App.js usually, but good to have explicit just in case, though usually it's public */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

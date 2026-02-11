@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loader, X, ArrowLeft } from 'lucide-react';
-import { N8N_ENDPOINTS } from '../config/n8n';
-import { apiFetch } from '../utils/api';
+import { AppointmentService } from '../services/AppointmentService';
+import { PatientService } from '../services/PatientService';
 import './loader-spin.css';
 import { APPOINTMENT_TYPES, WORK_DAYS } from '../config/appointments';
 import { combineDateTimeToISO, to24h } from '../utils/appointments';
@@ -45,25 +45,15 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
 
     try {
       const appointmentType = APPOINTMENT_TYPES.find(t => t.id === tipoTurno);
-
-      const params = new URLSearchParams({
-        fecha,
-        duration: String(appointmentType?.duration || 30),
-      });
-
       const effectiveExclude = excludeId || formData.id;
-      if (effectiveExclude) {
-        const keys = ['excludeId', 'excludeEventId', 'exclude', 'ignoreId', 'ignoreEventId'];
-        keys.forEach((k) => params.append(k, effectiveExclude));
-      }
 
-      const response = await apiFetch(`${N8N_ENDPOINTS.GET_AVAILABILITY}?${params.toString()}`);
-      const data = await response.json();
-      const raw = Array.isArray(data?.availableSlots) ? data.availableSlots : [];
+      const slots = await AppointmentService.getAvailableSlots(
+        fecha,
+        appointmentType?.duration || 30,
+        effectiveExclude
+      );
 
-      // Normalizar a 24h, quitar duplicados y ordenar
-      const unique = Array.from(new Set(raw.map(to24h))).sort();
-      setAvailableSlots(unique);
+      setAvailableSlots(slots);
     } catch (err) {
       setAvailableSlots([]);
     } finally {
@@ -185,26 +175,24 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     setCheckingPatient(true);
     setError('');
     try {
-      const response = await apiFetch(`${N8N_ENDPOINTS.CHECK_PATIENT}?dni=${dni}`);
-      if (!response.ok) throw new Error('Error al consultar paciente');
-      const data = await response.json();
-      if (data.found && data.patient) {
+      const patient = await PatientService.getPatientByDni(dni);
+      if (patient) {
         setFormData(prev => ({
           ...prev,
-          nombre: data.patient.nombre || data.patient.name || prev.nombre,
-          telefono: data.patient.telefono || data.patient.phone || prev.telefono,
-          email: data.patient.email || prev.email,
-          obraSocial: data.patient.obraSocial || data.patient.insurance || prev.obraSocial,
-          numeroAfiliado: data.patient.numeroAfiliado || data.patient.affiliateNumber || prev.numeroAfiliado,
-          alergias: data.patient.alergias || data.patient.allergies || prev.alergias || 'Ninguna',
-          antecedentes: data.patient.antecedentes || data.patient.background || prev.antecedentes || 'Ninguno',
+          nombre: patient.nombre || prev.nombre,
+          telefono: patient.telefono || prev.telefono,
+          email: patient.email || prev.email,
+          obraSocial: patient.obraSocial || prev.obraSocial,
+          numeroAfiliado: patient.numeroAfiliado || prev.numeroAfiliado,
+          alergias: patient.alergias || 'Ninguna',
+          antecedentes: patient.antecedentes || 'Ninguno',
         }));
         setPatientFound(true);
       } else {
         setPatientFound(false);
       }
     } catch (err) {
-      setError('No se encontró el paciente.');
+      setError('Error al consultar paciente.');
       setPatientFound(false);
     } finally {
       setCheckingPatient(false);
@@ -258,7 +246,8 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     try {
       const appointmentType = APPOINTMENT_TYPES.find(t => t.id === formData.tipoTurno);
       const appointmentISO = combineDateTimeToISO(formData.fecha, formData.hora, 'America/Argentina/Buenos_Aires');
-      const basePayload = {
+
+      const payload = {
         dni: formData.dni,
         nombre: formData.nombre,
         telefono: formData.telefono,
@@ -274,28 +263,17 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
         timezone: 'America/Argentina/Buenos_Aires',
         notas: formData.notas,
         isNewPatient: !patientFound,
-        updatedAt: new Date().toISOString(),
       };
 
-      const endpoint = freedRef.current
-        ? N8N_ENDPOINTS.CREATE_APPOINTMENT
-        : N8N_ENDPOINTS.UPDATE_APPOINTMENT;
-
-      const payload = freedRef.current
-        ? basePayload
-        : { ...basePayload, id: formData.id };
-
-      const response = await apiFetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Error al guardar el turno');
+      let saved;
+      if (freedRef.current || !formData.id) {
+        // Create new
+        saved = await AppointmentService.createAppointment(payload);
+      } else {
+        // Update existing
+        saved = await AppointmentService.updateAppointment(formData.id, payload);
       }
-      const result = await response.json().catch(() => ({}));
-      const saved = result.appointment || result || payload;
+
       if (onSaved) onSaved(saved);
       onClose();
     } catch (err) {
@@ -309,22 +287,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     setDeleting(true);
     setError('');
     try {
-      const response = await apiFetch(N8N_ENDPOINTS.DELETE_APPOINTMENT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: formData.id,
-          reason: 'Cancelado por el odontólogo',
-          canceledAt: new Date().toISOString(),
-        }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        if (response.status === 404) {
-          throw new Error('Webhook "/webhook/delete-appointment" no encontrado (404)');
-        }
-        throw new Error(errorData.message || `Error al cancelar el turno (HTTP ${response.status})`);
-      }
+      await AppointmentService.deleteAppointment(formData.id);
       if (onDeleted) onDeleted(turno);
       onClose();
     } catch (err) {
@@ -433,20 +396,20 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                 </div>
               </div>
 
-            {/* Email */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleInputChange('email', e.target.value)}
-                placeholder="paciente@correo.com"
-                className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] text-gray-700"
-              />
-            </div>
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  placeholder="paciente@correo.com"
+                  className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] text-gray-700"
+                />
+              </div>
 
-            {/* Obra Social */}
-            <div className="hidden">
+              {/* Obra Social */}
+              <div className="hidden">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Obra Social</label>
                   <input
@@ -548,11 +511,10 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                           key={slot}
                           type="button"
                           onClick={() => handleInputChange('hora', slot)}
-                          className={`p-3 text-sm rounded-lg border transition-colors focus:outline-none ${
-                            formData.hora === slot
-                              ? 'bg-teal-600 text-white border-teal-600'
-                              : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
-                          }`}
+                          className={`p-3 text-sm rounded-lg border transition-colors focus:outline-none ${formData.hora === slot
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
+                            }`}
                         >
                           {slot} hs
                         </button>

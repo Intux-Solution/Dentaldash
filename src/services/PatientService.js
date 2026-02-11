@@ -1,244 +1,199 @@
-import { URL_GET_PATIENTS, URL_CREATE_PATIENT, URL_UPDATE_PATIENT } from '../config/n8n.js';
-import { apiFetch } from '../utils/api';
+
+import { supabase } from '../config/supabaseClient';
 
 /**
- * Servicio para gestionar pacientes desde n8n
+ * Servicio para gestionar pacientes con Supabase
  */
 export class PatientService {
-  
+
   /**
-   * Obtener todos los pacientes desde n8n
+   * Obtener todos los pacientes
    * @returns {Promise<Array>} Lista de pacientes
    */
   static async fetchAllPatients() {
     try {
-      
-      
-      const response = await apiFetch(URL_GET_PATIENTS, {
-        method: 'GET',
-      });
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
+      if (error) throw error;
 
-      const data = await response.json();
-      
-      // El webhook debería devolver: { patients: [...] }
-      const patients = data.patients || [];
-      
-      
-      return patients;
+      // Normalizar para que coincida con el frontend
+      return data.map(p => ({
+        ...p,
+        obraSocial: p.obra_social,
+        numeroAfiliado: p.numero_afiliado,
+        fechaNacimiento: p.fecha_nacimiento,
+        historiaClinica: p.historia_clinica_url,
+        ultimaVisita: p.ultima_visita,
+      }));
     } catch (error) {
-      
+      console.error('Error fetching patients:', error);
       throw error;
     }
+  }
+
+  /**
+   * Buscar paciente por DNI
+   */
+  static async getPatientByDni(dni) {
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('dni', dni)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null; // Not found
+        throw error;
+      }
+
+      return {
+        ...data,
+        obraSocial: data.obra_social,
+        numeroAfiliado: data.numero_afiliado,
+        fechaNacimiento: data.fecha_nacimiento,
+        historiaClinica: data.historia_clinica_url,
+      };
+    } catch (error) {
+      console.error('Error getting patient by DNI:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Subir archivo a Storage y retornar URL pública
+   */
+  static async uploadClinicalRecord(file) {
+    if (!file) return null;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('clinical-records')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('clinical-records')
+      .getPublicUrl(filePath);
+
+    return publicUrl;
   }
 
   /**
    * Crear un nuevo paciente
-   * *** ACTUALIZADO: Ahora soporta archivos ***
-   * @param {Object} patientData - Datos del paciente (puede incluir historiaClinicaFile)
-   * @returns {Promise<Object>} Paciente creado
    */
   static async createPatient(patientData) {
     try {
-      
-
-      let requestOptions;
-
-      // *** LÓGICA CONDICIONAL: ARCHIVO vs JSON ***
+      let historiaClinicaUrl = null;
       if (patientData.historiaClinicaFile) {
-        // Si hay archivo, usar FormData
-        
-        
-        const formData = new FormData();
-        formData.append('nombre', patientData.nombre || '');
-        formData.append('dni', patientData.dni || '');
-        formData.append('telefono', patientData.telefono || '');
-        formData.append('email', patientData.email || '');
-        formData.append('obraSocial', patientData.obraSocial || '');
-        formData.append('numeroafiliado', patientData.numeroAfiliado || ''); // lowercase para N8N
-        formData.append('alergias', patientData.alergias || patientData.alergia || 'Ninguna');
-        formData.append('antecedentes', patientData.antecedentes || 'Ninguno');
-        formData.append('notas', patientData.notas || '');
-        formData.append('clinicalRecord', patientData.historiaClinicaFile); // el archivo
-
-        requestOptions = {
-          method: 'POST',
-          body: formData,
-          // NO ponemos Content-Type, el navegador lo hace automáticamente para FormData
-        };
-
-      } else {
-        // Sin archivo, usar JSON normal
-        
-        
-        requestOptions = {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            nombre: patientData.nombre || '',
-            dni: patientData.dni || '',
-            telefono: patientData.telefono || '',
-            email: patientData.email || '',
-            obraSocial: patientData.obraSocial || '',
-            numeroAfiliado: patientData.numeroAfiliado || '',
-            alergias: patientData.alergias || patientData.alergia || 'Ninguna',
-            antecedentes: patientData.antecedentes || 'Ninguno',
-            notas: patientData.notas || '',
-          })
-        };
+        historiaClinicaUrl = await this.uploadClinicalRecord(patientData.historiaClinicaFile);
       }
 
-      // *** ÚNICA LLAMADA A N8N ***
-      const response = await apiFetch(URL_CREATE_PATIENT, requestOptions);
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
-      const responseData = await response.json();
-      
-
-      // Normalizar la respuesta de N8N
-      const normalizedPatient = {
-        id: responseData.id || responseData._id || patientData.id || patientData._id || patientData.dni,
-        nombre: responseData.nombre || responseData.name || patientData.nombre,
-        dni: responseData.dni || responseData.DNI || patientData.dni,
-        telefono: responseData.telefono || responseData.phone || patientData.telefono,
-        email: responseData.email || patientData.email,
-        obraSocial:
-          responseData.obraSocial ||
-          responseData.obra_social ||
-          responseData['Obra Social'] ||
-          responseData.insurance ||
-          patientData.obraSocial,
-        numeroAfiliado:
-          responseData.numeroAfiliado ||
-          responseData.numeroafiliado ||
-          responseData.numero_afiliado ||
-          responseData['Numero Afiliado'] ||
-          responseData.affiliateNumber ||
-          patientData.numeroAfiliado,
-        fechaNacimiento: responseData.fechaNacimiento || responseData.birthDate || patientData.fechaNacimiento,
-        alergias: responseData.alergias || responseData.allergies || patientData.alergias || 'Ninguna',
-        notas: responseData.notas || responseData.notes || patientData.notas,
-        historiaClinica: responseData.historiaClinica || responseData.clinicalRecord || '',
-        ultimaVisita: responseData.ultimaVisita || responseData.lastVisit || '',
-        // Mantener información del archivo si estaba presente
-        hasFile: !!patientData.historiaClinicaFile,
-        fileName: patientData.fileName,
+      const newPatient = {
+        nombre: patientData.nombre,
+        dni: patientData.dni,
+        telefono: patientData.telefono,
+        email: patientData.email,
+        obra_social: patientData.obraSocial,
+        numero_afiliado: patientData.numeroAfiliado,
+        fecha_nacimiento: patientData.fechaNacimiento || null,
+        alergias: patientData.alergias || 'Ninguna',
+        antecedentes: patientData.antecedentes || 'Ninguno',
+        notas: patientData.notas,
+        historia_clinica_url: historiaClinicaUrl,
+        ultima_visita: new Date().toISOString(),
       };
 
-      
-      return normalizedPatient;
+      const { data, error } = await supabase
+        .from('patients')
+        .insert([newPatient])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return {
+        ...data,
+        obraSocial: data.obra_social,
+        numeroAfiliado: data.numero_afiliado,
+        fechaNacimiento: data.fecha_nacimiento,
+        historiaClinica: data.historia_clinica_url,
+      };
 
     } catch (error) {
+      console.error('Error creating patient:', error);
       throw error;
     }
   }
 
   /**
- * Actualizar un paciente existente
- * *** MEJORADO: Ahora soporta archivos ***
- * @param {Object} patientData - Datos del paciente (usar id o dni)
- * @returns {Promise<Object>} Paciente actualizado
- */
+   * Actualizar un paciente existente
+   */
   static async updatePatient(patientData) {
-  try {
-  
+    try {
+      const id = patientData.id || patientData._id; // Supabase uses UUID as 'id'
+      if (!id) throw new Error("Patient ID is required for update");
 
-    let requestOptions;
-
-    // *** LÓGICA CONDICIONAL: ARCHIVO vs JSON ***
-    if (patientData.historiaClinicaFile) {
-      // Si hay archivo, usar FormData
-      
-      
-      const formData = new FormData();
-      const appended = new Set();
-
-      // Normaliza arrays (vienen así desde n8n) a su primer valor
-      const normalizeValue = (value) => {
-        if (value == null) return '';
-        if (Array.isArray(value)) return value[0] ?? '';
-        return value;
+      const updates = {
+        nombre: patientData.nombre,
+        dni: patientData.dni,
+        telefono: patientData.telefono,
+        email: patientData.email,
+        obra_social: patientData.obraSocial,
+        numero_afiliado: patientData.numeroAfiliado,
+        fecha_nacimiento: patientData.fechaNacimiento || null,
+        alergias: patientData.alergias,
+        antecedentes: patientData.antecedentes,
+        notas: patientData.notas,
       };
 
-      // Evita duplicar campos (dni/id) que generan arrays en n8n
-      const appendOnce = (key, value) => {
-        if (appended.has(key)) return;
-        const normalized = normalizeValue(value);
-        if (normalized === '' || normalized === undefined) return;
-        // Si es archivo, adjuntarlo tal cual; si no, enviarlo como string
-        const isBlob = typeof Blob !== 'undefined' && normalized instanceof Blob;
-        formData.append(key, isBlob ? normalized : String(normalized));
-        appended.add(key);
-      };
+      if (patientData.historiaClinicaFile) {
+        updates.historia_clinica_url = await this.uploadClinicalRecord(patientData.historiaClinicaFile);
+      }
 
-      // Identificador: usar DNI o id si existe
-      if (patientData.dni) appendOnce('dni', patientData.dni);
-      else if (patientData.id || patientData._id) appendOnce('id', patientData.id || patientData._id);
-      
-      // Agregar todos los campos del formulario (sin duplicar dni/id ni el archivo)
-      Object.entries(patientData).forEach(([key, value]) => {
-        if (key === 'historiaClinicaFile' || key === 'fechaNacimiento') return;
-        appendOnce(key, value);
-      });
-      
-      // Agregar el archivo con el nombre esperado por n8n
-      appendOnce('historiaClinica', patientData.historiaClinicaFile);
+      const { data, error } = await supabase
+        .from('patients')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
 
-      requestOptions = {
-        method: 'POST',
-        body: formData,
-        // NO ponemos Content-Type, el navegador lo setea automáticamente
-      };
-    } else {
-      // Sin archivo, usar JSON normal
-      
-      
-      const sanitized = { ...patientData };
-      // Normalizar arrays a strings para evitar que n8n reciba listas
-      Object.entries(sanitized).forEach(([key, value]) => {
-        if (Array.isArray(value)) {
-          sanitized[key] = value[0] ?? '';
-        }
-      });
-      delete sanitized.fechaNacimiento;
+      if (error) throw error;
 
-      requestOptions = {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(sanitized)
+      return {
+        ...data,
+        obraSocial: data.obra_social,
+        numeroAfiliado: data.numero_afiliado,
+        fechaNacimiento: data.fecha_nacimiento,
+        historiaClinica: data.historia_clinica_url,
       };
+    } catch (error) {
+      console.error('Error updating patient:', error);
+      throw error;
     }
-
-    const response = await apiFetch(URL_UPDATE_PATIENT, requestOptions);
-
-    if (!response.ok) {
-      throw new Error(`Error ${response.status}: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    
-    // Normalizar respuesta
-    const updatedPatient = {
-      ...patientData,
-      ...result,
-      ...(result.data || {}),
-    };
-
-    
-    return updatedPatient;
-
-  } catch (error) {
-    throw error;
   }
+
+  /**
+   * Eliminar un paciente
+   */
+  static async deletePatient(id) {
+    try {
+      const { error } = await supabase
+        .from('patients')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting patient:', error);
+      throw error;
+    }
   }
 }

@@ -2,8 +2,8 @@
 import React, { useState, useMemo } from 'react';
 import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import './loader-spin.css';
-import { N8N_ENDPOINTS } from '../config/n8n';
-import { apiFetch } from '../utils/api';
+import { AppointmentService } from '../services/AppointmentService';
+import { PatientService } from '../services/PatientService';
 import { APPOINTMENT_TYPES, WORK_DAYS } from '../config/appointments';
 import { combineDateTimeToISO, to24h } from '../utils/appointments';
 
@@ -62,7 +62,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             hiddenSubmitRef.current?.click();
           }
         } catch {
-          try { hiddenSubmitRef.current?.click(); } catch {}
+          try { hiddenSubmitRef.current?.click(); } catch { }
         }
       });
     }
@@ -70,51 +70,31 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
 
   // Check patient by DNI
   const checkPatient = async (dni) => {
-    if (dni.length < 8) {
+    if (dni.length < 7) {
       setPatientFound(false);
       setPatientNotice('');
       return;
     }
-    
+
     setCheckingPatient(true);
     setError('');
     setPatientNotice('');
-    
-    try {
-      const response = await apiFetch(`${N8N_ENDPOINTS.CHECK_PATIENT}?dni=${dni}`);
-      
-      if (!response.ok) {
-        throw new Error('No se encontró el paciente');
-      }
-      
-      const data = await response.json();
-      
-      if (data.found && data.patient) {
-        const p = data.patient || {};
-        const obraSocial =
-          p.obraSocial ||
-          p.obra_social ||
-          p['Obra Social'] ||
-          p.insurance ||
-          '';
-        const numeroAfiliado =
-          p.numeroAfiliado ||
-          p.numeroafiliado ||
-          p.numero_afiliado ||
-          p['Numero Afiliado'] ||
-          p.affiliateNumber ||
-          '';
 
+    try {
+      const patient = await PatientService.getPatientByDni(dni);
+
+      if (patient) {
+        const p = patient;
         // Autocompletar datos del paciente encontrado
         setFormData(prev => ({
           ...prev,
           nombre: p.nombre || p.name || '',
           telefono: p.telefono || p.phone || '',
           email: p.email || '',
-          obraSocial,
-          numeroAfiliado,
-          alergias: p.alergias || p.allergies || 'Ninguna',
-          antecedentes: p.antecedentes || p.background || 'Ninguno'
+          obraSocial: p.obraSocial || '',
+          numeroAfiliado: p.numeroAfiliado || '',
+          alergias: p.alergias || 'Ninguna',
+          antecedentes: p.antecedentes || 'Ninguno'
         }));
         setPatientFound(true);
         setPatientNotice('');
@@ -134,7 +114,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
         setPatientNotice('No se encontró el paciente');
       }
     } catch (err) {
-      setPatientNotice('No se encontró el paciente');
+      setPatientNotice('Error al buscar paciente');
       setPatientFound(false);
     } finally {
       setCheckingPatient(false);
@@ -144,17 +124,12 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
   // Get available slots for selected date and appointment type
   const getAvailableSlots = async (fecha, tipoTurno) => {
     if (!fecha || !tipoTurno) return;
-    
+
     setLoadingAvailability(true);
     try {
       const appointmentType = APPOINTMENT_TYPES.find(t => t.id === tipoTurno);
-      const response = await apiFetch(
-        `${N8N_ENDPOINTS.GET_AVAILABILITY}?fecha=${fecha}&duration=${appointmentType.duration}`
-      );
-      const data = await response.json();
-      const raw = Array.isArray(data?.availableSlots) ? data.availableSlots : [];
-      const normalized = Array.from(new Set(raw.map(to24h))).sort();
-      setAvailableSlots(normalized);
+      const slots = await AppointmentService.getAvailableSlots(fecha, appointmentType.duration);
+      setAvailableSlots(slots);
     } catch (err) {
       setAvailableSlots([]);
     } finally {
@@ -197,12 +172,12 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
   // Handle form input changes
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    
+
     if (field === 'dni') {
       setPatientNotice('');
       checkPatient(value);
     }
-    
+
     if (field === 'fecha' || field === 'tipoTurno') {
       const newFormData = { ...formData, [field]: value };
       if (newFormData.fecha && newFormData.tipoTurno) {
@@ -219,46 +194,37 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
 
     try {
       const appointmentType = APPOINTMENT_TYPES.find(t => t.id === formData.tipoTurno);
-      
+
       // Combinar fecha y hora en formato ISO completo
       const appointmentISO = combineDateTimeToISO(
         formData.fecha,
         formData.hora,
         'America/Argentina/Buenos_Aires'
       );
-      
-      const response = await apiFetch(N8N_ENDPOINTS.CREATE_APPOINTMENT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          // Datos del paciente
-          dni: formData.dni,
-          nombre: formData.nombre,
-          telefono: formData.telefono,
-          email: formData.email,
-          obraSocial: formData.obraSocial,
-          numeroAfiliado: formData.numeroAfiliado,
-          alergias: formData.alergias || 'Ninguna',
-          antecedentes: formData.antecedentes || 'Ninguno',
-          // Datos del turno
-          tipoTurno: formData.tipoTurno,
-          tipoTurnoNombre: appointmentType.name,
-          duracion: appointmentType.duration,
-          fechaHora: appointmentISO, // Fecha y hora en formato ISO completo
-          timezone: 'America/Argentina/Buenos_Aires',
-          // Metadatos
-          isNewPatient: !patientFound
-        })
+
+      await AppointmentService.createAppointment({
+        // Datos del paciente
+        dni: formData.dni,
+        nombre: formData.nombre,
+        telefono: formData.telefono,
+        email: formData.email,
+        obraSocial: formData.obraSocial,
+        numeroAfiliado: formData.numeroAfiliado,
+        alergias: formData.alergias || 'Ninguna',
+        antecedentes: formData.antecedentes || 'Ninguno',
+        // Datos del turno
+        tipoTurno: formData.tipoTurno,
+        tipoTurnoNombre: appointmentType.name,
+        duracion: appointmentType.duration,
+        fechaHora: appointmentISO, // Fecha y hora en formato ISO completo
+        timezone: 'America/Argentina/Buenos_Aires',
+        // Metadatos
+        isNewPatient: !patientFound,
+        notas: '' // BookingForm currently doesn't have notes field, but service supports it
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Error al crear el turno');
-      }
-
-      await response.json();
       setSuccess(true);
-      
+
       // Notificar al padre que el turno se creó exitosamente después de un breve delay
       setTimeout(() => {
         if (onSuccess) onSuccess();
@@ -272,8 +238,8 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
 
   // Validation
   const isFormValid = () => {
-    return formData.dni && formData.nombre && formData.telefono && 
-           formData.tipoTurno && formData.fecha && formData.hora;
+    return formData.dni && formData.nombre && formData.telefono &&
+      formData.tipoTurno && formData.fecha && formData.hora;
   };
 
   // Reset form for new appointment
@@ -321,8 +287,8 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             <span className="font-medium">{APPOINTMENT_TYPES.find(t => t.id === formData.tipoTurno)?.name}</span>
           </div>
         </div>
-        <button 
-          onClick={resetForm} 
+        <button
+          onClick={resetForm}
           className="w-full bg-teal-600 text-white py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors"
         >
           Agendar Otro Turno
@@ -399,7 +365,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
               required
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <Phone className="inline w-4 h-4 mr-1" />
@@ -444,7 +410,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
               className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               N° de Afiliado
@@ -473,7 +439,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
               className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Antecedentes
@@ -549,11 +515,10 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
                     key={slot}
                     type="button"
                     onClick={() => handleInputChange('hora', slot)}
-                    className={`p-3 text-sm rounded-lg border transition-colors focus:outline-none ${
-                      formData.hora === slot
-                        ? 'bg-teal-600 text-white border-teal-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
-                    }`}
+                    className={`p-3 text-sm rounded-lg border transition-colors focus:outline-none ${formData.hora === slot
+                      ? 'bg-teal-600 text-white border-teal-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
+                      }`}
                   >
                     {slot} hs
                   </button>

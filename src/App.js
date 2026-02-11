@@ -1,50 +1,64 @@
-// src/App.js - App simplificada con Auth + Router
-import React, { useState, useCallback, useEffect } from 'react';
+// src/App.js - App Conectada a Supabase
+import React, { useState, useEffect } from 'react';
 import './App.css';
-import { BrowserRouter as Router } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
-import { isAuthenticated, saveAuth, clearAuth, getTokenInfo } from './utils/auth';
+import { supabase } from './config/supabaseClient';
 import LoginView from './components/LoginView';
 import AuthedApp from './components/AuthedApp.jsx';
+import UpdatePasswordView from './components/UpdatePasswordView.jsx';
 
 export default function App() {
-  const [authed, setAuthed] = useState(() => isAuthenticated());
-  const [justLoggedIn, setJustLoggedIn] = useState(false);
-
-  const handleLoginSuccess = useCallback((token, user) => {
-    try {
-      saveAuth(token, user);
-      setAuthed(true);
-      setJustLoggedIn(true);
-    } catch (e) {
-      setAuthed(true);
-      setJustLoggedIn(true);
-    }
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    clearAuth();
-    setAuthed(false);
-    setJustLoggedIn(false);
-  }, []);
-
-  const handleConsumedLogin = useCallback(() => {
-    setJustLoggedIn(false);
-  }, []);
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isRecovery, setIsRecovery] = useState(false);
 
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      // Debug deshabilitado: evitar logs en consola
-    }
-  }, [authed, justLoggedIn]);
+    // 1. Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
 
-  if (!authed) {
-    return <LoginView onSuccess={handleLoginSuccess} />;
+    // 2. Listen for changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsRecovery(false);
+  };
+
+  if (loading) {
+    return <div className="flex h-screen items-center justify-center">Cargando...</div>;
   }
 
   return (
     <Router>
-      <AuthedApp onLogout={handleLogout} justLoggedIn={justLoggedIn} onConsumedLogin={handleConsumedLogin} />
+      <Routes>
+        <Route path="/update-password" element={<UpdatePasswordView />} />
+        <Route
+          path="/*"
+          element={
+            isRecovery ? (
+              <Navigate to="/update-password" replace />
+            ) : !session ? (
+              <LoginView onSuccess={() => { }} />
+            ) : (
+              <AuthedApp onLogout={handleLogout} justLoggedIn={false} />
+            )
+          }
+        />
+      </Routes>
     </Router>
   );
 }

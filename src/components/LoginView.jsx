@@ -1,8 +1,10 @@
-// src/components/LoginView.jsx - VERSIÓN PRODUCCIÓN
+
+// src/components/LoginView.jsx - SUPABASE VERSION
 import React, { useState, useEffect } from "react";
 import { Shield, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
 import fondoLogin from "../imagenes/fondo-login-dentista.jpg";
-import { apiFetch } from "../utils/api";
+import { signIn } from "../utils/auth"; // Usa nuestra función wrapper de Supabase
+import { supabase } from "../config/supabaseClient";
 import { N8N_BASE } from "../config/n8n";
 
 export default function LoginView({ onSuccess }) {
@@ -36,91 +38,55 @@ export default function LoginView({ onSuccess }) {
     setLoading(true);
     setError("");
     setSuccess("");
-    try {
-      const response = await apiFetch(`${n8nBaseUrl}/webhook/auth-login`, {
-        method: "POST",
-        body: JSON.stringify({
-          username: credentials.username.trim(),
-          password: credentials.password,
-          timestamp: new Date().toISOString(),
-        }),
-      });
-      const data = await response.json();
 
-      if (data.success && data.token) {
-        setSuccess(`¡Bienvenido ${data.user?.name || credentials.username}!`);
-        setTimeout(() => {
-          if (typeof onSuccess === "function") {
-            onSuccess(data.token, data.user);
-          } else {
-            try {
-              localStorage.setItem("token", data.token);
-              localStorage.setItem("user", JSON.stringify(data.user));
-              window.location.assign("/");
-            } catch {
-              window.location.assign("/");
-            }
-          }
-        }, 1000);
+    try {
+      // Supabase Login
+      await signIn(credentials.username.trim(), credentials.password);
+
+      setSuccess("¡Bienvenido!");
+      // No necesitamos hacer nada más, App.js detectará el session change automáticamente
+
+    } catch (err) {
+      console.error("Login error:", err);
+      if (err.message === "Invalid login credentials") {
+        setError("Usuario o contraseña incorrectos");
       } else {
-        switch (data.code) {
-          case "RATE_LIMITED":
-          case "ACCOUNT_LOCKED":
-            setError(data.message || "Tu cuenta está temporalmente bloqueada");
-            break;
-          case "INVALID_CREDENTIALS":
-            setError(
-              "Usuario o contraseña incorrectos" +
-                (data.attemptsRemaining !== undefined
-                  ? ` (${data.attemptsRemaining} intentos restantes)`
-                  : "")
-            );
-            break;
-          default:
-            setError(data.message || "Error de autenticación");
-        }
+        setError(err.message || "Error de autenticación");
       }
-    } catch {
-      setError("Error de conexión. Verificá que el servidor esté disponible.");
     } finally {
       setLoading(false);
     }
   };
 
   const quickFill = (user) => {
-    if (user === "admin") {
-      setCredentials({ username: "admin", password: "Chilldigital2025" });
-    } else {
-      setCredentials({ username: "doctor", password: "TuPassword123" });
-    }
+    // Placeholder for dev convenience if needed, otherwise empty
+    // setCredentials({ username: "test@example.com", password: "password" });
   };
 
   // Forgot Password: submit
   const handleForgotPassword = async (e) => {
     e.preventDefault();
-    setFpMsg({ type: "", text: "" });
-
-    const email = fpEmail.trim();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-      setFpMsg({ type: "error", text: "Ingresá un email válido." });
+    if (!fpEmail.trim()) {
+      setFpMsg({ type: "error", text: "Por favor ingresa tu email para recuperar la contraseña." });
       return;
     }
 
     setFpLoading(true);
+    setFpMsg({ type: "", text: "" }); // Clear previous messages
+
     try {
-      const res = await apiFetch(`${n8nBaseUrl}/webhook/forgot-password`, {
-        method: "POST",
-        body: JSON.stringify({ email, timestamp: new Date().toISOString() }),
+      const { error } = await supabase.auth.resetPasswordForEmail(fpEmail.trim(), {
+        redirectTo: `${window.location.origin}/update-password`,
       });
-      const data = await res.json();
-      if (data.success) {
-        setFpMsg({ type: "success", text: data.message || "Si el email existe, te enviamos instrucciones." });
-      } else {
-        setFpMsg({ type: "error", text: data.message || "No pudimos procesar tu solicitud." });
-      }
-    } catch {
-      setFpMsg({ type: "error", text: "Error de conexión. Intentá de nuevo." });
+
+      if (error) throw error;
+
+      setFpMsg({ type: "success", text: "Se ha enviado un correo de recuperación. Revisa tu bandeja de entrada." });
+      // Optionally close the modal after success, or let the user see the message
+      // setFpOpen(false);
+    } catch (err) {
+      console.error("Forgot password error:", err);
+      setFpMsg({ type: "error", text: err.message || "Error al enviar correo de recuperación." });
     } finally {
       setFpLoading(false);
     }
@@ -199,24 +165,18 @@ export default function LoginView({ onSuccess }) {
 
               {/* Campo Usuario */}
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">Usuario</label>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                 <input
-                  type="text"
+                  type="email"
                   id="username"
                   name="username"
                   value={credentials.username}
                   onChange={handleInputChange}
-                  placeholder="Ingresá tu usuario"
+                  placeholder="tu@email.com"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors"
                   disabled={loading}
                   autoComplete="username"
                 />
-                {process.env.NODE_ENV === "development" && (
-                  <div className="mt-2 flex gap-2">
-                    <button type="button" onClick={() => quickFill("admin")} disabled={loading} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded text-gray-600">Admin</button>
-                    <button type="button" onClick={() => quickFill("doctor")} disabled={loading} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded text-gray-600">Doctor</button>
-                  </div>
-                )}
               </div>
 
               {/* Campo Contraseña */}
@@ -293,7 +253,7 @@ export default function LoginView({ onSuccess }) {
 
               {/* Mensaje modal */}
               {fpMsg.text && (
-                <div className={`mt-4 px-4 py-3 rounded-lg text-sm border flex items-center gap-2 ${fpMsg.type === "success" ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                <div className={`mt-4 px-4 py-3 rounded-lg text-sm border flex items-center gap-2 ${fpMsg.type === "success" ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
                   {fpMsg.type === "success" ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
                   <span>{fpMsg.text}</span>
                 </div>
@@ -316,11 +276,7 @@ export default function LoginView({ onSuccess }) {
 
                 <div className="flex items-center justify-end gap-2">
                   <button type="button" className="px-4 py-2 text-sm rounded-lg border hover:bg-gray-50" onClick={() => setFpOpen(false)} disabled={fpLoading}>Cancelar</button>
-                  {fpMsg.type === "success" ? (
-                    <button type="button" onClick={() => setFpOpen(false)} className="px-4 py-2 text-sm rounded-lg brand-btn">Salir</button>
-                  ) : (
-                    <button type="submit" disabled={fpLoading || !fpEmail.trim()} className="px-4 py-2 text-sm rounded-lg brand-btn disabled:bg-gray-400 disabled:cursor-not-allowed">{fpLoading ? "Enviando..." : "Enviar"}</button>
-                  )}
+                  <button type="submit" disabled={fpLoading || !fpEmail.trim()} className="px-4 py-2 text-sm rounded-lg brand-btn disabled:bg-gray-400 disabled:cursor-not-allowed">{fpLoading ? "Enviando..." : "Enviar"}</button>
                 </div>
               </form>
 

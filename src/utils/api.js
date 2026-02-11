@@ -13,7 +13,7 @@ export const apiFetch = async (url, options = {}) => {
   }
 
   // Attach JWT if present
-  const token = getAuthToken();
+  const token = await getAuthToken();
   if (token && token !== 'temp_token') {
     headers['Authorization'] = `Bearer ${token}`;
   }

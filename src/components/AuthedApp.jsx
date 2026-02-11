@@ -13,8 +13,8 @@ import { ModalsProvider } from '../hooks/useModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
 
 import { checkTokenExpiry, getTokenInfo } from '../utils/auth';
-import { URL_DELETE_PATIENT } from '../config/n8n';
-import { apiFetch } from '../utils/api';
+import { PatientService } from '../services/PatientService';
+
 
 const titleByPath = (pathname) => {
   if (pathname.startsWith('/pacientes')) return 'Pacientes';
@@ -26,22 +26,6 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // Verificar token periódicamente
-  useEffect(() => {
-    if (!checkTokenExpiry()) {
-      onLogout();
-      return;
-    }
-
-    const tokenCheckInterval = setInterval(() => {
-      if (!checkTokenExpiry()) {
-        onLogout();
-      }
-    }, 5 * 60 * 1000);
-
-    return () => clearInterval(tokenCheckInterval);
-  }, [onLogout]);
 
   // Navegar a home después del login
   useEffect(() => {
@@ -71,25 +55,19 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }) {
         const patient =
           typeof patientData === 'string'
             ? normalizedPatients.find(
-                (p) =>
-                  p?.id === patientData ||
-                  p?._id === patientData ||
-                  p?.dni === patientData
-              )
+              (p) =>
+                p?.id === patientData ||
+                p?._id === patientData ||
+                p?.dni === patientData
+            )
             : patientData;
 
         if (!patient) throw new Error('No se pudo encontrar el paciente');
 
-        const dni = patient?.dni || '';
-        if (!dni) throw new Error('No se pudo identificar el paciente (falta DNI)');
+        const id = patient?.id || patient?._id;
+        if (!id) throw new Error('No se pudo identificar el paciente (falta ID)');
 
-        const response = await apiFetch(URL_DELETE_PATIENT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dni, timestamp: new Date().toISOString() }),
-        });
-        if (!response.ok) throw new Error(`Error del servidor: ${response.status}`);
-
+        await PatientService.deletePatient(id);
         await refreshPatients();
       } catch (err) {
         throw err;
