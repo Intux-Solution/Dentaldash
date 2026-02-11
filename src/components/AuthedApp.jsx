@@ -12,7 +12,7 @@ import { useTurnos } from '../hooks/useTurnos';
 import { ModalsProvider } from '../hooks/useModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
 
-import { checkTokenExpiry, getTokenInfo } from '../utils/auth';
+import { checkTokenExpiry } from '../utils/auth';
 import { PatientService } from '../services/PatientService';
 
 
@@ -39,7 +39,6 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }) {
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
       // Debug deshabilitado: evitar logs en consola
-      void getTokenInfo();
     }
   }, []);
 

@@ -5,7 +5,7 @@ import { Shield, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
 import fondoLogin from "../imagenes/fondo-login-dentista.jpg";
 import { signIn } from "../utils/auth"; // Usa nuestra función wrapper de Supabase
 import { supabase } from "../config/supabaseClient";
-import { N8N_BASE } from "../config/n8n";
+
 
 export default function LoginView({ onSuccess }) {
   const [credentials, setCredentials] = useState({ username: "", password: "" });
@@ -20,7 +20,7 @@ export default function LoginView({ onSuccess }) {
   const [fpLoading, setFpLoading] = useState(false);
   const [fpMsg, setFpMsg] = useState({ type: "", text: "" });
 
-  const n8nBaseUrl = N8N_BASE;
+
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

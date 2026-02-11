@@ -1,7 +1,7 @@
 // src/components/ChangePasswordModal.jsx
 import React, { useState } from 'react';
 import { X, Eye, EyeOff, Lock, Check, AlertCircle } from 'lucide-react';
-import { secureApiCall } from '../utils/auth';
+import { supabase } from '../config/supabaseClient';
 
 export default function ChangePasswordModal({ open, onClose, user }) {
   const [passwords, setPasswords] = useState({
@@ -39,7 +39,7 @@ export default function ChangePasswordModal({ open, onClose, user }) {
       hasNumber: /\d/.test(password),
       hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(password)
     };
-    
+
     const score = Object.values(requirements).filter(Boolean).length;
     return { requirements, score, isValid: score >= 3 && requirements.length };
   };
@@ -82,36 +82,27 @@ export default function ChangePasswordModal({ open, onClose, user }) {
     setSuccess('');
 
     try {
-      const response = await secureApiCall(`${n8nBaseUrl}/webhook/change-password`, {
-        method: 'POST',
-        body: JSON.stringify({
-          email: userEmail,
-          currentPassword: passwords.currentPassword,
-          newPassword: passwords.newPassword,
-          timestamp: new Date().toISOString()
-        })
+      const { error } = await supabase.auth.updateUser({
+        password: passwords.newPassword
       });
 
-      const data = await response.json();
+      if (error) throw error;
 
-      if (data.success) {
-        setSuccess('¡Contraseña actualizada exitosamente!');
-        
-        // Limpiar formulario después de 2 segundos y cerrar
-        setTimeout(() => {
-          setPasswords({
-            currentPassword: '',
-            newPassword: '',
-            confirmPassword: ''
-          });
-          setSuccess('');
-          onClose();
-        }, 2000);
-      } else {
-        setError(data.message || 'Error al actualizar la contraseña');
-      }
+      setSuccess('¡Contraseña actualizada exitosamente!');
+
+      // Limpiar formulario después de 2 segundos y cerrar
+      setTimeout(() => {
+        setPasswords({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+        setSuccess('');
+        onClose();
+      }, 2000);
+
     } catch (err) {
-      setError('Error de conexión. Intenta nuevamente.');
+      setError(err.message || 'Error al actualizar la contraseña');
     } finally {
       setLoading(false);
     }
@@ -119,7 +110,7 @@ export default function ChangePasswordModal({ open, onClose, user }) {
 
   const handleClose = () => {
     if (loading) return;
-    
+
     setPasswords({
       currentPassword: '',
       newPassword: '',
@@ -165,7 +156,7 @@ export default function ChangePasswordModal({ open, onClose, user }) {
               <span>{error}</span>
             </div>
           )}
-          
+
           {success && (
             <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
               <Check size={16} />
@@ -234,15 +225,14 @@ export default function ChangePasswordModal({ open, onClose, user }) {
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-gray-600">Seguridad de contraseña:</span>
-                    <span className={`text-xs font-medium ${
-                      passwordValidation.score >= 4 ? 'text-green-600' :
+                    <span className={`text-xs font-medium ${passwordValidation.score >= 4 ? 'text-green-600' :
                       passwordValidation.score >= 3 ? 'text-yellow-600' : 'text-red-600'
-                    }`}>
+                      }`}>
                       {passwordValidation.score >= 4 ? 'Excelente' :
-                       passwordValidation.score >= 3 ? 'Buena' : 'Débil'}
+                        passwordValidation.score >= 3 ? 'Buena' : 'Débil'}
                     </span>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className={`flex items-center gap-1 ${passwordValidation.requirements.length ? 'text-green-600' : 'text-gray-400'}`}>
                       {passwordValidation.requirements.length ? '✓' : '○'} 8+ caracteres
@@ -277,10 +267,9 @@ export default function ChangePasswordModal({ open, onClose, user }) {
                   value={passwords.confirmPassword}
                   onChange={handleInputChange}
                   placeholder="Confirma tu nueva contraseña"
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors pr-12 ${
-                    passwords.confirmPassword && passwords.newPassword !== passwords.confirmPassword 
-                      ? 'border-red-300' : 'border-gray-300'
-                  }`}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors pr-12 ${passwords.confirmPassword && passwords.newPassword !== passwords.confirmPassword
+                    ? 'border-red-300' : 'border-gray-300'
+                    }`}
                   disabled={loading}
                   autoComplete="new-password"
                 />

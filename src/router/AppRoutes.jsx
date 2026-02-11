@@ -6,8 +6,7 @@ import PacientesView from '../components/PacientesView';
 import TurnosView from '../components/TurnosView';
 
 import { useModals } from '../hooks/useModals';
-import { URL_DELETE_PATIENT } from '../config/n8n';
-import { apiFetch } from '../utils/api';
+import { PatientService } from '../services/PatientService';
 
 export default function AppRoutes({ normalizedPatients = [], loading = false, refreshPatients }) {
   const navigate = useNavigate();
@@ -42,24 +41,18 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
 
       if (!patient) throw new Error('No se pudo encontrar el paciente');
 
-      const key = patient?.id || patient?._id || patient?.dni;
-      const dni = patient?.dni || '';
-      if (!dni) throw new Error('No se pudo identificar el paciente (falta DNI)');
+      const id = patient?.id || patient?._id;
+      if (!id) throw new Error('No se pudo identificar el paciente (falta ID)');
 
-      if (key) setLocallyDeleted(prev => [...prev, key]);
+      if (id) setLocallyDeleted(prev => [...prev, id]);
 
-      const response = await apiFetch(URL_DELETE_PATIENT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dni, timestamp: new Date().toISOString() }),
-      });
-      if (!response.ok) throw new Error(`Error del servidor: ${response.status}`);
+      await PatientService.deletePatient(id);
 
       await refreshPatients?.();
-      if (key) setLocallyDeleted(prev => prev.filter(k => k !== key));
+      if (id) setLocallyDeleted(prev => prev.filter(k => k !== id));
     } catch (err) {
-      const key = typeof patientData === 'string' ? patientData : (patientData?.id || patientData?._id || patientData?.dni);
-      if (key) setLocallyDeleted(prev => prev.filter(k => k !== key));
+      const id = typeof patientData === 'string' ? patientData : (patientData?.id || patientData?._id);
+      if (id) setLocallyDeleted(prev => prev.filter(k => k !== id));
       throw err;
     }
   }, [refreshPatients, patientsForViews]);
