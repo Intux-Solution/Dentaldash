@@ -131,22 +131,11 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
       }
 
       // Liberar turno actual solo una vez para que el horario quede disponible
-      const freeAndLoad = async () => {
-        if (idTurno && !freedRef.current) {
-          try {
-            await AppointmentService.deleteAppointment(idTurno);
-            freedRef.current = true;
-          } catch (e) {
-            // Si falla el delete, continuamos pero avisamos
-            console.error('No se pudo liberar el turno antes de reprogramar:', e);
-          }
-        }
-        if (fecha && tipoTurno) {
-          getAvailableSlots(fecha, tipoTurno, idTurno);
-        }
-      };
+      // CORRECCIÓN: No borramos el turno al abrir. Usamos excludeId en getAvailableSlots.
 
-      freeAndLoad();
+      if (fecha && tipoTurno) {
+        getAvailableSlots(fecha, tipoTurno, idTurno);
+      }
     }
   }, [open, turno, getAvailableSlots]);
 

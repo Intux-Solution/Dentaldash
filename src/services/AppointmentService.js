@@ -137,6 +137,26 @@ export class AppointmentService {
     }
 
     /**
+     * Helper para formatear la descripción del evento de Google
+     */
+    static formatEventDescription(data) {
+        return `
+Pacinte: ${data.nombre}
+DNI: ${data.dni}
+Teléfono: ${data.telefono}
+Email: ${data.email || 'No informado'}
+Obra Social: ${data.obraSocial || 'No informada'}
+Nro Afiliado: ${data.numeroAfiliado || '-'}
+
+Tipo de Turno: ${data.tipoTurnoNombre}
+Duración: ${data.duracion} min
+
+Notas:
+${data.notas || 'Sin notas adicionales'}
+        `.trim();
+    }
+
+    /**
      * Crear un turno
      */
     static async createAppointment(data) {
@@ -203,11 +223,13 @@ export class AppointmentService {
                 // Determine patient email (existing or from data)
                 const patientEmail = existingPatient ? existingPatient.email : data.email;
 
+                const description = this.formatEventDescription(data);
+
                 const googleEvent = await GoogleCalendarService.createEvent({
                     ...result,
                     title: appointment.title,
                     patientEmail: patientEmail,
-                    notes: appointment.notes
+                    notes: description // Usamos la descripción enriquecida
                 });
 
                 if (googleEvent && googleEvent.id) {
@@ -251,6 +273,24 @@ export class AppointmentService {
                 .single();
 
             if (error) throw error;
+
+            // Sync with Google Calendar
+            try {
+                if (result.google_event_id) {
+                    const description = this.formatEventDescription(data);
+
+                    await GoogleCalendarService.updateEvent(result.google_event_id, {
+                        ...updates,
+                        patientEmail: data.email,
+                        notes: description // Update description with rich text
+                    });
+                } else {
+                    console.warn('Skipping Google Update: No google_event_id found for appointment', id);
+                }
+            } catch (syncError) {
+                console.error('Google Sync Error (Update):', syncError);
+            }
+
             return result;
         } catch (error) {
             console.error('Error updating appointment:', error);
@@ -263,19 +303,35 @@ export class AppointmentService {
      */
     static async deleteAppointment(id) {
         try {
-            // Hard delete or soft delete?
-            // Init DB said "status: cancelled".
-            // But BookingForm delete usually means "remove from calendar".
-            // Let's hard delete for consistency with previous N8N logic which seemed to remove it.
-            // Although keeping history is better.
-            // Let's UPDATE status to 'cancelled' so it falls out of queries.
+            // 1. Fetch appointment to get google_event_id
+            const { data: appointment } = await supabase
+                .from('appointments')
+                .select('google_event_id')
+                .eq('id', id)
+                .single();
 
+            console.log('Attempting to delete appointment:', id, 'Google ID:', appointment?.google_event_id);
+
+            // 2. Soft delete in Supabase
             const { error } = await supabase
                 .from('appointments')
                 .update({ status: 'cancelled' })
                 .eq('id', id);
 
             if (error) throw error;
+
+            // 3. Delete from Google Calendar
+            if (appointment?.google_event_id) {
+                try {
+                    await GoogleCalendarService.deleteEvent(appointment.google_event_id);
+                    console.log('Google Event deleted successfully:', appointment.google_event_id);
+                } catch (syncError) {
+                    console.error('Google Sync Error (Delete):', syncError);
+                }
+            } else {
+                console.warn('Skipping Google Delete: No google_event_id found in DB.');
+            }
+
             return true;
         } catch (error) {
             console.error('Error deleting appointment:', error);
