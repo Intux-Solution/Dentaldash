@@ -87,7 +87,10 @@ export class AppointmentService {
 
             if (error) throw error;
 
-            // 3. Generar slots para CADA rango horario definido
+            // 3. Traer eventos de Google Calendar (si está conectado)
+            const googleEvents = await GoogleCalendarService.listEvents(dayStartBound, dayEndBound);
+
+            // 4. Generar slots para CADA rango horario definido
             const slots = [];
 
             for (const schedule of daySchedules) {
@@ -108,15 +111,30 @@ export class AppointmentService {
 
                     if (slotEnd > rangeEnd) break;
 
-                    // Verificar colisión
-                    const isOccupied = existing.some(app => {
+                    // Verificar colisión con turnos locales
+                    const isOccupiedLocal = existing.some(app => {
                         if (excludeId && app.id === excludeId) return false;
                         const appStart = new Date(app.start_time);
                         const appEnd = new Date(app.end_time);
                         return (slotStart < appEnd && slotEnd > appStart);
                     });
 
-                    if (!isOccupied) {
+                    // Verificar colisión con Google Calendar
+                    const isOccupiedGoogle = googleEvents.some(event => {
+                        // Ignorar eventos de todo el día por ahora si no bloquean (o asumir que bloquean)
+                        // Google "transparency": "transparent" = disponible, "opaque" = ocupado.
+                        if (event.transparency === 'transparent') return false;
+
+                        const eventStart = new Date(event.start.dateTime || event.start.date);
+                        const eventEnd = new Date(event.end.dateTime || event.end.date);
+
+                        // Ajuste para eventos de todo el día que terminan al dia siguiente a las 00:00
+                        // Si es 'date' (todo el día), eventStart es 00:00 del día y eventEnd 00:00 del siguiente.
+
+                        return (slotStart < eventEnd && slotEnd > eventStart);
+                    });
+
+                    if (!isOccupiedLocal && !isOccupiedGoogle) {
                         slots.push(
                             slotStart.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
                         );

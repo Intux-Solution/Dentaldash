@@ -13,6 +13,38 @@ export class GoogleCalendarService {
     }
 
     /**
+     * List events from the primary calendar.
+     */
+    static async listEvents(timeMin, timeMax) {
+        const token = await this.getProviderToken();
+        if (!token) return [];
+
+        try {
+            const params = new URLSearchParams({
+                timeMin: timeMin.toISOString(),
+                timeMax: timeMax.toISOString(),
+                singleEvents: 'true',
+                orderBy: 'startTime',
+            });
+
+            const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) return [];
+
+            const data = await response.json();
+            return data.items || [];
+        } catch (error) {
+            console.error('Error listing Google Calendar events:', error);
+            return [];
+        }
+    }
+
+    /**
      * Create an event in the primary calendar.
      */
     static async createEvent(appointment) {
