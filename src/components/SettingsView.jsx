@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../config/supabaseClient';
-import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X } from 'lucide-react';
+import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard } from 'lucide-react';
 
 const DAYS = [
     { id: 0, name: 'Domingo' },
@@ -13,7 +13,7 @@ const DAYS = [
 ];
 
 export default function SettingsView() {
-    const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'schedule'
+    const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'insurances' | 'schedule'
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -29,6 +29,7 @@ export default function SettingsView() {
         user_id: null,
         accepted_insurances: []
     });
+    const [googleAvatar, setGoogleAvatar] = useState(null);
     const [avatarFile, setAvatarFile] = useState(null);
     const [avatarPreview, setAvatarPreview] = useState(null);
     const fileInputRef = useRef(null);
@@ -43,6 +44,11 @@ export default function SettingsView() {
             setLoading(true);
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
+
+            // Set Google Avatar from session metadata
+            if (session.user?.user_metadata?.avatar_url) {
+                setGoogleAvatar(session.user.user_metadata.avatar_url);
+            }
 
             // 1. Fetch Profile
             const { data: profileData, error: profileError } = await supabase
@@ -219,9 +225,9 @@ export default function SettingsView() {
         setSuccess('');
 
         try {
-            if (activeTab === 'profile') {
+            if (activeTab === 'profile' || activeTab === 'insurances') {
                 await saveProfile();
-            } else {
+            } else if (activeTab === 'schedule') {
                 await saveSchedules();
             }
         } catch (err) {
@@ -240,7 +246,7 @@ export default function SettingsView() {
             <div className="flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
-                    <p className="text-gray-500">Gestiona tu perfil y horarios de atención.</p>
+                    <p className="text-gray-500">Gestiona tu perfil, obras sociales y horarios.</p>
                 </div>
                 <button
                     onClick={handleSave}
@@ -270,10 +276,10 @@ export default function SettingsView() {
             )}
 
             {/* Tabs */}
-            <div className="flex border-b mb-6">
+            <div className="flex border-b mb-6 overflow-x-auto no-scrollbar">
                 <button
                     onClick={() => setActiveTab('profile')}
-                    className={`px-6 py-3 font-medium text-sm transition-colors relative ${activeTab === 'profile' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'
+                    className={`px-6 py-3 font-medium text-sm transition-colors relative whitespace-nowrap ${activeTab === 'profile' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     Perfil
@@ -282,8 +288,18 @@ export default function SettingsView() {
                     )}
                 </button>
                 <button
+                    onClick={() => setActiveTab('insurances')}
+                    className={`px-6 py-3 font-medium text-sm transition-colors relative whitespace-nowrap ${activeTab === 'insurances' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                >
+                    Obras Sociales
+                    {activeTab === 'insurances' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />
+                    )}
+                </button>
+                <button
                     onClick={() => setActiveTab('schedule')}
-                    className={`px-6 py-3 font-medium text-sm transition-colors relative ${activeTab === 'schedule' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'
+                    className={`px-6 py-3 font-medium text-sm transition-colors relative whitespace-nowrap ${activeTab === 'schedule' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     Horarios de Atención
@@ -303,8 +319,8 @@ export default function SettingsView() {
                             {/* Avatar */}
                             <div className="flex flex-col items-center gap-4">
                                 <div className="relative w-32 h-32 rounded-full bg-gray-100 border-2 border-gray-200 overflow-hidden group">
-                                    {avatarPreview ? (
-                                        <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                                    {(avatarPreview || googleAvatar) ? (
+                                        <img src={avatarPreview || googleAvatar} alt="Avatar" className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center text-gray-400">
                                             <User size={48} />
@@ -331,6 +347,9 @@ export default function SettingsView() {
                                 >
                                     Cambiar Foto
                                 </button>
+                                <p className="text-[10px] text-gray-400 text-center max-w-[120px]">
+                                    {googleAvatar && !avatarPreview ? "Usando foto de Google" : "Foto personalizada"}
+                                </p>
                             </div>
 
                             {/* Inputs */}
@@ -351,73 +370,85 @@ export default function SettingsView() {
                                     </p>
                                 </div>
 
-                                {/* Obras Sociales */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Obras Sociales Atendidas
-                                    </label>
-                                    <div className="flex flex-wrap gap-2 mb-3">
-                                        {(profile.accepted_insurances || []).map((ins, index) => (
-                                            <div key={index} className="flex items-center gap-1 bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-sm border border-teal-100">
-                                                <span>{ins}</span>
-                                                <button
-                                                    onClick={() => {
-                                                        const newInsurances = profile.accepted_insurances.filter((_, i) => i !== index);
-                                                        handleProfileChange('accepted_insurances', newInsurances);
-                                                    }}
-                                                    className="hover:text-teal-900 rounded-full p-0.5"
-                                                >
-                                                    <X size={14} className="lucide-x" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            placeholder="Agregar Obra Social (Ej. OSDE)..."
-                                            className="flex-1 px-4 py-2 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all text-sm"
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    const val = e.target.value.trim();
-                                                    if (val) {
-                                                        const current = profile.accepted_insurances || [];
-                                                        if (!current.includes(val)) {
-                                                            handleProfileChange('accepted_insurances', [...current, val]);
-                                                        }
-                                                        e.target.value = '';
-                                                    }
-                                                }
-                                            }}
-                                            id="insurance-input"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const input = document.getElementById('insurance-input');
-                                                const val = input.value.trim();
-                                                if (val) {
-                                                    const current = profile.accepted_insurances || [];
-                                                    if (!current.includes(val)) {
-                                                        handleProfileChange('accepted_insurances', [...current, val]);
-                                                    }
-                                                    input.value = '';
-                                                }
-                                            }}
-                                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium text-sm transition-colors"
-                                        >
-                                            Agregar
-                                        </button>
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-2">
-                                        Presiona Enter o el botón para agregar. Estas opciones aparecerán en el formulario de turnos (próximamente).
-                                    </p>
-                                </div>
-
                                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm text-blue-800">
                                     <p>Tu cuenta está vinculada a Google. La gestión de tu email y contraseña se realiza desde tu cuenta de Google.</p>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* INSURANCES TAB */}
+                {activeTab === 'insurances' && (
+                    <div className="p-8">
+                        <div className="max-w-xl">
+                            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                                <CreditCard size={20} /> Obras Sociales Atendidas
+                            </h2>
+                            <p className="text-sm text-gray-500 mb-6">
+                                Agregá las obras sociales y prepagas con las que trabajás. Estas opciones aparecerán en el formulario de reserva para tus pacientes.
+                            </p>
+
+                            <div className="flex flex-wrap gap-2 mb-6">
+                                {(profile.accepted_insurances || []).length === 0 ? (
+                                    <div className="w-full p-4 bg-gray-50 border border-dashed rounded-xl text-center text-gray-400 text-sm">
+                                        No has agregado ninguna obra social todavía.
+                                    </div>
+                                ) : (
+                                    (profile.accepted_insurances || []).map((ins, index) => (
+                                        <div key={index} className="flex items-center gap-2 bg-teal-50 text-teal-700 px-4 py-2 rounded-xl text-sm border border-teal-100 shadow-sm animate-fade-in">
+                                            <span className="font-medium">{ins}</span>
+                                            <button
+                                                onClick={() => {
+                                                    const newInsurances = profile.accepted_insurances.filter((_, i) => i !== index);
+                                                    handleProfileChange('accepted_insurances', newInsurances);
+                                                }}
+                                                className="hover:bg-teal-200/50 rounded-full p-1 transition-colors"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Ej. OSDE, Swiss Medical, Galeno..."
+                                    className="flex-1 px-4 py-3 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all text-sm"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            const val = e.target.value.trim();
+                                            if (val) {
+                                                const current = profile.accepted_insurances || [];
+                                                if (!current.includes(val)) {
+                                                    handleProfileChange('accepted_insurances', [...current, val]);
+                                                }
+                                                e.target.value = '';
+                                            }
+                                        }
+                                    }}
+                                    id="insurance-input"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const input = document.getElementById('insurance-input');
+                                        const val = input.value.trim();
+                                        if (val) {
+                                            const current = profile.accepted_insurances || [];
+                                            if (!current.includes(val)) {
+                                                handleProfileChange('accepted_insurances', [...current, val]);
+                                            }
+                                            input.value = '';
+                                        }
+                                    }}
+                                    className="px-6 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 font-medium text-sm transition-colors shadow-sm"
+                                >
+                                    Agregar
+                                </button>
                             </div>
                         </div>
                     </div>
