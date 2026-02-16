@@ -34,7 +34,11 @@ export class GoogleCalendarService {
                 },
             });
 
-            if (!response.ok) return [];
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                console.error('Google Calendar list error:', response.status, err);
+                return [];
+            }
 
             const data = await response.json();
             return data.items || [];

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ModalShell from './ModalShell';
 import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope, AlertCircle, Check, X, ArrowLeft } from 'lucide-react';
+import InsuranceAutocomplete from './InsuranceAutocomplete';
 import { cls } from '../utils/helpers';
 
 export default function EditPatientModal({ open, patient, onClose, onSaved, onBack }) {
@@ -19,7 +20,7 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
     estado: 'Activo',
     notas: ''
   });
-  
+
   const [historiaClinicaFile, setHistoriaClinicaFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +40,7 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
     if (open && patient) {
       // Helper para manejar arrays de N8N
       const getValue = (val) => Array.isArray(val) ? val[0] || '' : val || '';
-      
+
       setForm({
         nombre: getValue(patient?.nombre),
         dni: getValue(patient?.dni),
@@ -228,22 +229,12 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
               />
             </div>
 
-            {/* 4. Obra Social */}
-            <div>
-              <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
-                <Building2 size={16} className="mr-2 text-gray-500" />
-                Obra Social
-              </label>
-              <input
-                name="obraSocial"
-                value={form.obraSocial}
-                onChange={handleChange}
-                type="text"
-                placeholder="OSDE, Swiss Medical, etc."
-                className="w-full rounded-xl border border-transparent bg-[#F5F5F5] px-3 py-2 placeholder:text-sm text-sm focus:outline-none focus:ring-0 focus:shadow-none focus:border-transparent"
-                disabled={saving}
-              />
-            </div>
+            {/* 4. Obra Social (Searchable Autocomplete) */}
+            <InsuranceAutocomplete
+              value={form.obraSocial}
+              onChange={handleChange}
+              disabled={saving}
+            />
 
             {/* 5. Número de Afiliado */}
             <div>

@@ -196,4 +196,46 @@ export class PatientService {
       throw error;
     }
   }
+
+  /**
+   * Obtener lista única de todas las obras sociales registradas (en perfil y en pacientes)
+   */
+  static async getAllUniqueInsurances() {
+    try {
+      // 1. Obtener de la configuración del profesional (profiles)
+      const { data: { session } } = await supabase.auth.getSession();
+      let profileInsurances = [];
+
+      if (session?.user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('accepted_insurances')
+          .eq('id', session.user.id)
+          .single();
+        if (profile?.accepted_insurances) {
+          profileInsurances = profile.accepted_insurances;
+        }
+      }
+
+      // 2. Obtener de los pacientes ya registrados
+      const { data: patientData, error } = await supabase
+        .from('patients')
+        .select('obra_social');
+
+      if (error) throw error;
+
+      const patientInsurances = patientData
+        .map(p => p.obra_social)
+        .filter(val => val && val.trim() !== '');
+
+      // 3. Combinar y quitar duplicados (ignorado mayúsculas/minúsculas para el set)
+      const combined = [...new Set([...profileInsurances, ...patientInsurances])];
+
+      // Ordenar alfabéticamente
+      return combined.sort((a, b) => a.localeCompare(b));
+    } catch (error) {
+      console.error('Error fetching unique insurances:', error);
+      return [];
+    }
+  }
 }

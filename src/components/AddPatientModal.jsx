@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope, Paperclip } from 'lucide-react';
+import InsuranceAutocomplete from './InsuranceAutocomplete';
 
 const todayISO = () => new Date().toISOString();
 
@@ -7,7 +8,7 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate, onC
   const submittingRef = useRef(false);
   const fileInputRef = useRef(null);
   const attachBtnRef = useRef(null);
-  
+
   const [form, setForm] = useState({
     nombre: '',
     dni: '',
@@ -21,7 +22,7 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate, onC
     estado: 'Activo', // Valor por defecto
     notas: ''
   });
-  
+
   const [historiaClinicaFile, setHistoriaClinicaFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -52,15 +53,15 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate, onC
     const file = e.target.files?.[0];
     setHistoriaClinicaFile(file || null);
     // Devolver el foco a un elemento visible y estable
-    try { attachBtnRef.current?.focus({ preventScroll: true }); } catch {}
+    try { attachBtnRef.current?.focus({ preventScroll: true }); } catch { }
   };
 
   const handleClearFile = () => {
     try {
       if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch {}
+    } catch { }
     setHistoriaClinicaFile(null);
-    try { attachBtnRef.current?.focus({ preventScroll: true }); } catch {}
+    try { attachBtnRef.current?.focus({ preventScroll: true }); } catch { }
   };
 
   const submit = async () => {
@@ -92,7 +93,7 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate, onC
 
       if (historiaClinicaFile) {
         baseData.historiaClinicaFile = historiaClinicaFile;
-      } 
+      }
 
       if (typeof onCreate !== 'function') {
         throw new Error('onCreate no está definido');
@@ -136,11 +137,11 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate, onC
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={submitting ? undefined : onClose}
       />
-      
+
       {/* Modal */}
       <div className="relative z-10 flex h-full items-center justify-center py-6 md:py-10 px-4">
         <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-2xl border flex flex-col max-h-[90vh] md:max-h-[calc(100vh-5rem)] min-h-0 overflow-hidden">
-          
+
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b bg-white/80 backdrop-blur min-h-[75px]">
             <h3 className="text-xl font-semibold text-gray-900">Nuevo Paciente</h3>
@@ -156,7 +157,7 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate, onC
 
           {/* Body */}
           <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6 space-y-6">
-            
+
             {/* 1. Nombre */}
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
@@ -226,22 +227,12 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate, onC
               />
             </div>
 
-            {/* 4. Obra Social */}
-            <div>
-              <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
-                <Building2 size={16} className="mr-2 text-gray-500" />
-                Obra Social
-              </label>
-              <input
-                name="obraSocial"
-                value={form.obraSocial}
-                onChange={handleChange}
-                type="text"
-                placeholder="OSDE, Swiss Medical, etc."
-                className="w-full rounded-xl border border-transparent bg-[#F5F5F5] px-3 py-2 placeholder:text-sm text-sm focus:outline-none focus:ring-0 focus:shadow-none focus:border-transparent"
-                disabled={submitting}
-              />
-            </div>
+            {/* 4. Obra Social (Searchable Autocomplete) */}
+            <InsuranceAutocomplete
+              value={form.obraSocial}
+              onChange={handleChange}
+              disabled={submitting}
+            />
 
             {/* 5. Número de Afiliado */}
             <div>
@@ -315,7 +306,7 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate, onC
                   type="file"
                   accept=".pdf,image/*"
                   onChange={handleFileChange}
-                  onFocus={(e) => { try { e.target.blur(); } catch {} }}
+                  onFocus={(e) => { try { e.target.blur(); } catch { } }}
                   className="hidden"
                   disabled={submitting}
                 />

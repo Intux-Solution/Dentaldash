@@ -130,16 +130,25 @@ export class AppointmentService {
 
                     // Verificar colisión con Google Calendar
                     const isOccupiedGoogle = googleEvents.some(event => {
-                        // Ignorar eventos de todo el día por ahora si no bloquean (o asumir que bloquean)
                         // Google "transparency": "transparent" = disponible, "opaque" = ocupado.
                         if (event.transparency === 'transparent') return false;
 
-                        const eventStart = new Date(event.start.dateTime || event.start.date);
-                        const eventEnd = new Date(event.end.dateTime || event.end.date);
+                        let eventStart, eventEnd;
 
-                        // Ajuste para eventos de todo el día que terminan al dia siguiente a las 00:00
-                        // Si es 'date' (todo el día), eventStart es 00:00 del día y eventEnd 00:00 del siguiente.
+                        if (event.start.date) {
+                            // All-day event: Google gives YYYY-MM-DD
+                            // We must parse it as local midnight to avoid UTC shifts
+                            const [sY, sM, sD] = event.start.date.split('-').map(Number);
+                            eventStart = new Date(sY, sM - 1, sD, 0, 0, 0);
 
+                            const [eY, eM, eD] = event.end.date.split('-').map(Number);
+                            eventEnd = new Date(eY, eM - 1, eD, 0, 0, 0);
+                        } else {
+                            eventStart = new Date(event.start.dateTime);
+                            eventEnd = new Date(event.end.dateTime);
+                        }
+
+                        // Overlap check: (StartA < EndB) && (EndA > StartB)
                         return (slotStart < eventEnd && slotEnd > eventStart);
                     });
 

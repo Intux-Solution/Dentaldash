@@ -4,6 +4,7 @@ import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loa
 import './loader-spin.css';
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
+import InsuranceAutocomplete from './InsuranceAutocomplete';
 import { APPOINTMENT_TYPES } from '../config/appointments';
 import { combineDateTimeToISO, to24h } from '../utils/appointments';
 
@@ -399,18 +400,12 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
 
         {/* Insurance Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Obra Social
-            </label>
-            <input
-              type="text"
-              value={formData.obraSocial}
-              onChange={(e) => handleInputChange('obraSocial', e.target.value)}
-              placeholder="OSDE, Swiss Medical, etc."
-              className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
-            />
-          </div>
+          {/* Obra Social (Searchable Autocomplete) */}
+          <InsuranceAutocomplete
+            value={formData.obraSocial}
+            onChange={(e) => handleInputChange('obraSocial', e.target.value)}
+            disabled={loading}
+          />
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
