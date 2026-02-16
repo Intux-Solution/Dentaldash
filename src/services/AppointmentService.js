@@ -53,8 +53,16 @@ export class AppointmentService {
      */
     static async getAvailableSlots(date, durationMinutes, excludeId = null) {
         try {
-            // 0. Determinar día de la semana
-            const inputDate = new Date(date);
+            // 0. Determinar día de la semana (PARSE LOCAL)
+            // date coming as YYYY-MM-DD
+            const [yStr, mStr, dStr] = String(date).split('-');
+            const inputDate = new Date(
+                parseInt(yStr, 10),
+                parseInt(mStr, 10) - 1,
+                parseInt(dStr, 10),
+                12, 0, 0 // Use noon to avoid any edge flips during day math
+            );
+
             // getDay() returns 0 (Sun) to 6 (Sat)
             const dayOfWeek = inputDate.getDay();
 
@@ -72,10 +80,11 @@ export class AppointmentService {
             }
 
             // 2. Traer turnos existentes ese día (para collision check)
-            // Definimos el rango total del día para la query (00:00 a 23:59) para estar seguros
-            const dayStartBound = new Date(date);
+            // Definimos el rango total del día para la query basado en la fecha parsed local
+            const dayStartBound = new Date(inputDate);
             dayStartBound.setHours(0, 0, 0, 0);
-            const dayEndBound = new Date(date);
+
+            const dayEndBound = new Date(inputDate);
             dayEndBound.setHours(23, 59, 59, 999);
 
             const { data: existing, error } = await supabase

@@ -198,11 +198,22 @@ export default function SettingsView() {
                                 <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">{googleAvatar && !avatarPreview ? "De Google" : "Personalizada"}</p>
                             </div>
                             <div className="flex-1 max-w-lg space-y-6">
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-sm font-semibold text-gray-700">Nombre Profesional</label>
+                                    <span className="text-[10px] text-gray-400 font-bold bg-gray-50 px-2 py-1 rounded-md">VERSION 2.0</span>
+                                </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre Profesional</label>
                                     <input type="text" value={profile.full_name} onChange={(e) => handleProfileChange('full_name', e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
                                 </div>
-                                <div className="p-4 bg-teal-50 rounded-xl border border-teal-100 text-xs text-teal-800 font-medium">Gestiona tu email y contraseña desde tu cuenta de Google.</div>
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-teal-50 rounded-xl border border-teal-100 text-xs text-teal-800 font-medium leading-relaxed">
+                                        <p className="font-bold mb-1">ℹ️ Gestión de Obras Sociales</p>
+                                        Las obras sociales se han movido a su propia pestaña dedicada (**Obras Sociales**) para mayor claridad y espacio.
+                                    </div>
+                                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-500 font-medium leading-relaxed">
+                                        Gestiona tu email y contraseña desde tu cuenta de Google.
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
