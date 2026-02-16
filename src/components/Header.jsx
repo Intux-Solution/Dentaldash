@@ -1,88 +1,172 @@
 // src/components/Header.jsx
-import React, { useState } from 'react';
-import { Settings, Lock, LogOut, User, ChevronDown } from 'lucide-react';
-import { getUser } from '../utils/auth';
-import ChangePasswordModal from './ChangePasswordModal';
+import React, { useState, useEffect } from 'react';
+import { Settings, LogOut, User, ChevronDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../config/supabaseClient';
 
 export default function Header({ title, setSidebarOpen, onLogout }) {
+  const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showChangePassword, setShowChangePassword] = useState(false);
-  const user = getUser();
+  const [userData, setUserData] = useState({
+    name: 'Usuario',
+    avatar: null,
+    role: 'Odontólogo'
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUserData();
+
+    // Listener para cambios en el perfil
+    const profileSubscription = supabase
+      .channel('header_profile_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        fetchUserData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileSubscription);
+    };
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const user = session.user;
+      let name = user.user_metadata?.full_name || user.email;
+      let avatar = user.user_metadata?.avatar_url;
+
+      // Intentar obtener datos del perfil en la DB
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', user.id)
+        .single();
+
+      if (profile) {
+        if (profile.full_name) name = profile.full_name;
+        if (profile.avatar_url) {
+          const { data: { publicUrl } } = supabase
+            .storage
+            .from('avatars')
+            .getPublicUrl(profile.avatar_url);
+          avatar = publicUrl;
+        }
+      }
+
+      setUserData({
+        name: name,
+        avatar: avatar,
+        email: user.email,
+        role: 'Odontólogo'
+      });
+    } catch (err) {
+      console.error('Error fetching header user data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     setShowUserMenu(false);
     if (onLogout) onLogout();
   };
 
-  const handleChangePassword = () => {
-    setShowUserMenu(false);
-    setShowChangePassword(true);
-  };
-
   return (
     <>
-      <div className="bg-white border-b px-4 lg:px-8 flex justify-between items-center min-h-[90px]">
+      <div className="bg-white border-b px-4 lg:px-8 flex justify-between items-center min-h-[90px] relative z-20">
         <div className="flex items-center space-x-4">
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 text-gray-600 hover:text-gray-900">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
           <h1 className="text-xl lg:text-2xl font-semibold text-gray-800">{title}</h1>
         </div>
-        
+
         <div className="flex items-center space-x-4">
           {/* User Menu */}
           <div className="relative">
             <button
+              id="user-menu-button"
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center space-x-2 rounded-lg p-2 transition-colors"
+              className="flex items-center space-x-2 rounded-xl p-1.5 transition-all hover:bg-gray-50 border border-transparent hover:border-gray-100"
             >
-              <img
-                src="/profile.jpg"
-                alt="Foto del profesional"
-                className="w-8 h-8 lg:w-10 lg:h-10 rounded-full object-cover ring-2 ring-orange-200"
-              />
-              <ChevronDown size={16} className={`text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+              <div className="relative">
+                {userData.avatar ? (
+                  <img
+                    src={userData.avatar}
+                    alt="Perfil"
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-teal-50"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center ring-2 ring-teal-50">
+                    <User size={20} className="text-teal-600" />
+                  </div>
+                )}
+                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+              </div>
+
+              <div className="hidden sm:block text-left px-1">
+                <p className="text-sm font-bold text-gray-900 leading-tight truncate max-w-[120px]">
+                  {userData.name}
+                </p>
+                <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                  {userData.role}
+                </p>
+              </div>
+              <ChevronDown size={14} className={`text-gray-400 mx-1 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Dropdown Menu */}
             {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                {/* User Info */}
-                {user && (
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center">
-                        <User size={20} className="text-teal-600" />
+              <div className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
+                {/* User Info Header Overlay */}
+                <div className="px-5 py-4 border-b border-gray-50 bg-gray-50/50 rounded-t-2xl -mt-2 mb-2">
+                  <div className="flex items-center gap-4">
+                    {userData.avatar ? (
+                      <img src={userData.avatar} alt="" className="w-12 h-12 rounded-full object-cover shadow-sm ring-2 ring-white" />
+                    ) : (
+                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm">
+                        <User size={24} className="text-teal-600" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {user.name || user.username}
-                        </p>
-                        <p className="text-xs text-gray-500 capitalize">
-                          {user.role || 'Usuario'}
-                        </p>
-                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate">
+                        {userData.name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {userData.email || 'Profesional Dental'}
+                      </p>
                     </div>
                   </div>
-                )}
+                </div>
 
                 {/* Menu Items */}
-                <div className="py-1">
+                <div className="px-2 py-1">
                   <button
-                    onClick={handleChangePassword}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    onClick={() => {
+                      navigate('/configuracion');
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-teal-50 hover:text-teal-700 rounded-xl transition-all group"
                   >
-                    <Lock size={16} />
-                    <span>Cambiar Contraseña</span>
+                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center group-hover:bg-teal-100 transition-colors">
+                      <Settings size={18} />
+                    </div>
+                    <span>Mi Configuración</span>
                   </button>
-                  
-                  <div className="border-t border-gray-100 my-1" />
-                  
+
+                  <div className="h-px bg-gray-50 my-2 mx-4" />
+
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition-all group"
                   >
-                    <LogOut size={16} />
+                    <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                      <LogOut size={18} />
+                    </div>
                     <span>Cerrar Sesión</span>
                   </button>
                 </div>
@@ -92,17 +176,10 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
         </div>
       </div>
 
-      {/* Change Password Modal */}
-      <ChangePasswordModal
-        open={showChangePassword}
-        onClose={() => setShowChangePassword(false)}
-        user={user}
-      />
-
       {/* Click outside handler for user menu */}
       {showUserMenu && (
-        <div 
-          className="fixed inset-0 z-30" 
+        <div
+          className="fixed inset-0 z-10"
           onClick={() => setShowUserMenu(false)}
         />
       )}
