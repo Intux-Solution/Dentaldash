@@ -416,7 +416,7 @@ export default function SettingsView() {
                                 </div>
 
                                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm text-blue-800">
-                                    <p>Tu email de inicio de sesión no se puede cambiar aquí.</p>
+                                    <p>Tu cuenta está vinculada a Google. La gestión de tu email y contraseña se realiza desde tu cuenta de Google.</p>
                                 </div>
                             </div>
                         </div>
