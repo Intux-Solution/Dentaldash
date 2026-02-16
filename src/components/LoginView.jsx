@@ -31,49 +31,9 @@ export default function LoginView({ onSuccess }) {
     if (success) setSuccess("");
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    if (!credentials.username.trim() || !credentials.password.trim()) {
-      setError("Por favor completá todos los campos");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      if (isRegistering) {
-        // Supabase Registration
-        const { data, error } = await supabase.auth.signUp({
-          email: credentials.username.trim(),
-          password: credentials.password,
-        });
-
-        if (error) throw error;
-
-        if (data?.user?.identities?.length === 0) {
-          throw new Error('Este email ya está registrado. Intenta iniciar sesión.');
-        }
-
-        setSuccess("¡Cuenta creada! Revisa tu email para confirmar tu cuenta (si es necesario) o inicia sesión.");
-        setIsRegistering(false); // Switch back to login
-      } else {
-        // Supabase Login
-        await signIn(credentials.username.trim(), credentials.password);
-        setSuccess("¡Bienvenido!");
-        // No necesitamos hacer nada más, App.js detectará el session change automáticamente
-      }
-
-    } catch (err) {
-      console.error("Auth error:", err);
-      if (err.message === "Invalid login credentials") {
-        setError("Usuario o contraseña incorrectos");
-      } else {
-        setError(err.message || "Error de autenticación");
-      }
-    } finally {
-      setLoading(false);
-    }
+    // No longer needed as we use Google Login exclusively
   };
 
   const quickFill = (user) => {
@@ -81,33 +41,6 @@ export default function LoginView({ onSuccess }) {
   };
 
   // Forgot Password: submit
-  const handleForgotPassword = async (e) => {
-    e.preventDefault();
-    if (!fpEmail.trim()) {
-      setFpMsg({ type: "error", text: "Por favor ingresa tu email para recuperar la contraseña." });
-      return;
-    }
-
-    setFpLoading(true);
-    setFpMsg({ type: "", text: "" }); // Clear previous messages
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(fpEmail.trim(), {
-        redirectTo: `${window.location.origin}/update-password`,
-      });
-
-      if (error) throw error;
-
-      setFpMsg({ type: "success", text: "Se ha enviado un correo de recuperación. Revisa tu bandeja de entrada." });
-      // Optionally close the modal after success, or let the user see the message
-      // setFpOpen(false);
-    } catch (err) {
-      console.error("Forgot password error:", err);
-      setFpMsg({ type: "error", text: err.message || "Error al enviar correo de recuperación." });
-    } finally {
-      setFpLoading(false);
-    }
-  };
 
   // Close modal with ESC
   useEffect(() => {
@@ -162,10 +95,10 @@ export default function LoginView({ onSuccess }) {
         {/* Panel de login */}
         <div className="relative z-10 flex items-center justify-center p-8">
           <div className="w-full max-w-md bg-white border rounded-2xl shadow-sm p-8">
-            <h1 className="text-3xl font-semibold text-gray-900">{isRegistering ? "Crear Cuenta" : "Login"}</h1>
-            <p className="text-gray-500 mt-2">{isRegistering ? "Registrate para comenzar." : "Accedé a tu sistema odontológico."}</p>
+            <h1 className="text-3xl font-semibold text-gray-900 text-center">Bienvenido</h1>
+            <p className="text-gray-500 mt-2 text-center">Accedé a tu sistema odontológico.</p>
 
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div className="mt-8 space-y-6">
               {/* Mensajes de estado */}
               {error && (
                 <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 animate-fade-in">
@@ -181,123 +114,50 @@ export default function LoginView({ onSuccess }) {
               )}
 
               {/* Google Sign In */}
-              <button
-                type="button"
-                onClick={async () => {
-                  setLoading(true);
-                  try {
-                    const { error } = await supabase.auth.signInWithOAuth({
-                      provider: 'google',
-                      options: {
-                        redirectTo: `${window.location.origin}/`,
-                        scopes: 'https://www.googleapis.com/auth/calendar', // Request Calendar access
-                        queryParams: {
-                          access_type: 'offline',
-                          prompt: 'consent',
-                        },
-                      },
-                    });
-                    if (error) throw error;
-                  } catch (err) {
-                    setError(err.message || 'Error al iniciar sesión con Google');
-                    setLoading(false);
-                  }
-                }}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-              >
-                <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-                Continuar con Google
-              </button>
-
-              <div className="relative flex items-center py-2">
-                <div className="flex-grow border-t border-gray-300"></div>
-                <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">o con email</span>
-                <div className="flex-grow border-t border-gray-300"></div>
-              </div>
-
-              {/* Email */}
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  id="username"
-                  name="username"
-                  value={credentials.username}
-                  onChange={handleInputChange}
-                  placeholder="tu@email.com"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors"
-                  disabled={loading}
-                  autoComplete="username"
-                />
-              </div>
-
-              {/* Campo Contraseña */}
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    id="password"
-                    name="password"
-                    value={credentials.password}
-                    onChange={handleInputChange}
-                    placeholder="Tu contraseña"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors pr-12"
-                    disabled={loading}
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    disabled={loading}
-                  >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Botón Login/Register */}
-              <button
-                type="submit"
-                disabled={loading || !credentials.username.trim() || !credentials.password.trim()}
-                className="w-full py-3 px-4 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    {isRegistering ? "Registrando..." : "Ingresando..."}
-                  </>
-                ) : (
-                  isRegistering ? "Registrarse" : "Ingresar"
-                )}
-              </button>
-
-              {/* Toggle Login/Register */}
-              <div className="text-center mt-4 space-y-2">
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600 text-center">
+                  Para sincronizar tu calendario y gestionar tus turnos, inicia sesión con Google.
+                </p>
                 <button
                   type="button"
-                  className="text-sm text-teal-600 hover:underline hover:text-teal-700 transition-colors block w-full"
-                  onClick={() => {
-                    setIsRegistering(!isRegistering);
-                    setError("");
-                    setSuccess("");
+                  disabled={loading}
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const { error } = await supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: {
+                          redirectTo: `${window.location.origin}/`,
+                          scopes: 'https://www.googleapis.com/auth/calendar',
+                          queryParams: {
+                            access_type: 'offline',
+                            prompt: 'consent',
+                          },
+                        },
+                      });
+                      if (error) throw error;
+                    } catch (err) {
+                      setError(err.message || 'Error al iniciar sesión con Google');
+                      setLoading(false);
+                    }
                   }}
+                  className="w-full flex items-center justify-center gap-3 py-4 px-4 bg-white border-2 border-gray-200 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 hover:border-teal-500 transition-all shadow-sm"
                 >
-                  {isRegistering ? "¿Ya tenés cuenta? Iniciá sesión" : "¿No tenés cuenta? Registrate"}
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+                  )}
+                  Continuar con Google
                 </button>
-
-                {!isRegistering && (
-                  <button
-                    type="button"
-                    className="text-sm text-gray-400 hover:underline hover:text-teal-700 transition-colors"
-                    onClick={() => { setFpOpen(true); setFpEmail(""); setFpMsg({ type: "", text: "" }); }}
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </button>
-                )}
               </div>
-            </form>
+
+              <div className="pt-4">
+                <p className="text-xs text-center text-gray-400">
+                  Al continuar, aceptas la sincronización automática de tu calendario de Google para la gestión de turnos.
+                </p>
+              </div>
+            </div>
 
             {/* Footer info */}
             <div className="mt-8 pt-6 border-t border-gray-200 text-center">
@@ -308,50 +168,6 @@ export default function LoginView({ onSuccess }) {
         </div>
       </div>
 
-      {/* Modal Forgot Password */}
-      {fpOpen && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setFpOpen(false)} aria-hidden="true" />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-white rounded-xl shadow-xl border p-6 relative">
-              <h2 className="text-xl font-semibold text-gray-900">Recuperar contraseña</h2>
-              <p className="text-sm text-gray-500 mt-1">Ingresá tu email. Si existe una cuenta, te enviaremos instrucciones.</p>
-
-              {/* Mensaje modal */}
-              {fpMsg.text && (
-                <div className={`mt-4 px-4 py-3 rounded-lg text-sm border flex items-center gap-2 ${fpMsg.type === "success" ? "bg-green-50 text-green-700 border-green-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
-                  {fpMsg.type === "success" ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-                  <span>{fpMsg.text}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleForgotPassword} className="mt-4 space-y-4">
-                <div>
-                  <label htmlFor="fp-email" className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                  <input
-                    id="fp-email"
-                    type="email"
-                    value={fpEmail}
-                    onChange={(e) => setFpEmail(e.target.value)}
-                    placeholder="tuemail@ejemplo.com"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors"
-                    disabled={fpLoading}
-                    autoFocus
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-2">
-                  <button type="button" className="px-4 py-2 text-sm rounded-lg border hover:bg-gray-50" onClick={() => setFpOpen(false)} disabled={fpLoading}>Cancelar</button>
-                  <button type="submit" disabled={fpLoading || !fpEmail.trim()} className="px-4 py-2 text-sm rounded-lg brand-btn disabled:bg-gray-400 disabled:cursor-not-allowed">{fpLoading ? "Enviando..." : "Enviar"}</button>
-                </div>
-              </form>
-
-              {/* Cerrar con X */}
-              <button type="button" aria-label="Cerrar" onClick={() => setFpOpen(false)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">×</button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

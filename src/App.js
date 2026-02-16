@@ -6,12 +6,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { supabase } from './config/supabaseClient';
 import LoginView from './components/LoginView';
 import AuthedApp from './components/AuthedApp.jsx';
-import UpdatePasswordView from './components/UpdatePasswordView.jsx';
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isRecovery, setIsRecovery] = useState(false);
 
   useEffect(() => {
     // 1. Check active session
@@ -25,9 +23,6 @@ export default function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsRecovery(true);
-      }
     });
 
     return () => subscription.unsubscribe();
@@ -35,7 +30,6 @@ export default function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setIsRecovery(false);
   };
 
   if (loading) {
@@ -45,13 +39,10 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/update-password" element={<UpdatePasswordView />} />
         <Route
           path="/*"
           element={
-            isRecovery ? (
-              <Navigate to="/update-password" replace />
-            ) : !session ? (
+            !session ? (
               <LoginView onSuccess={() => { }} />
             ) : (
               <AuthedApp onLogout={handleLogout} justLoggedIn={false} />
