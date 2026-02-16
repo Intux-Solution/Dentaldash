@@ -1,76 +1,17 @@
-
-// src/components/LoginView.jsx - SUPABASE VERSION
-import React, { useState, useEffect } from "react";
-import { Shield, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
+// src/components/LoginView.jsx - UPDATED 2026-02-16 - FINAL VERSION
+import React, { useState } from "react";
+import { Shield, AlertCircle, CheckCircle } from "lucide-react";
 import fondoLogin from "../imagenes/fondo-login-dentista.jpg";
-import { signIn } from "../utils/auth"; // Usa nuestra función wrapper de Supabase
 import { supabase } from "../config/supabaseClient";
 
-
 export default function LoginView({ onSuccess }) {
-  const [credentials, setCredentials] = useState({ username: "", password: "" });
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Forgot password modal state
-  const [fpOpen, setFpOpen] = useState(false);
-  const [fpEmail, setFpEmail] = useState("");
-  const [fpLoading, setFpLoading] = useState(false);
-  const [fpMsg, setFpMsg] = useState({ type: "", text: "" });
-
-
-
-  const [isRegistering, setIsRegistering] = useState(false);
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setCredentials((prev) => ({ ...prev, [name]: value }));
-    if (error) setError("");
-    if (success) setSuccess("");
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // No longer needed as we use Google Login exclusively
-  };
-
-  const quickFill = (user) => {
-    // Placeholder for dev convenience
-  };
-
-  // Forgot Password: submit
-
-  // Close modal with ESC
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") setFpOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   return (
     <>
-      <style>{`
-        .brand-bg { background-color: #0C9488 !important; }
-        .brand-text { color: #0C9488 !important; }
-        .brand-btn { background-color: #0C9488 !important; color: #fff !important; }
-        .brand-btn:hover { background-color: #097C73 !important; }
-        .brand-ring:focus { outline: none !important; box-shadow: 0 0 0 2px #0C9488 !important; }
-      `}</style>
-
       <div className="relative min-h-screen grid lg:grid-cols-2">
-        {/* Fondo para mobile: misma imagen con overlay negro */}
-        <div
-          className="lg:hidden absolute inset-0 z-0"
-          style={{
-            backgroundImage: `url(${fondoLogin})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        >
-          <div className="absolute inset-0 bg-black/50" />
-        </div>
         {/* Panel ilustración */}
         <div
           className="hidden lg:flex relative flex-col justify-between p-10 text-white"
@@ -93,27 +34,25 @@ export default function LoginView({ onSuccess }) {
         </div>
 
         {/* Panel de login */}
-        <div className="relative z-10 flex items-center justify-center p-8">
+        <div className="relative z-10 flex items-center justify-center p-8 bg-gray-50">
           <div className="w-full max-w-md bg-white border rounded-2xl shadow-sm p-8">
             <h1 className="text-3xl font-semibold text-gray-900 text-center">Bienvenido</h1>
             <p className="text-gray-500 mt-2 text-center">Accedé a tu sistema odontológico.</p>
 
             <div className="mt-8 space-y-6">
-              {/* Mensajes de estado */}
               {error && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 animate-fade-in">
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2">
                   <AlertCircle size={16} />
                   {error}
                 </div>
               )}
               {success && (
-                <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm flex items-center gap-2 animate-fade-in">
+                <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm flex items-center gap-2">
                   <CheckCircle size={16} />
                   {success}
                 </div>
               )}
 
-              {/* Google Sign In */}
               <div className="space-y-4">
                 <p className="text-sm text-gray-600 text-center">
                   Para sincronizar tu calendario y gestionar tus turnos, inicia sesión con Google.
@@ -159,7 +98,6 @@ export default function LoginView({ onSuccess }) {
               </div>
             </div>
 
-            {/* Footer info */}
             <div className="mt-8 pt-6 border-t border-gray-200 text-center">
               <p className="text-xs text-gray-500">Dental Dash</p>
               <p className="text-xs text-gray-400 mt-1">Powered by <a href="https://chilldigital.agency" target="_blank">ChillDigital</a></p>
@@ -167,7 +105,6 @@ export default function LoginView({ onSuccess }) {
           </div>
         </div>
       </div>
-
     </>
   );
 }

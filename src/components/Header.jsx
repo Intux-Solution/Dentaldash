@@ -1,4 +1,4 @@
-// src/components/Header.jsx
+// src/components/Header.jsx - UPDATED 2026-02-16 - FINAL VERSION
 import React, { useState, useEffect } from 'react';
 import { Settings, LogOut, User, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -10,14 +10,13 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
   const [userData, setUserData] = useState({
     name: 'Usuario',
     avatar: null,
+    email: '',
     role: 'Odontólogo'
   });
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchUserData();
 
-    // Listener para cambios en el perfil
     const profileSubscription = supabase
       .channel('header_profile_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
@@ -39,7 +38,6 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
       let name = user.user_metadata?.full_name || user.email;
       let avatar = user.user_metadata?.avatar_url;
 
-      // Intentar obtener datos del perfil en la DB
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name, avatar_url')
@@ -65,8 +63,6 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
       });
     } catch (err) {
       console.error('Error fetching header user data:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -86,7 +82,6 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
         </div>
 
         <div className="flex items-center space-x-4">
-          {/* User Menu */}
           <div className="relative">
             <button
               id="user-menu-button"
@@ -119,10 +114,8 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
               <ChevronDown size={14} className={`text-gray-400 mx-1 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
             </button>
 
-            {/* Dropdown Menu */}
             {showUserMenu && (
               <div className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
-                {/* User Info Header Overlay */}
                 <div className="px-5 py-4 border-b border-gray-50 bg-gray-50/50 rounded-t-2xl -mt-2 mb-2">
                   <div className="flex items-center gap-4">
                     {userData.avatar ? (
@@ -137,13 +130,12 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
                         {userData.name}
                       </p>
                       <p className="text-xs text-gray-500 truncate">
-                        {userData.email || 'Profesional Dental'}
+                        {userData.email}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Menu Items */}
                 <div className="px-2 py-1">
                   <button
                     onClick={() => {
@@ -176,7 +168,6 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
         </div>
       </div>
 
-      {/* Click outside handler for user menu */}
       {showUserMenu && (
         <div
           className="fixed inset-0 z-10"
