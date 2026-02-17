@@ -1,5 +1,6 @@
 
 import { supabase } from '../config/supabaseClient';
+import { GoogleDriveService } from './GoogleDriveService';
 
 /**
  * Servicio para gestionar pacientes con Supabase
@@ -25,7 +26,7 @@ export class PatientService {
         obraSocial: p.obra_social,
         numeroAfiliado: p.numero_afiliado,
         fechaNacimiento: p.fecha_nacimiento,
-        historiaClinica: p.historia_clinica_url,
+        historiaClinica: p.historia_clinica_url || p.historia_clinica,
         ultimaVisita: p.ultima_visita,
       }));
     } catch (error) {
@@ -55,7 +56,7 @@ export class PatientService {
         obraSocial: data.obra_social,
         numeroAfiliado: data.numero_afiliado,
         fechaNacimiento: data.fecha_nacimiento,
-        historiaClinica: data.historia_clinica_url,
+        historiaClinica: data.historia_clinica_url || data.historia_clinica,
       };
     } catch (error) {
       console.error('Error getting patient by DNI:', error);
@@ -66,8 +67,20 @@ export class PatientService {
   /**
    * Subir archivo a Storage y retornar URL pública
    */
-  static async uploadClinicalRecord(file) {
+  static async uploadClinicalRecord(file, patientName) {
     if (!file) return null;
+
+    try {
+      // 1. Intentar subir a Google Drive si hay sesión
+      const driveData = await GoogleDriveService.uploadFile(file, patientName);
+      if (driveData) {
+        return driveData.embedUrl || driveData.url;
+      }
+    } catch (driveErr) {
+      console.warn('Fallo subida a Google Drive, usando Supabase fallback...', driveErr);
+    }
+
+    // 2. Fallback a Supabase Storage (comportamiento original)
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
     const filePath = `${fileName}`;
@@ -92,7 +105,7 @@ export class PatientService {
     try {
       let historiaClinicaUrl = null;
       if (patientData.historiaClinicaFile) {
-        historiaClinicaUrl = await this.uploadClinicalRecord(patientData.historiaClinicaFile);
+        historiaClinicaUrl = await this.uploadClinicalRecord(patientData.historiaClinicaFile, patientData.nombre);
       }
 
       const newPatient = {
@@ -123,7 +136,7 @@ export class PatientService {
         obraSocial: data.obra_social,
         numeroAfiliado: data.numero_afiliado,
         fechaNacimiento: data.fecha_nacimiento,
-        historiaClinica: data.historia_clinica_url,
+        historiaClinica: data.historia_clinica_url || data.historia_clinica,
       };
 
     } catch (error) {
@@ -154,7 +167,7 @@ export class PatientService {
       };
 
       if (patientData.historiaClinicaFile) {
-        updates.historia_clinica_url = await this.uploadClinicalRecord(patientData.historiaClinicaFile);
+        updates.historia_clinica_url = await this.uploadClinicalRecord(patientData.historiaClinicaFile, patientData.nombre);
       }
 
       const { data, error } = await supabase
@@ -171,7 +184,7 @@ export class PatientService {
         obraSocial: data.obra_social,
         numeroAfiliado: data.numero_afiliado,
         fechaNacimiento: data.fecha_nacimiento,
-        historiaClinica: data.historia_clinica_url,
+        historiaClinica: data.historia_clinica_url || data.historia_clinica,
       };
     } catch (error) {
       console.error('Error updating patient:', error);

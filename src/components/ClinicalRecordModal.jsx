@@ -2,7 +2,9 @@ import React, { useEffect } from "react";
 import ModalShell from "./ModalShell";
 
 function isPdf(url = "") {
-  return typeof url === "string" && url.toLowerCase().endsWith(".pdf");
+  if (typeof url !== "string") return false;
+  const lowerUrl = url.toLowerCase();
+  return lowerUrl.endsWith(".pdf") || lowerUrl.includes("drive.google.com");
 }
 
 
