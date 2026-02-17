@@ -36,7 +36,7 @@ export const OdontogramService = {
                     patient_id: patientId,
                     data: odontogramData,
                     updated_at: new Date().toISOString()
-                })
+                }, { onConflict: 'patient_id' })
                 .select()
                 .single();
 
