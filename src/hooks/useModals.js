@@ -42,7 +42,12 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
   const closeOdontogram = useCallback(() => setShowOdontogramModal(false), []);
 
   const onOpenOdontogram = useCallback((p) => {
-    setSelectedPatient(p);
+    const id = p?.id || p?._id;
+    if (!id) {
+      alert('Error: El paciente no tiene un ID válido para el odontograma.');
+      return;
+    }
+    setSelectedPatient({ ...p, id });
     setShowProfileModal(false);
     setShowOdontogramModal(true);
   }, []);

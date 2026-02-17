@@ -14,7 +14,7 @@ import { X } from 'lucide-react';
  * queden siempre visibles. Además, el contenedor de la tarjeta
  * usa `overflow-hidden` para que la barra de scroll no sobresalga.
  */
-export default function ModalShell({ title, onClose, children, footer }) {
+export default function ModalShell({ title, onClose, children, footer, maxWidth = 'max-w-md' }) {
   useEffect(() => {
     const original = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -30,7 +30,7 @@ export default function ModalShell({ title, onClose, children, footer }) {
       {/* Wrapper: añade márgenes top/bottom */}
       <div className="relative z-10 flex h-full items-center justify-center py-6 md:py-10 px-4">
         {/* Card del modal */}
-        <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border flex flex-col max-h-[calc(100vh-3rem)] md:max-h-[calc(100vh-5rem)] min-h-0 overflow-hidden">
+        <div className={`relative bg-white w-full ${maxWidth} rounded-2xl shadow-xl border flex flex-col max-h-[calc(100vh-3rem)] md:max-h-[calc(100vh-5rem)] min-h-0 overflow-hidden`}>
           {/* Header fijo */}
           <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b">
             <h3 className="text-lg font-semibold text-gray-900 truncate pr-4">{title}</h3>

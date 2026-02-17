@@ -17,6 +17,7 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
     onOpenRecord,
     openBookingModal,
     onViewTurno,
+    onOpenOdontogram,
   } = useModals();
 
   // Local UI state moved from App.js
@@ -71,6 +72,7 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
             onOpenRecord={onOpenRecord}
             onOpenBooking={openBookingModal}
             onViewTurno={onViewTurno}
+            onOpenOdontogram={onOpenOdontogram}
             patients={patientsForViews}
             latestPatients={latestPatients}
             loading={loading}
@@ -90,6 +92,7 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
             onAddPatient={openAddPatient}
             onViewPatient={onViewPatient}
             onOpenRecord={onOpenRecord}
+            onOpenOdontogram={onOpenOdontogram}
             patients={patientsForViews}
             loading={loading}
             onDeletePatient={handleDeletePatient}
