@@ -8,6 +8,7 @@ import ClinicalRecordModal from './ClinicalRecordModal';
 import BookingModal from './BookingModal';
 import TurnoDetailsModal from './TurnoDetailsModal';
 import EditTurnoModal from './EditTurnoModal';
+import OdontogramModal from './OdontogramModal';
 
 export default function ModalsRoot({ patientsLoading = false, onDeletePatient }) {
   const {
@@ -17,9 +18,10 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient })
     showEditModal,
     showAddModal,
     showRecordModal,
+    showOdontogramModal,
     closeProfile,
-  onEditFromProfile,
-  onViewPatient,
+    onEditFromProfile,
+    onViewPatient,
     onSavedPatient,
     onCreatedPatient,
 
@@ -42,6 +44,8 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient })
     closeAddPatient,
     closeEditPatient,
     closeRecordModal,
+    closeOdontogram,
+    onOpenOdontogram,
   } = useModals();
 
   return (
@@ -52,6 +56,7 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient })
         onClose={closeProfile}
         onEdit={onEditFromProfile}
         onDelete={onDeletePatient}
+        onOpenOdontogram={onOpenOdontogram}
       />
 
       <EditPatientModal
@@ -108,6 +113,11 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient })
             onViewTurno(selectedTurno);
           }
         }}
+      />
+      <OdontogramModal
+        isOpen={showOdontogramModal}
+        onClose={closeOdontogram}
+        patient={selectedPatient}
       />
     </>
   );

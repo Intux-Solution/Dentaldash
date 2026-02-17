@@ -3,7 +3,7 @@ import ModalShell from './ModalShell';
 import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope } from 'lucide-react';
 import { initials } from '../utils/helpers';
 
-export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage }) {
+export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage, onOpenOdontogram }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -269,6 +269,20 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
             icon={FileText}
             label="Historia Clínica"
             value={historiaClinicaValue}
+          />
+
+          {/* 8b. Odontograma */}
+          <InfoRow
+            icon={Activity}
+            label="Odontograma"
+            value={
+              <button
+                onClick={() => onOpenOdontogram && onOpenOdontogram(patient)}
+                className="text-teal-600 underline hover:text-teal-700 font-medium"
+              >
+                Abrir Odontograma
+              </button>
+            }
           />
 
           {/* 9. Estado */}

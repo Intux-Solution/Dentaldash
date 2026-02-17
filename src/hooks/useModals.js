@@ -10,6 +10,7 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRecordModal, setShowRecordModal] = useState(false);
+  const [showOdontogramModal, setShowOdontogramModal] = useState(false);
 
   // Turnos
   const [selectedTurno, setSelectedTurno] = useState(null);
@@ -38,6 +39,12 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
   const closeAddPatient = useCallback(() => setShowAddModal(false), []);
   const closeEditPatient = useCallback(() => setShowEditModal(false), []);
   const closeRecordModal = useCallback(() => setShowRecordModal(false), []);
+  const closeOdontogram = useCallback(() => setShowOdontogramModal(false), []);
+
+  const onOpenOdontogram = useCallback((p) => {
+    setSelectedPatient(p);
+    setShowOdontogramModal(true);
+  }, []);
 
   const onOpenRecord = useCallback((p) => {
     const historiaUrl =
@@ -171,6 +178,7 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     showEditModal,
     showAddModal,
     showRecordModal,
+    showOdontogramModal,
     // Turno state
     selectedTurno,
     showBookingModal,
@@ -185,6 +193,8 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     closeEditPatient,
     onOpenRecord,
     closeRecordModal,
+    onOpenOdontogram,
+    closeOdontogram,
     onSavedPatient,
     onCreatedPatient,
     // Turno actions
@@ -216,6 +226,8 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     closeEditPatient,
     onOpenRecord,
     closeRecordModal,
+    onOpenOdontogram,
+    closeOdontogram,
     onSavedPatient,
     onCreatedPatient,
     openBookingModal,
