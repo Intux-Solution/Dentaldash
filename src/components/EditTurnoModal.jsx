@@ -3,7 +3,7 @@ import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loa
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import './loader-spin.css';
-import { APPOINTMENT_TYPES } from '../config/appointments';
+import './loader-spin.css';
 import { combineDateTimeToISO, to24h } from '../utils/appointments';
 
 // ...existing code...
@@ -36,14 +36,19 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
 
   // Dynamic Working Days
   const [activeWorkingDays, setActiveWorkingDays] = useState([]);
+  const [services, setServices] = useState([]);
 
   // Fetch working days on mount
   useEffect(() => {
-    const fetchDays = async () => {
-      const days = await AppointmentService.getActiveWorkingDays();
+    const fetchConfig = async () => {
+      const [days, servs] = await Promise.all([
+        AppointmentService.getActiveWorkingDays(),
+        AppointmentService.getServices()
+      ]);
       setActiveWorkingDays(days);
+      setServices(servs);
     };
-    fetchDays();
+    fetchConfig();
   }, []);
 
   // Evita borrar el turno más de una vez al abrir el modal
@@ -56,7 +61,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     setLoadingAvailability(true);
 
     try {
-      const appointmentType = APPOINTMENT_TYPES.find(t => t.id === tipoTurno);
+      const appointmentType = services.find(t => (t.id === tipoTurno || t.name === tipoTurno));
       const effectiveExclude = excludeId || formData.id;
 
       const slots = await AppointmentService.getAvailableSlots(
@@ -87,11 +92,12 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
         }
       }
 
-      const tipoTurno = (APPOINTMENT_TYPES.find(type =>
+      const tipoTurno = (services.find(type =>
         (turno.title || '').toLowerCase().includes(type.name.toLowerCase()) ||
-        (turno.summary || '').toLowerCase().includes(type.name.toLowerCase()) ||
-        (turno.tipoTurnoNombre || '').toLowerCase().includes(type.name.toLowerCase())
-      ) || {}).id || '';
+        (turno.tipoTurnoNombre || '').toLowerCase().includes(type.name.toLowerCase()) ||
+        (turno.tipoTurno || '').toLowerCase() === (type.id || '').toLowerCase() ||
+        (turno.appointment_type || '').toLowerCase() === (type.name || '').toLowerCase()
+      ) || {}).id || turno.tipoTurno || '';
 
       // Obtener DNI: usar campo explícito o parsear de la descripción
       let dniInicial = turno.patientDni || turno.dni || '';
@@ -149,7 +155,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
         getAvailableSlots(fecha, tipoTurno, idTurno);
       }
     }
-  }, [open, turno, getAvailableSlots]);
+  }, [open, turno, getAvailableSlots, services]);
 
   // Reset flag al cerrar el modal
   useEffect(() => {
@@ -239,7 +245,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     setLoading(true);
     setError('');
     try {
-      const appointmentType = APPOINTMENT_TYPES.find(t => t.id === formData.tipoTurno);
+      const appointmentType = services.find(t => (t.id === formData.tipoTurno || t.name === formData.tipoTurno));
       const appointmentISO = combineDateTimeToISO(formData.fecha, formData.hora, 'America/Argentina/Buenos_Aires');
 
       const payload = {
@@ -463,8 +469,8 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                   required
                 >
                   <option value="">Selecciona el tipo de consulta</option>
-                  {APPOINTMENT_TYPES.map((type) => (
-                    <option key={type.id} value={type.id}>
+                  {services.map((type) => (
+                    <option key={type.id || type.name} value={type.id || type.name}>
                       {type.name} ({type.duration} min)
                     </option>
                   ))}

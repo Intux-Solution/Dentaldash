@@ -1,6 +1,6 @@
 
 import { supabase } from '../config/supabaseClient';
-import { WORK_HOURS, APPOINTMENT_TYPES } from '../config/appointments';
+import { WORK_HOURS } from '../config/appointments';
 import { to24h } from '../utils/appointments';
 import { GoogleCalendarService } from './GoogleCalendarService';
 
@@ -39,8 +39,8 @@ export class AppointmentService {
                 patientDni: app.patient?.dni,
                 patientPhone: app.patient?.telefono,
                 tipoTurnoNombre: app.appointment_type,
-                // Helper fields for frontend
-                tipoTurno: APPOINTMENT_TYPES.find(t => t.name === app.appointment_type)?.id || 'consulta',
+                // Helper fields for frontend - we won't map to hardcoded IDs here
+                tipoTurno: app.appointment_type,
             }));
         } catch (error) {
             console.error('Error fetching appointments:', error);
@@ -173,8 +173,29 @@ export class AppointmentService {
     }
 
     /**
+     * Obtener los servicios configurados en el perfil del usuario
+     */
+    static async getServices() {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return [];
+
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('services')
+                .eq('id', session.user.id)
+                .single();
+
+            if (error) throw error;
+            return data.services || [];
+        } catch (error) {
+            console.error('Error fetching services:', error);
+            return [];
+        }
+    }
+
+    /**
      * Obtener los días laborales activos desde la configuración
-     * @returns {Promise<number[]>} Array de días (0-6)
      */
     static async getActiveWorkingDays() {
         try {

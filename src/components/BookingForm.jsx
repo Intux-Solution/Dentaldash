@@ -5,7 +5,6 @@ import './loader-spin.css';
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import InsuranceAutocomplete from './InsuranceAutocomplete';
-import { APPOINTMENT_TYPES } from '../config/appointments';
 import { combineDateTimeToISO, to24h } from '../utils/appointments';
 
 // ... (LOCAL_APPOINTMENT_TYPES or other constants if any)
@@ -38,14 +37,19 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
 
   // Dynamic Working Days
   const [activeWorkingDays, setActiveWorkingDays] = useState([]);
+  const [services, setServices] = useState([]);
 
   // Fetch working days on mount
   useEffect(() => {
-    const fetchDays = async () => {
-      const days = await AppointmentService.getActiveWorkingDays();
+    const fetchConfig = async () => {
+      const [days, servs] = await Promise.all([
+        AppointmentService.getActiveWorkingDays(),
+        AppointmentService.getServices()
+      ]);
       setActiveWorkingDays(days);
+      setServices(servs);
     };
-    fetchDays();
+    fetchConfig();
   }, []);
 
   // Exponer submit del form al contenedor para el botón del footer del modal
@@ -126,8 +130,9 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
 
     setLoadingAvailability(true);
     try {
-      const appointmentType = APPOINTMENT_TYPES.find(t => t.id === tipoTurno);
-      const slots = await AppointmentService.getAvailableSlots(fecha, appointmentType.duration);
+      const appointmentType = services.find(t => (t.id === tipoTurno || t.name === tipoTurno));
+      const duration = appointmentType?.duration || 30;
+      const slots = await AppointmentService.getAvailableSlots(fecha, duration);
       setAvailableSlots(slots);
     } catch (err) {
       setAvailableSlots([]);
@@ -195,7 +200,9 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
     setError('');
 
     try {
-      const appointmentType = APPOINTMENT_TYPES.find(t => t.id === formData.tipoTurno);
+      const appointmentType = services.find(t => (t.id === formData.tipoTurno || t.name === formData.tipoTurno));
+      const duration = appointmentType?.duration || 30;
+      const typeName = appointmentType?.name || formData.tipoTurno;
 
       // Combinar fecha y hora en formato ISO completo
       const appointmentISO = combineDateTimeToISO(
@@ -216,8 +223,8 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
         antecedentes: formData.antecedentes || 'Ninguno',
         // Datos del turno
         tipoTurno: formData.tipoTurno,
-        tipoTurnoNombre: appointmentType.name,
-        duracion: appointmentType.duration,
+        tipoTurnoNombre: typeName,
+        duracion: duration,
         fechaHora: appointmentISO, // Fecha y hora en formato ISO completo
         timezone: 'America/Argentina/Buenos_Aires',
         // Metadatos
@@ -286,7 +293,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Tipo:</span>
-            <span className="font-medium">{APPOINTMENT_TYPES.find(t => t.id === formData.tipoTurno)?.name}</span>
+            <span className="font-medium">{services.find(t => (t.id === formData.tipoTurno || t.name === formData.tipoTurno))?.name || formData.tipoTurno}</span>
           </div>
         </div>
         <button
@@ -463,8 +470,8 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             required
           >
             <option value="">Selecciona el tipo de consulta</option>
-            {APPOINTMENT_TYPES.map((type) => (
-              <option key={type.id} value={type.id}>
+            {services.map((type) => (
+              <option key={type.id || type.name} value={type.id || type.name}>
                 {type.name} ({type.duration} min)
               </option>
             ))}

@@ -70,9 +70,9 @@ export class GoogleDriveService {
     }
 
     /**
-     * Sube un archivo a Google Drive dentro de HistoriasClinicas, con el nombre del paciente.
+     * Sube un archivo a Google Drive dentro de una carpeta específica.
      */
-    static async uploadFile(file, patientName = "Paciente") {
+    static async uploadFile(file, fileName, folderName = 'HistoriasClinicas') {
         const token = await this.getProviderToken();
         if (!token) {
             console.warn('No Google provider token found.');
@@ -80,19 +80,19 @@ export class GoogleDriveService {
         }
 
         try {
-            // 1. Asegurar carpeta HistoriasClinicas
-            const folderId = await this.getOrCreateFolder('HistoriasClinicas', token);
+            // 1. Asegurar carpeta
+            const folderId = await this.getOrCreateFolder(folderName, token);
 
-            // 2. Preparar nombre de archivo (Saneado básico)
+            // 2. Preparar nombre de archivo
             const fileExt = file.name.split('.').pop();
-            const fileName = `${patientName.replace(/[^a-z0-9]/gi, '_')}.${fileExt}`;
+            const finalFileName = fileName.endsWith(`.${fileExt}`) ? fileName : `${fileName.replace(/[^a-z0-9]/gi, '_')}.${fileExt}`;
 
             // 3. Eliminar si ya existe (para sobrescribir)
-            await this.deleteExistingFiles(fileName, folderId, token);
+            await this.deleteExistingFiles(finalFileName, folderId, token);
 
             // 4. Subir el archivo
             const metadata = {
-                name: fileName,
+                name: finalFileName,
                 mimeType: file.type,
                 parents: [folderId]
             };
