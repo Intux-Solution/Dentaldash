@@ -31,12 +31,12 @@ export function useNormalizedPatients(patients) {
     const getField = (obj, fieldNames, defaultValue = '') => {
       for (const fieldName of fieldNames) {
         let value = obj?.[fieldName] || obj?.fields?.[fieldName];
-        
+
         // Si es un array, tomar el primer elemento
         if (Array.isArray(value)) {
           value = value[0];
         }
-        
+
         if (value != null && value !== '') return String(value);
       }
       return defaultValue;
@@ -62,7 +62,7 @@ export function useNormalizedPatients(patients) {
           alergias: getField(p, ['alergias', 'alergia', 'Alergia', 'allergies'], 'Ninguna'),
           antecedentes: getField(p, ['antecedentes', 'Antecedentes', 'medicalHistory'], 'Ninguno'),
           notas: getField(p, ['notas', 'Notas', 'notes']),
-          historiaClinicaUrl: getField(p, ['historiaClinicaUrl', 'historia_clinica', 'Historia Clinica']),
+          historiaClinicaUrl: getField(p, ['historiaClinicaUrl', 'historia_clinica', 'Historia Clinica', 'historiaClinica', 'historia_clinica_url']),
           fechaCreacion: getField(
             p,
             ['fechaCreacion', 'Fecha Creacion', 'createdAt', 'createdTime'],

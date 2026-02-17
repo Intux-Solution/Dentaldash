@@ -51,7 +51,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
   const numeroAfiliado = getField(patient, ['numeroAfiliado', 'Numero Afiliado', 'Número Afiliado', 'numero_afiliado']);
   const alergias = getField(patient, ['alergias', 'alergia', 'Alergias', 'allergies'], 'Ninguna');
   const antecedentes = getField(patient, ['antecedentes', 'Antecedentes', 'medical_history'], 'Ninguno');
-  const historiaClinicaUrl = getField(patient, ['historiaClinicaUrl', 'historia_clinica', 'Historia Clinica'], 'Sin archivo');
+  const historiaClinicaUrl = getField(patient, ['historiaClinicaUrl', 'historia_clinica', 'Historia Clinica', 'historia_clinica_url', 'historiaClinica'], 'Sin archivo');
   const estado = getField(patient, ['estado', 'Estado', 'status'], 'Activo');
   const notas = getField(patient, ['notas', 'Notas', 'notes', 'observaciones'], 'Sin notas');
 
@@ -71,7 +71,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
 
   async function confirmDelete() {
     if (!onDelete || !patient || deleting) return;
-    
+
     try {
       setDeleting(true);
       await onDelete(patient);
@@ -102,16 +102,24 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
     const invalid = !url || url === '-' || url === 'Sin archivo';
     if (invalid) return 'Sin archivo';
     // If it doesn't look like a URL, just show the text as fallback
+    // If it doesn't look like a URL, it might be a storage path
     const looksLikeUrl = /^https?:\/\//i.test(url);
-    if (!looksLikeUrl) return url;
+    if (!looksLikeUrl) {
+      // If it looks like a path (e.g., filename with extension), we can at least show it or allow opening the Modal
+      return (
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 italic max-w-[150px] truncate" title={url}>{url}</span>
+        </div>
+      );
+    }
     return (
       <a
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-emerald-600 underline hover:text-emerald-700"
+        className="text-emerald-600 underline hover:text-emerald-700 font-medium"
       >
-        Enlace
+        Ver archivo
       </a>
     );
   })();
@@ -179,7 +187,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
       )}
     >
       <div className="py-6 overflow-x-hidden">
-        
+
         {/* Header con avatar y nombre */}
         <div className="flex flex-col items-center mb-6 text-center">
           <div className="w-28 h-28 rounded-2xl bg-gray-100 overflow-hidden flex items-center justify-center text-gray-600 text-2xl font-semibold mb-4">
@@ -198,80 +206,80 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
 
         {/* Información del paciente */}
         <div className="space-y-1">
-          
+
           {/* 1. Nombre */}
-          <InfoRow 
-            icon={User} 
-            label="Nombre" 
-            value={nombre} 
+          <InfoRow
+            icon={User}
+            label="Nombre"
+            value={nombre}
           />
 
           {/* 2. DNI */}
-          <InfoRow 
-            icon={Hash} 
-            label="DNI" 
-            value={dni} 
+          <InfoRow
+            icon={Hash}
+            label="DNI"
+            value={dni}
           />
 
           {/* 3. Teléfono */}
-          <InfoRow 
-            icon={Phone} 
-            label="Teléfono" 
-            value={telefono} 
+          <InfoRow
+            icon={Phone}
+            label="Teléfono"
+            value={telefono}
           />
 
           {/* 3b. Email */}
-          <InfoRow 
-            icon={FileText} 
-            label="Email" 
-            value={email} 
+          <InfoRow
+            icon={FileText}
+            label="Email"
+            value={email}
           />
 
           {/* 4. Obra Social */}
-          <InfoRow 
-            icon={Building2} 
-            label="Obra Social" 
-            value={obraSocial} 
+          <InfoRow
+            icon={Building2}
+            label="Obra Social"
+            value={obraSocial}
           />
 
           {/* 5. Número de Afiliado */}
-          <InfoRow 
-            icon={Hash} 
-            label="N° de Afiliado" 
-            value={numeroAfiliado} 
+          <InfoRow
+            icon={Hash}
+            label="N° de Afiliado"
+            value={numeroAfiliado}
           />
 
           {/* 6. Alergias */}
-          <InfoRow 
-            icon={AlertTriangle} 
-            label="Alergias" 
-            value={alergias} 
+          <InfoRow
+            icon={AlertTriangle}
+            label="Alergias"
+            value={alergias}
             className={alergias !== 'Ninguna' && alergias !== '-' ? 'text-red-600 font-medium' : ''}
           />
 
           {/* 7. Antecedentes */}
-          <InfoRow 
-            icon={Stethoscope} 
-            label="Antecedentes" 
-            value={antecedentes} 
+          <InfoRow
+            icon={Stethoscope}
+            label="Antecedentes"
+            value={antecedentes}
           />
 
           {/* 8. Historia Clínica */}
-          <InfoRow 
-            icon={FileText} 
-            label="Historia Clínica" 
-            value={historiaClinicaValue} 
+          <InfoRow
+            icon={FileText}
+            label="Historia Clínica"
+            value={historiaClinicaValue}
           />
 
           {/* 9. Estado */}
-          <InfoRow 
-            icon={Activity} 
-            label="Estado" 
+          <InfoRow
+            icon={Activity}
+            label="Estado"
             value={
               <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${getEstadoColor(estado)}`}>
                 {estado}
               </span>
-            } 
+            }
           />
 
           {/* 10. Notas */}
