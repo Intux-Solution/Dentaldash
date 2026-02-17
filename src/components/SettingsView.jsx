@@ -1,7 +1,7 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-16 - FINAL VERSION
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../config/supabaseClient';
-import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard, MessageSquare, Briefcase } from 'lucide-react';
+import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard, Briefcase } from 'lucide-react';
 import { GoogleDriveService } from '../services/GoogleDriveService';
 
 const DAYS = [
@@ -28,7 +28,6 @@ export default function SettingsView() {
         user_id: null,
         accepted_insurances: [],
         services: [],
-        chatbot_context_url: null
     });
     const [googleAvatar, setGoogleAvatar] = useState(null);
     const [avatarFile, setAvatarFile] = useState(null);
@@ -62,7 +61,6 @@ export default function SettingsView() {
                     user_id: session.user.id,
                     accepted_insurances: profileData.accepted_insurances || [],
                     services: profileData.services || [],
-                    chatbot_context_url: profileData.chatbot_context_url
                 });
                 if (profileData.avatar_url) {
                     const { data: { publicUrl } } = supabase
@@ -119,7 +117,6 @@ export default function SettingsView() {
             avatar_url: avatarPath,
             accepted_insurances: profile.accepted_insurances || [],
             services: profile.services || [],
-            chatbot_context_url: profile.chatbot_context_url,
             updated_at: new Date(),
         };
 
@@ -191,7 +188,6 @@ export default function SettingsView() {
                 <button onClick={() => setActiveTab('insurances')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'insurances' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'insurances' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Obras Sociales</button>
                 <button onClick={() => setActiveTab('services')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'services' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'services' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Servicios</button>
                 <button onClick={() => setActiveTab('schedule')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'schedule' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'schedule' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Horarios</button>
-                <button onClick={() => setActiveTab('chatbot')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'chatbot' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'chatbot' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Chatbot AI</button>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -215,10 +211,6 @@ export default function SettingsView() {
                                     <input type="text" value={profile.full_name} onChange={(e) => handleProfileChange('full_name', e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
                                 </div>
                                 <div className="space-y-4">
-                                    <div className="p-4 bg-teal-50 rounded-xl border border-teal-100 text-xs text-teal-800 font-medium leading-relaxed">
-                                        <p className="font-bold mb-1">ℹ️ Gestión de Obras Sociales</p>
-                                        Las obras sociales se han movido a su propia pestaña dedicada (**Obras Sociales**) para mayor claridad y espacio.
-                                    </div>
                                     <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-500 font-medium leading-relaxed">
                                         Gestiona tu email y contraseña desde tu cuenta de Google.
                                     </div>
@@ -250,14 +242,19 @@ export default function SettingsView() {
 
                         <div className="space-y-4 mb-6">
                             {(profile.services || []).map((service, i) => (
-                                <div key={i} className="flex items-center gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                    <div className="flex-1">
-                                        <div className="font-bold text-gray-800">{service.name}</div>
-                                        <div className="text-xs text-gray-500">{service.duration} minutos</div>
+                                <div key={i} className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-600">
+                                            <Briefcase size={18} />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold text-gray-800">{service.name}</div>
+                                            <div className="text-xs text-gray-500">{service.duration} minutos</div>
+                                        </div>
                                     </div>
                                     <button
                                         onClick={() => handleProfileChange('services', profile.services.filter((_, idx) => idx !== i))}
-                                        className="text-gray-400 hover:text-red-500 transition-colors"
+                                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                                     >
                                         <Trash2 size={18} />
                                     </button>
@@ -265,15 +262,17 @@ export default function SettingsView() {
                             ))}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-teal-50/30 p-4 rounded-2xl border border-teal-100/50">
-                            <div className="md:col-span-2">
-                                <label className="block text-[10px] font-bold text-teal-700 uppercase mb-1 ml-1">Nombre del Servicio</label>
-                                <input type="text" id="service-name" placeholder="Ej: Limpieza Completa" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-teal-700 uppercase mb-1 ml-1">Duración (min)</label>
-                                <div className="flex gap-2">
-                                    <input type="number" id="service-duration" defaultValue="30" className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
+                        <div className="bg-teal-50/30 p-5 rounded-2xl border border-teal-100/50">
+                            <div className="flex flex-col md:flex-row gap-4 items-end">
+                                <div className="flex-1 w-full">
+                                    <label className="block text-[10px] font-bold text-teal-700 uppercase mb-1 ml-1">Nombre del Servicio</label>
+                                    <input type="text" id="service-name" placeholder="Ej: Limpieza Completa" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
+                                </div>
+                                <div className="w-full md:w-32">
+                                    <label className="block text-[10px] font-bold text-teal-700 uppercase mb-1 ml-1">Duración (min)</label>
+                                    <input type="number" id="service-duration" defaultValue="30" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
+                                </div>
+                                <div className="w-full md:w-auto">
                                     <button
                                         onClick={() => {
                                             const nameEl = document.getElementById('service-name');
@@ -285,84 +284,11 @@ export default function SettingsView() {
                                                 durEl.value = '30';
                                             }
                                         }}
-                                        className="px-4 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all"
+                                        className="w-full md:w-auto px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all flex items-center justify-center gap-2 h-[46px]"
                                     >
                                         <Plus size={20} />
+                                        <span className="md:hidden">Agregar</span>
                                     </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'chatbot' && (
-                    <div className="p-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><MessageSquare size={20} className="text-teal-600" /> Configuración del Chatbot (n8n)</h2>
-                            <span className="px-3 py-1 bg-teal-100 text-teal-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Beta</span>
-                        </div>
-
-                        <div className="bg-gray-50 rounded-2xl border border-gray-100 p-6 space-y-6">
-                            <div>
-                                <h3 className="text-sm font-bold text-gray-800 mb-2">Archivo de Contexto (Documento RAG)</h3>
-                                <p className="text-xs text-gray-500 mb-4">Sube un archivo Word o PDF con toda la información de tu consultorio para que la IA sepa como responder a tus pacientes.</p>
-
-                                <div className="flex flex-col md:flex-row items-center gap-4">
-                                    <input
-                                        type="file"
-                                        id="rag-file"
-                                        accept=".doc,.docx,.pdf,.txt"
-                                        className="hidden"
-                                        onChange={async (e) => {
-                                            const file = e.target.files[0];
-                                            if (!file) return;
-                                            setSaving(true);
-                                            try {
-                                                const res = await GoogleDriveService.uploadFile(file, 'Contexto_Chatbot', 'Configuracion');
-                                                if (res) {
-                                                    handleProfileChange('chatbot_context_url', res.url);
-                                                    setSuccess('Archivo de contexto subido correctamente.');
-                                                }
-                                            } catch (err) {
-                                                setError('Error al subir archivo: ' + err.message);
-                                            } finally {
-                                                setSaving(false);
-                                            }
-                                        }}
-                                    />
-                                    <button
-                                        onClick={() => document.getElementById('rag-file').click()}
-                                        className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-dashed border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:border-teal-500 hover:text-teal-600 transition-all"
-                                    >
-                                        <Plus size={18} />
-                                        Subir Nuevo Documento
-                                    </button>
-
-                                    {profile.chatbot_context_url && (
-                                        <a
-                                            href={profile.chatbot_context_url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-xs text-teal-600 font-bold hover:underline underline-offset-4"
-                                        >
-                                            Ver documento actual &rarr;
-                                        </a>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="pt-6 border-t border-gray-200">
-                                <h3 className="text-sm font-bold text-gray-800 mb-4">Webhook para Integración n8n</h3>
-                                <div className="space-y-4">
-                                    <div className="bg-white p-4 rounded-xl border border-gray-100">
-                                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Endpoint de Consulta (Contexto)</label>
-                                        <code className="text-[11px] text-gray-600 break-all bg-gray-50 p-2 rounded block">
-                                            {profile.chatbot_context_url || 'Primero sube un documento para obtener el link'}
-                                        </code>
-                                    </div>
-                                    <p className="text-xs text-gray-400 leading-relaxed italic">
-                                        Copia este link y configúralo en tu nodo de Google Drive / RAG dentro de n8n para que el bot pueda leerlo.
-                                    </p>
                                 </div>
                             </div>
                         </div>
