@@ -1,7 +1,6 @@
 
 import { supabase } from '../config/supabaseClient';
 import { WORK_HOURS } from '../config/appointments';
-import { to24h } from '../utils/appointments';
 import { GoogleCalendarService } from './GoogleCalendarService';
 
 export class AppointmentService {

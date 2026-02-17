@@ -5,7 +5,7 @@ import './loader-spin.css';
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import InsuranceAutocomplete from './InsuranceAutocomplete';
-import { combineDateTimeToISO, to24h } from '../utils/appointments';
+import { combineDateTimeToISO } from '../utils/helpers';
 
 // ... (LOCAL_APPOINTMENT_TYPES or other constants if any)
 

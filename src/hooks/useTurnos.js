@@ -3,7 +3,6 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { AppointmentService } from '../services/AppointmentService';
-import { normalizeTurno } from '../utils/appointments';
 
 export function useTurnos(fromDate = null, toDate = null) {
   const [turnos, setTurnos] = useState([]);
@@ -47,7 +46,7 @@ export function useTurnos(fromDate = null, toDate = null) {
       }
 
       const events = await AppointmentService.getAppointments(fromISO, toISO);
-      const normalized = Array.isArray(events) ? events.map(normalizeTurno) : [];
+      const normalized = Array.isArray(events) ? events : [];
       const visible = normalized.filter(ev => (ev?.status || '').toLowerCase() !== 'cancelled' && (ev?.status || '').toLowerCase() !== 'canceled');
       setTurnos(visible);
     } catch (err) {

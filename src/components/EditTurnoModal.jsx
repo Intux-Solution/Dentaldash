@@ -4,7 +4,7 @@ import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import './loader-spin.css';
 import './loader-spin.css';
-import { combineDateTimeToISO, to24h } from '../utils/appointments';
+import { combineDateTimeToISO } from '../utils/helpers';
 
 // ...existing code...
 
