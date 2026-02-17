@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, XCircle } from 'lucide-react';
 
-export default React.memo(function PatientTable({ patients, onView, onOpenRecord, onDelete, showActions = false }) {
+export default React.memo(function PatientTable({ patients, onView, onOpenRecord, onOpenOdontogram, onDelete, showActions = false }) {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -55,17 +55,30 @@ export default React.memo(function PatientTable({ patients, onView, onOpenRecord
               <td className="p-3 lg:p-4 text-sm text-blue-600 whitespace-nowrap">{paciente.obraSocial}</td>
 
               <td className="p-3 lg:p-4 text-sm whitespace-nowrap">
-                <button
-                  type="button"
-                  onClick={() => onOpenRecord && onOpenRecord({
-                    ...paciente,
-                    historiaUrl: paciente.historiaClinica || paciente.historiaClinicaUrl || paciente.odontogramaUrl || paciente.historiaUrl || ''
-                  })}
-                  className="text-teal-600 hover:underline font-medium"
-                  aria-label={`Abrir historia clínica de ${paciente.nombre}`}
-                >
-                  Abrir
-                </button>
+                <div className="flex flex-col gap-1 items-start">
+                  <button
+                    type="button"
+                    onClick={() => onOpenRecord && onOpenRecord({
+                      ...paciente,
+                      historiaUrl: paciente.historiaClinica || paciente.historiaClinicaUrl || paciente.odontogramaUrl || paciente.historiaUrl || ''
+                    })}
+                    className="text-teal-600 hover:underline font-medium text-xs lg:text-sm"
+                    aria-label={`Abrir historia clínica de ${paciente.nombre}`}
+                  >
+                    H. Clínica
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenOdontogram && onOpenOdontogram(paciente);
+                    }}
+                    className="text-emerald-600 hover:underline font-medium text-xs lg:text-sm"
+                    aria-label={`Abrir odontograma de ${paciente.nombre}`}
+                  >
+                    Odontograma
+                  </button>
+                </div>
               </td>
 
               <td className="p-3 lg:p-4 text-sm text-gray-900 whitespace-nowrap">{paciente.telefono || '—'}</td>

@@ -9,6 +9,7 @@ export default function PacientesView({
   onAddPatient,
   onViewPatient,
   onOpenRecord,
+  onOpenOdontogram,
   onDeletePatient,
   patients = [],
   loading = false
@@ -44,7 +45,7 @@ export default function PacientesView({
             </button>
           </div>
         </div>
-        
+
         {loading ? (
           <div className="p-8 text-center">
             <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
@@ -55,6 +56,7 @@ export default function PacientesView({
             patients={filteredPacientes}
             onView={onViewPatient}
             onOpenRecord={onOpenRecord}
+            onOpenOdontogram={onOpenOdontogram}
             onDelete={onDeletePatient}
             showActions={false}
           />

@@ -7,17 +7,18 @@ import PatientTable from './PatientTable';
 import { Link } from 'react-router-dom';
 import { norm } from '../utils/helpers';
 
-export default function DashboardView({ 
-  dashboardSearchTerm, 
-  setDashboardSearchTerm, 
-  onAddPatient, 
-  onViewPatient, 
+export default function DashboardView({
+  dashboardSearchTerm,
+  setDashboardSearchTerm,
+  onAddPatient,
+  onViewPatient,
   onOpenRecord,
+  onOpenOdontogram,
   onOpenBooking, // Nueva prop para abrir el modal de turnos
   onViewTurno,
   patients = [],
   latestPatients = [],
-  loading: patientsLoading = false 
+  loading: patientsLoading = false
 }) {
   // Hook para turnos (próximos 7 días para el dashboard)
   const { turnos: events, loading: turnosLoading, error: turnosError } = useTurnos();
@@ -26,7 +27,7 @@ export default function DashboardView({
   const turnos = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     return events
       .filter(event => {
         const startDate = new Date(event.start || event.startTime);
@@ -169,20 +170,20 @@ export default function DashboardView({
   return (
     <div className="p-4 lg:p-8 bg-gray-50 min-h-screen">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mb-6 lg:mb-8">
-        <StatsCard 
-          title="Turnos de hoy" 
-          value={turnosLoading ? "..." : turnosHoy} 
-          color="text-teal-600" 
+        <StatsCard
+          title="Turnos de hoy"
+          value={turnosLoading ? "..." : turnosHoy}
+          color="text-teal-600"
         />
-        <StatsCard 
-          title="Turnos de la semana" 
-          value={turnosLoading ? "..." : turnosSemana} 
-          color="text-gray-900" 
+        <StatsCard
+          title="Turnos de la semana"
+          value={turnosLoading ? "..." : turnosSemana}
+          color="text-gray-900"
         />
-        <StatsCard 
-          title="Pacientes" 
-          value={patientsLoading ? "..." : patients.length} 
-          color="text-gray-900" 
+        <StatsCard
+          title="Pacientes"
+          value={patientsLoading ? "..." : patients.length}
+          color="text-gray-900"
         />
       </div>
 
@@ -200,7 +201,7 @@ export default function DashboardView({
                 <ArrowRight size={16} className="ml-1" />
               </Link>
             </div>
-            
+
             <div className="flex items-center gap-2">
               {/* Cambiar el enlace externo por el botón del modal */}
               <button
@@ -212,7 +213,7 @@ export default function DashboardView({
               </button>
             </div>
           </div>
-          
+
           <div className="p-4 lg:p-6">
             {turnosLoading && (
               <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
@@ -220,13 +221,13 @@ export default function DashboardView({
                 Cargando turnos...
               </div>
             )}
-            
+
             {!turnosLoading && turnosError && (
               <div className="p-4 rounded-lg border text-sm bg-red-50 text-red-900 border-red-200 mb-4">
                 {turnosError}
               </div>
             )}
-            
+
             {!turnosLoading && !turnosError && turnos.length === 0 && (
               <div className="text-center py-6 text-gray-600">
                 <Calendar size={32} className="mx-auto mb-2 opacity-50" />
@@ -240,7 +241,7 @@ export default function DashboardView({
                 </button>
               </div>
             )}
-            
+
             {!turnosLoading && turnos.length > 0 && (
               <div className="space-y-4">
                 {turnos.map((turno) => (
@@ -260,7 +261,7 @@ export default function DashboardView({
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button 
+                      <button
                         className="text-gray-400 hover:text-gray-600"
                         onClick={() => onViewTurno && onViewTurno(turno.raw)}
                         title="Ver detalles del turno"
@@ -293,13 +294,13 @@ export default function DashboardView({
               )}
             </div>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-              <SearchInput 
-                value={dashboardSearchTerm} 
-                onChange={handleSearchChange} 
-                placeholder="Buscar paciente" 
+              <SearchInput
+                value={dashboardSearchTerm}
+                onChange={handleSearchChange}
+                placeholder="Buscar paciente"
               />
-              <button 
-                onClick={onAddPatient} 
+              <button
+                onClick={onAddPatient}
                 disabled={patientsLoading}
                 className="inline-flex items-center gap-1 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -308,16 +309,17 @@ export default function DashboardView({
               </button>
             </div>
           </div>
-          
+
           {patientsLoading ? (
             <div className="p-8 text-center">
               <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
             </div>
           ) : (
-            <PatientTable 
-              patients={filteredPacientes} 
-              onView={onViewPatient} 
-              onOpenRecord={onOpenRecord} 
+            <PatientTable
+              patients={filteredPacientes}
+              onView={onViewPatient}
+              onOpenRecord={onOpenRecord}
+              onOpenOdontogram={onOpenOdontogram}
             />
           )}
         </div>

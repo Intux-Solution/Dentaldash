@@ -43,6 +43,7 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
 
   const onOpenOdontogram = useCallback((p) => {
     setSelectedPatient(p);
+    setShowProfileModal(false);
     setShowOdontogramModal(true);
   }, []);
 
