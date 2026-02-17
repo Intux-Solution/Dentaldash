@@ -1,6 +1,6 @@
 
 import { supabase } from '../config/supabaseClient';
-import { GoogleDriveService } from './GoogleDriveService';
+import { StorageService } from './StorageService';
 
 /**
  * Servicio para gestionar pacientes con Supabase
@@ -65,37 +65,25 @@ export class PatientService {
   }
 
   /**
-   * Subir archivo a Storage y retornar URL pública
+   * Subir archivo a Storage y retornar PATH (no URL pública)
    */
   static async uploadClinicalRecord(file, patientName) {
     if (!file) return null;
 
     try {
-      // 1. Intentar subir a Google Drive si hay sesión
-      const driveData = await GoogleDriveService.uploadFile(file, patientName);
-      if (driveData) {
-        return driveData.embedUrl || driveData.url;
-      }
-    } catch (driveErr) {
-      console.warn('Fallo subida a Google Drive, usando Supabase fallback...', driveErr);
+      // Generar un nombre de archivo único: timestamp_nombreoriginal
+      const fileExt = file.name.split('.').pop();
+      // Sanitizar nombre de paciente para usar en nombre de archivo if needed, 
+      // pero para simplificar usamos random id + timestamp
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      // Sube el archivo y retorna el PATH (ej: "12345_imagen.jpg")
+      const path = await StorageService.uploadFile(file, 'clinical-records', fileName);
+      return path;
+    } catch (error) {
+      console.error('Error uploading clinical record:', error);
+      throw error;
     }
-
-    // 2. Fallback a Supabase Storage (comportamiento original)
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('clinical-records')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('clinical-records')
-      .getPublicUrl(filePath);
-
-    return publicUrl;
   }
 
   /**
@@ -103,9 +91,9 @@ export class PatientService {
    */
   static async createPatient(patientData) {
     try {
-      let historiaClinicaUrl = null;
+      let historiaClinicaPath = null;
       if (patientData.historiaClinicaFile) {
-        historiaClinicaUrl = await this.uploadClinicalRecord(patientData.historiaClinicaFile, patientData.nombre);
+        historiaClinicaPath = await this.uploadClinicalRecord(patientData.historiaClinicaFile, patientData.nombre);
       }
 
       const newPatient = {
@@ -119,7 +107,7 @@ export class PatientService {
         alergias: patientData.alergias || 'Ninguna',
         antecedentes: patientData.antecedentes || 'Ninguno',
         notas: patientData.notas,
-        historia_clinica_url: historiaClinicaUrl,
+        historia_clinica_url: historiaClinicaPath, // Guardamos el PATH
         ultima_visita: new Date().toISOString(),
       };
 
