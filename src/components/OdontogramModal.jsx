@@ -42,9 +42,14 @@ const OdontogramModal = ({ isOpen, onClose, patient }) => {
             onClose();
         } catch (err) {
             const msg = err.message || 'Error desconocido';
-            setError(`No se pudo guardar: ${msg}`);
-            alert(`Error al guardar el odontograma: ${msg}`);
-            console.error(err);
+            console.error('Error saving odontogram:', err);
+
+            // Check for the specific unique constraint error to give a better hint
+            if (msg.includes('unique or exclusion constraint')) {
+                setError('Error en la base de datos: Falta la restricción de unicidad en patient_id.');
+            } else {
+                setError(`No se pudo guardar: ${msg}`);
+            }
         } finally {
             setSaving(false);
         }
