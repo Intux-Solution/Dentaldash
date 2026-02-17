@@ -39,25 +39,10 @@ export const logout = async () => {
   }
 };
 
-// Utils for compatibility
-export const getToken = async () => {
-  const session = await getSession();
-  return session?.access_token;
-};
-
-// Alias for compatibility with api.js (ASYNC NOW)
-export const getAuthToken = getToken;
-
-// Dummy for compatibility (Supabase handles this)
-export const checkTokenExpiry = () => true;
-
 export default {
   getSession,
   getUser,
   isAuthenticated,
   signIn,
-  logout,
-  getToken,
-  getAuthToken,
-  checkTokenExpiry,
+  logout
 };

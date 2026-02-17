@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../config/supabaseClient';
 import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard, Briefcase } from 'lucide-react';
-import { GoogleDriveService } from '../services/GoogleDriveService';
+
 
 const DAYS = [
     { id: 0, name: 'Domingo' },
