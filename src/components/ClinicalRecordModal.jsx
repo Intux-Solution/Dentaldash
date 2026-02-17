@@ -117,11 +117,11 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
       </div>
 
       <div className="mt-6 flex justify-end gap-3">
-        {url && (
+        {displayUrl && (
           <>
             <button
               onClick={() => {
-                navigator.clipboard.writeText(url);
+                navigator.clipboard.writeText(displayUrl);
                 alert('Link copiado al portapapeles');
               }}
               className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50 mr-auto"
@@ -129,7 +129,7 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
               Copiar Link
             </button>
             <a
-              href={rawUrl}
+              href={displayUrl}
               target="_blank"
               rel="noreferrer"
               className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50"
