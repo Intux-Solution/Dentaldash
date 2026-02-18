@@ -25,6 +25,8 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [ok, setOk] = useState(false);
+  const [shouldRemoveRecord, setShouldRemoveRecord] = useState(false);
+  const [originalRecord, setOriginalRecord] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -55,6 +57,8 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
         notas: getValue(patient?.notas)
       });
       setHistoriaClinicaFile(null);
+      setOriginalRecord(getValue(patient?.historiaClinica));
+      setShouldRemoveRecord(false);
       setError('');
       setOk(false);
       savingRef.current = false;
@@ -93,6 +97,10 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
       if (historiaClinicaFile) {
         updatedPatientData.historiaClinicaFile = historiaClinicaFile;
         updatedPatientData.historiaClinicaNombre = historiaClinicaFile.name;
+      } else if (shouldRemoveRecord) {
+        // Flag to PatientService to clear the URL in DB
+        updatedPatientData.historiaClinica = null;
+        updatedPatientData.historia_clinica_url = null;
       }
 
       if (onSaved) {
@@ -306,8 +314,26 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
                   <FileText size={16} />
                   Adjuntar
                 </label>
+                {(historiaClinicaFile || (originalRecord && !shouldRemoveRecord)) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (historiaClinicaFile) {
+                        setHistoriaClinicaFile(null);
+                      } else {
+                        setShouldRemoveRecord(true);
+                      }
+                    }}
+                    className="ml-2 p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                    title="Eliminar archivo"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
                 <span className="ml-3 text-sm text-gray-600 truncate max-w-[12rem] sm:max-w-[16rem] md:max-w-[20rem]">
-                  {historiaClinicaFile ? historiaClinicaFile.name : 'Sin archivos seleccionados'}
+                  {historiaClinicaFile
+                    ? historiaClinicaFile.name
+                    : (shouldRemoveRecord ? 'Archivo eliminado (se guardará al actualizar)' : (originalRecord ? `Actual: ${originalRecord}` : 'Sin archivos seleccionados'))}
                 </span>
               </div>
             </div>

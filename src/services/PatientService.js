@@ -107,6 +107,7 @@ export class PatientService {
         alergias: patientData.alergias || 'Ninguna',
         antecedentes: patientData.antecedentes || 'Ninguno',
         notas: patientData.notas,
+        estado: patientData.estado || 'Activo',
         historia_clinica_url: historiaClinicaPath, // Guardamos el PATH
         ultima_visita: new Date().toISOString(),
       };
@@ -152,10 +153,14 @@ export class PatientService {
         alergias: patientData.alergias,
         antecedentes: patientData.antecedentes,
         notas: patientData.notas,
+        estado: patientData.estado,
       };
 
       if (patientData.historiaClinicaFile) {
         updates.historia_clinica_url = await this.uploadClinicalRecord(patientData.historiaClinicaFile, patientData.nombre);
+      } else if (patientData.historiaClinica === null || patientData.historia_clinica_url === null) {
+        // Explicitly clear history URL if requested
+        updates.historia_clinica_url = null;
       }
 
       const { data, error } = await supabase

@@ -57,6 +57,7 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient })
         onEdit={onEditFromProfile}
         onDelete={onDeletePatient}
         onOpenOdontogram={onOpenOdontogram}
+        onOpenRecord={onOpenRecord}
       />
 
       <EditPatientModal

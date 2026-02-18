@@ -3,7 +3,7 @@ import ModalShell from './ModalShell';
 import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope } from 'lucide-react';
 import { initials } from '../utils/helpers';
 
-export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage, onOpenOdontogram }) {
+export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage, onOpenOdontogram, onOpenRecord }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -113,14 +113,12 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
       );
     }
     return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-emerald-600 underline hover:text-emerald-700 font-medium"
+      <button
+        onClick={() => onOpenRecord && onOpenRecord(patient)}
+        className="text-emerald-600 underline hover:text-emerald-700 font-medium text-left"
       >
-        Ver archivo
-      </a>
+        {looksLikeUrl ? 'Ver archivo' : (url || 'Abrir historial')}
+      </button>
     );
   })();
 
