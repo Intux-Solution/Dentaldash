@@ -47,21 +47,47 @@ serve(async (req) => {
         })
         const [{ embedding }] = embeddingResponse.data.data
 
-        // 3. RAG: Search similar documents
-        const { data: documents, error: rpcError } = await supabase.rpc('match_tenant_documents', {
+        // 3. GET FAQs (Priority)
+        const { data: faqs } = await supabase
+            .from('tenant_faqs')
+            .select('question, answer')
+            .eq('tenant_id', tenant.id);
+
+        let faqContext = "";
+        if (faqs && faqs.length > 0) {
+            faqContext = "Preguntas Frecuentes (Prioridad):\n" +
+                faqs.map(f => `P: ${f.question}\nR: ${f.answer}`).join('\n\n');
+        }
+
+        // 4. RAG: Search similar documents (Secondary Context)
+        const { data: documents } = await supabase.rpc('match_tenant_documents', {
             query_embedding: embedding,
             match_threshold: 0.5,
             match_count: 5,
             filter_tenant_id: tenant.id
         })
 
-        const context = documents?.map(d => d.content).join('\n---\n') || 'No context found.'
+        const docContext = documents?.length > 0
+            ? "Contexto adicional de documentos:\n" + documents.map(d => d.content).join('\n---\n')
+            : "";
 
-        // 4. LLM: Generate response
+        const finalContext = `${faqContext}\n\n${docContext}`.trim();
+
+        // 5. LLM: Generate response with GLOBAL SYSTEM PROMPT
+        const globalSystemPrompt = `Eres la secretaria virtual de la clínica dental "${tenant.business_name}". 
+Tu objetivo es resolver dudas de pacientes de forma profesional, amable y eficiente. 
+
+REGLAS:
+1. Usa el contexto proporcionado (FAQs y Documentos) para responder.
+2. Si no sabes la respuesta, ofrece que un humano se contactará con ellos.
+3. Sé concisa y utiliza un tono cálido.
+4. No menciones que eres una IA a menos que te lo pregunten directamente.
+5. Si el paciente quiere agendar, indícale que puedes ayudarle a coordinar o que el doctor se comunicará.`;
+
         const completion = await openai.createChatCompletion({
             model: "gpt-4o",
             messages: [
-                { role: 'system', content: `${tenant.system_prompt}\n\nContexto de la clínica:\n${context}` },
+                { role: 'system', content: globalSystemPrompt + `\n\nContexto actual:\n${finalContext}` },
                 { role: 'user', content: messageText }
             ]
         })

@@ -1,8 +1,8 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-16 - FINAL VERSION
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../config/supabaseClient';
-import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard, Briefcase, MessageSquare, Upload } from 'lucide-react';
-import { QRCode, message, Upload as AntUpload, Button } from 'antd';
+import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard, Briefcase, MessageSquare } from 'lucide-react';
+import { QRCode, message, Button } from 'antd';
 
 
 const DAYS = [
@@ -34,6 +34,7 @@ export default function SettingsView() {
     const [avatarFile, setAvatarFile] = useState(null);
     const [avatarPreview, setAvatarPreview] = useState(null);
     const [tenant, setTenant] = useState(null);
+    const [faqs, setFaqs] = useState([]);
     const [qrCodeData, setQrCodeData] = useState(null);
     const [instanceStatus, setInstanceStatus] = useState('disconnected');
     const [pollingActive, setPollingActive] = useState(false);
@@ -99,6 +100,14 @@ export default function SettingsView() {
                 if (tenantData.whatsapp_status === 'connecting') {
                     setPollingActive(true);
                 }
+
+                // Fetch FAQs
+                const { data: faqData } = await supabase
+                    .from('tenant_faqs')
+                    .select('*')
+                    .eq('tenant_id', tenantData.id)
+                    .order('created_at', { ascending: true });
+                setFaqs(faqData || []);
             }
         } catch (err) {
             console.error('Error fetching settings:', err);
@@ -118,6 +127,20 @@ export default function SettingsView() {
         setProfile(prev => ({ ...prev, [field]: value }));
     };
 
+    const handleAutoSaveProfile = async (updates) => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const { error } = await supabase
+                .from('profiles')
+                .update({ ...updates, updated_at: new Date() })
+                .eq('id', session.user.id);
+            if (error) throw error;
+            message.success('Actualizado correctamente');
+        } catch (err) {
+            message.error('Error al actualizar: ' + err.message);
+        }
+    };
+
     const saveProfile = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         let avatarPath = profile.avatar_url;
@@ -135,14 +158,13 @@ export default function SettingsView() {
             id: session.user.id,
             full_name: profile.full_name,
             avatar_url: avatarPath,
-            accepted_insurances: profile.accepted_insurances || [],
-            services: profile.services || [],
             updated_at: new Date(),
         };
 
         const { error } = await supabase.from('profiles').upsert(updates);
         if (error) throw error;
         setProfile(prev => ({ ...prev, avatar_url: avatarPath }));
+        message.success('Perfil actualizado');
     };
 
     const saveSchedules = async () => {
@@ -157,14 +179,53 @@ export default function SettingsView() {
 
         const toUpsert = schedules.map(s => {
             const { id, isNew, created_at, updated_at, ...rest } = s;
+            // If it's new, we don't send the ID so Supabase generates a valid UUID
             return isNew ? rest : { id, ...rest };
         });
 
         if (toUpsert.length > 0) {
             const { error } = await supabase.from('schedules').upsert(toUpsert);
             if (error) throw error;
+            message.success('Horarios guardados');
         }
         await fetchData();
+    };
+
+    const handleAddFAQ = async () => {
+        const qEl = document.getElementById('faq-question');
+        const aEl = document.getElementById('faq-answer');
+        if (!qEl.value.trim() || !aEl.value.trim()) return;
+
+        try {
+            const { data, error } = await supabase
+                .from('tenant_faqs')
+                .insert({
+                    question: qEl.value.trim(),
+                    answer: aEl.value.trim(),
+                    tenant_id: tenant.id
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            setFaqs([...faqs, data]);
+            qEl.value = '';
+            aEl.value = '';
+            message.success('Pregunta agregada correctamente');
+        } catch (err) {
+            message.error('Error al agregar FAQ: ' + err.message);
+        }
+    };
+
+    const handleDeleteFAQ = async (id) => {
+        try {
+            const { error } = await supabase.from('tenant_faqs').delete().eq('id', id);
+            if (error) throw error;
+            setFaqs(faqs.filter(f => f.id !== id));
+            message.success('FAQ eliminada');
+        } catch (err) {
+            message.error('Error al eliminar FAQ: ' + err.message);
+        }
     };
 
     const handleSave = async () => {
@@ -259,12 +320,12 @@ export default function SettingsView() {
             {error && <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in fade-in"><AlertCircle size={20} />{error}</div>}
             {success && <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in fade-in"><Check size={20} />{success}</div>}
 
-            <div className="flex border-b mb-6 border-gray-100">
-                <button onClick={() => setActiveTab('profile')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'profile' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'profile' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Perfil</button>
-                <button onClick={() => setActiveTab('insurances')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'insurances' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'insurances' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Obras Sociales</button>
-                <button onClick={() => setActiveTab('services')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'services' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'services' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Servicios</button>
-                <button onClick={() => setActiveTab('schedule')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'schedule' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'schedule' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Horarios</button>
-                <button onClick={() => setActiveTab('chatbot')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'chatbot' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'chatbot' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Chatbot AI</button>
+            <div className="flex border-b mb-6 border-gray-100 overflow-x-auto">
+                <button onClick={() => setActiveTab('profile')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'profile' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'profile' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Perfil</button>
+                <button onClick={() => setActiveTab('insurances')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'insurances' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'insurances' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Obras Sociales</button>
+                <button onClick={() => setActiveTab('services')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'services' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'services' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Servicios</button>
+                <button onClick={() => setActiveTab('schedule')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'schedule' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'schedule' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Horarios</button>
+                <button onClick={() => setActiveTab('chatbot')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'chatbot' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'chatbot' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Chatbot AI</button>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -285,7 +346,21 @@ export default function SettingsView() {
                                     <span className="text-[10px] text-gray-400 font-bold bg-gray-50 px-2 py-1 rounded-md">VERSION 2.0</span>
                                 </div>
                                 <div>
-                                    <input type="text" value={profile.full_name} onChange={(e) => handleProfileChange('full_name', e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={profile.full_name}
+                                            onChange={(e) => handleProfileChange('full_name', e.target.value)}
+                                            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+                                        />
+                                        <button
+                                            onClick={() => handleAutoSaveProfile({ full_name: profile.full_name })}
+                                            className="px-4 py-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-all flex items-center justify-center"
+                                            title="Guardar nombre"
+                                        >
+                                            <Save size={18} />
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="space-y-4">
                                     <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-500 font-medium leading-relaxed">
@@ -302,12 +377,36 @@ export default function SettingsView() {
                         <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><CreditCard size={20} className="text-teal-600" /> Obras Sociales</h2>
                         <div className="flex flex-wrap gap-2 mb-6">
                             {(profile.accepted_insurances || []).map((ins, i) => (
-                                <div key={i} className="flex items-center gap-2 bg-teal-50 text-teal-700 px-4 py-2 rounded-xl text-sm border border-teal-100 font-medium shadow-sm">{ins}<X size={14} className="cursor-pointer hover:text-teal-900" onClick={() => handleProfileChange('accepted_insurances', profile.accepted_insurances.filter((_, idx) => idx !== i))} /></div>
+                                <div key={i} className="flex items-center gap-2 bg-teal-50 text-teal-700 px-4 py-2 rounded-xl text-sm border border-teal-100 font-medium shadow-sm">
+                                    {ins}
+                                    <X
+                                        size={14}
+                                        className="cursor-pointer hover:text-teal-900"
+                                        onClick={async () => {
+                                            const newInsurances = profile.accepted_insurances.filter((_, idx) => idx !== i);
+                                            handleProfileChange('accepted_insurances', newInsurances);
+                                            await handleAutoSaveProfile({ accepted_insurances: newInsurances });
+                                        }}
+                                    />
+                                </div>
                             ))}
                         </div>
                         <div className="flex gap-2">
                             <input type="text" id="ins-input" placeholder="Agregar nueva obra social..." className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
-                            <button onClick={() => { const el = document.getElementById('ins-input'); if (el.value.trim()) { handleProfileChange('accepted_insurances', [...(profile.accepted_insurances || []), el.value.trim()]); el.value = ''; } }} className="px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all">Agregar</button>
+                            <button
+                                onClick={async () => {
+                                    const el = document.getElementById('ins-input');
+                                    if (el.value.trim()) {
+                                        const newInsurances = [...(profile.accepted_insurances || []), el.value.trim()];
+                                        handleProfileChange('accepted_insurances', newInsurances);
+                                        el.value = '';
+                                        await handleAutoSaveProfile({ accepted_insurances: newInsurances });
+                                    }
+                                }}
+                                className="px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all"
+                            >
+                                Agregar
+                            </button>
                         </div>
                     </div>
                 )}
@@ -330,7 +429,11 @@ export default function SettingsView() {
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => handleProfileChange('services', profile.services.filter((_, idx) => idx !== i))}
+                                        onClick={async () => {
+                                            const newServices = profile.services.filter((_, idx) => idx !== i);
+                                            handleProfileChange('services', newServices);
+                                            await handleAutoSaveProfile({ services: newServices });
+                                        }}
                                         className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                                     >
                                         <Trash2 size={18} />
@@ -351,14 +454,16 @@ export default function SettingsView() {
                                 </div>
                                 <div className="w-full md:w-auto">
                                     <button
-                                        onClick={() => {
+                                        onClick={async () => {
                                             const nameEl = document.getElementById('service-name');
                                             const durEl = document.getElementById('service-duration');
                                             if (nameEl.value.trim()) {
                                                 const id = nameEl.value.toLowerCase().replace(/\s+/g, '_');
-                                                handleProfileChange('services', [...(profile.services || []), { id, name: nameEl.value.trim(), duration: parseInt(durEl.value) || 30 }]);
+                                                const newServices = [...(profile.services || []), { id, name: nameEl.value.trim(), duration: parseInt(durEl.value) || 30 }];
+                                                handleProfileChange('services', newServices);
                                                 nameEl.value = '';
                                                 durEl.value = '30';
+                                                await handleAutoSaveProfile({ services: newServices });
                                             }
                                         }}
                                         className="w-full md:w-auto px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all flex items-center justify-center gap-2 h-[46px]"
@@ -454,58 +559,44 @@ export default function SettingsView() {
 
                                 <section>
                                     <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <Briefcase size={20} className="text-teal-600" />
-                                        Personalidad del Asistente
+                                        <Plus size={20} className="text-teal-600" />
+                                        Entrenamiento: Preguntas Frecuentes
                                     </h2>
-                                    <div className="space-y-4">
-                                        <label className="block text-sm font-semibold text-gray-700">System Prompt (Instrucciones)</label>
-                                        <textarea
-                                            value={tenant.system_prompt}
-                                            onChange={(e) => setTenant({ ...tenant, system_prompt: e.target.value })}
-                                            rows={4}
-                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all text-sm"
-                                            placeholder="Ej: Eres un asistente dental amable. Responde siempre con profesionalismo..."
-                                        />
+                                    <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden mb-6">
+                                        <div className="p-6 space-y-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Pregunta del Paciente</label>
+                                                <input type="text" id="faq-question" placeholder="Ej: ¿Qué obras sociales aceptan?" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Respuesta del Asistente</label>
+                                                <textarea id="faq-answer" rows={2} placeholder="Ej: Aceptamos OSDE, Swiss Medical y Galeno..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
+                                            </div>
+                                            <button
+                                                onClick={handleAddFAQ}
+                                                className="w-full py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <Plus size={18} />
+                                                <span>Guardar Pregunta</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {faqs.map(faq => (
+                                            <div key={faq.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex justify-between items-start gap-4">
+                                                <div className="flex-1">
+                                                    <div className="font-bold text-gray-800 text-sm mb-1">{faq.question}</div>
+                                                    <div className="text-xs text-gray-500">{faq.answer}</div>
+                                                </div>
+                                                <button onClick={() => handleDeleteFAQ(faq.id)} className="p-2 text-gray-300 hover:text-red-500 transition-all">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
                                 </section>
 
-                                <section>
-                                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <Upload size={20} className="text-teal-600" />
-                                        Base de Conocimiento (RAG)
-                                    </h2>
-                                    <p className="text-sm text-gray-500 mb-4">Sube archivos PDF con información de tu clínica (precios, tratamientos, políticas) para que el asistente pueda responder dudas específicas.</p>
-                                    <AntUpload.Dragger
-                                        customRequest={async ({ file, onSuccess, onError }) => {
-                                            try {
-                                                const fileName = `${tenant.id}/${Date.now()}-${file.name}`;
-                                                const { data, error } = await supabase.storage
-                                                    .from('clinic-docs')
-                                                    .upload(fileName, file);
-
-                                                if (error) throw error;
-
-                                                // Trigger RAG processing
-                                                await supabase.functions.invoke('process-pdf', {
-                                                    body: { file_path: fileName, tenant_id: tenant.id }
-                                                });
-
-                                                onSuccess("ok");
-                                                message.success(`${file.name} procesado correctamente.`);
-                                            } catch (err) {
-                                                onError(err);
-                                                message.error(`Error al procesar ${file.name}: ${err.message}`);
-                                            }
-                                        }}
-                                        showUploadList={false}
-                                    >
-                                        <p className="ant-upload-drag-icon flex justify-center text-teal-600">
-                                            <Upload size={48} />
-                                        </p>
-                                        <p className="ant-upload-text font-bold text-gray-700">Haz clic o arrastra un PDF aquí</p>
-                                        <p className="ant-upload-hint text-xs text-gray-400 px-8">Solo se permiten archivos PDF. El contenido será indexado para el asistente.</p>
-                                    </AntUpload.Dragger>
-                                </section>
                             </>
                         )}
                     </div>

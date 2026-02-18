@@ -29,7 +29,14 @@ const Odontogram = ({ data = {}, onChange, readOnly = false }) => {
         } else if (selectedTool === 'ausente') {
             newToothData = currentTooth.all === 'ausente' ? {} : { all: 'ausente' };
         } else {
-            newToothData = { ...currentTooth, [zone]: selectedTool };
+            // Toque Inteligente: Si la zona ya tiene la herramienta actual, se limpia.
+            // Si tiene una distinta, se cambia a la actual.
+            if (currentTooth[zone] === selectedTool) {
+                const { [zone]: _, ...rest } = currentTooth;
+                newToothData = rest;
+            } else {
+                newToothData = { ...currentTooth, [zone]: selectedTool };
+            }
         }
 
         onChange({
@@ -63,8 +70,8 @@ const Odontogram = ({ data = {}, onChange, readOnly = false }) => {
                             key={tool.id}
                             onClick={() => setSelectedTool(tool.id)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectedTool === tool.id
-                                    ? 'bg-white shadow-md ring-2 ring-teal-500 text-teal-700'
-                                    : 'text-gray-600 hover:bg-white/50'
+                                ? 'bg-white shadow-md ring-2 ring-teal-500 text-teal-700'
+                                : 'text-gray-600 hover:bg-white/50'
                                 }`}
                         >
                             <div className={`w-3 h-3 rounded-full ${tool.color}`} />
