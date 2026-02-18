@@ -248,6 +248,19 @@ export default function SettingsView() {
         }
     };
 
+    const handleUpdateFAQ = async (faqId, updates) => {
+        try {
+            const { error } = await supabase
+                .from('tenant_faqs')
+                .update(updates)
+                .eq('id', faqId);
+            if (error) throw error;
+            setFaqs(prev => prev.map(f => f.id === faqId ? { ...f, ...updates } : f));
+        } catch (err) {
+            console.error('Error updating FAQ:', err);
+        }
+    };
+
     const handleDeleteFAQ = async (id) => {
         try {
             const { error } = await supabase.from('tenant_faqs').delete().eq('id', id);
@@ -335,7 +348,8 @@ export default function SettingsView() {
                 <button onClick={() => setActiveTab('insurances')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'insurances' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'insurances' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Obras Sociales</button>
                 <button onClick={() => setActiveTab('services')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'services' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'services' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Servicios</button>
                 <button onClick={() => setActiveTab('schedule')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'schedule' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'schedule' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Horarios</button>
-                <button onClick={() => setActiveTab('chatbot')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'chatbot' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'chatbot' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Chatbot AI</button>
+                <button onClick={() => setActiveTab('whatsapp')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'whatsapp' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'whatsapp' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}WhatsApp</button>
+                <button onClick={() => setActiveTab('faqs')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'faqs' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'faqs' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Preguntas Frecuentes</button>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -511,11 +525,11 @@ export default function SettingsView() {
                     </div>
                 )}
 
-                {activeTab === 'chatbot' && (
-                    <div className="p-8 space-y-8">
+                {activeTab === 'whatsapp' && (
+                    <div className="p-8">
                         {!tenant ? (
                             <div className="text-center py-12">
-                                <p className="text-gray-500 mb-4">Primero completa tu perfil para habilitar el chatbot.</p>
+                                <p className="text-gray-500 mb-4">Primero completa tu perfil para habilitar WhatsApp.</p>
                                 <button
                                     onClick={async () => {
                                         const { data: { session } } = await supabase.auth.getSession();
@@ -527,87 +541,108 @@ export default function SettingsView() {
                                     }}
                                     className="px-6 py-2 bg-teal-600 text-white rounded-xl font-bold"
                                 >
-                                    Habilitar Chatbot
+                                    Habilitar WhatsApp
                                 </button>
                             </div>
                         ) : (
-                            <>
-                                <section>
-                                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <MessageSquare size={20} className="text-teal-600" />
-                                        Conexión de WhatsApp
-                                    </h2>
-                                    <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 flex flex-col md:flex-row items-center gap-8">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <div className={`w-3 h-3 rounded-full ${instanceStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'}`} />
-                                                <span className="font-bold text-gray-700">
-                                                    Estado: {instanceStatus === 'connected' ? 'Conectado' : 'Desconectado'}
-                                                </span>
-                                            </div>
-                                            <p className="text-sm text-gray-500 mb-4">
-                                                Conecta tu cuenta de WhatsApp para que el asistente pueda responder a tus pacientes automáticamente.
-                                            </p>
-                                            {instanceStatus !== 'connected' && (
-                                                <button
-                                                    onClick={handleConnectWhatsApp}
-                                                    disabled={saving || pollingActive}
-                                                    className="px-6 py-2 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50"
-                                                >
-                                                    {pollingActive ? 'Esperando conexión...' : 'Conectar WhatsApp'}
-                                                </button>
-                                            )}
+                            <section>
+                                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                    <MessageSquare size={20} className="text-teal-600" />
+                                    Conexión de WhatsApp
+                                </h2>
+                                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 flex flex-col md:flex-row items-center gap-8">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className={`w-3 h-3 rounded-full ${instanceStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                            <span className="font-bold text-gray-700">
+                                                Estado: {instanceStatus === 'connected' ? 'Conectado' : 'Desconectado'}
+                                            </span>
                                         </div>
-                                        {qrCodeData && instanceStatus !== 'connected' && (
-                                            <div className="p-4 bg-white rounded-2xl shadow-sm border border-gray-100">
-                                                <QRCode value={qrCodeData} size={180} />
-                                                <p className="text-[10px] text-center mt-2 text-gray-400 font-bold uppercase">Escanea con WhatsApp</p>
-                                            </div>
+                                        <p className="text-sm text-gray-500 mb-4">
+                                            Conecta tu cuenta de WhatsApp para que el asistente pueda responder a tus pacientes automáticamente.
+                                        </p>
+                                        {instanceStatus !== 'connected' && (
+                                            <button
+                                                onClick={handleConnectWhatsApp}
+                                                disabled={saving || pollingActive}
+                                                className="px-6 py-2 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50"
+                                            >
+                                                {pollingActive ? 'Esperando conexión...' : 'Conectar WhatsApp'}
+                                            </button>
                                         )}
                                     </div>
-                                </section>
-
-                                <section>
-                                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <Plus size={20} className="text-teal-600" />
-                                        Entrenamiento: Preguntas Frecuentes
-                                    </h2>
-                                    <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden mb-6">
-                                        <div className="p-6 space-y-4">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Pregunta del Paciente</label>
-                                                <input type="text" id="faq-question" placeholder="Ej: ¿Qué obras sociales aceptan?" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Respuesta del Asistente</label>
-                                                <textarea id="faq-answer" rows={2} placeholder="Ej: Aceptamos OSDE, Swiss Medical y Galeno..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
-                                            </div>
-                                            <button
-                                                onClick={handleAddFAQ}
-                                                className="w-full py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <Plus size={18} />
-                                                <span>Guardar Pregunta</span>
-                                            </button>
+                                    {qrCodeData && instanceStatus !== 'connected' && (
+                                        <div className="p-4 bg-white rounded-2xl shadow-sm border border-gray-100">
+                                            <QRCode value={qrCodeData} size={180} />
+                                            <p className="text-[10px] text-center mt-2 text-gray-400 font-bold uppercase">Escanea con WhatsApp</p>
                                         </div>
-                                    </div>
+                                    )}
+                                </div>
+                            </section>
+                        )}
+                    </div>
+                )}
 
-                                    <div className="space-y-3">
-                                        {faqs.map(faq => (
-                                            <div key={faq.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex justify-between items-start gap-4">
-                                                <div className="flex-1">
-                                                    <div className="font-bold text-gray-800 text-sm mb-1">{faq.question}</div>
-                                                    <div className="text-xs text-gray-500">{faq.answer}</div>
+                {activeTab === 'faqs' && (
+                    <div className="p-8">
+                        {!tenant ? (
+                            <div className="text-center py-12">
+                                <p className="text-gray-500 mb-4">Primero completa tu perfil para configurar las preguntas.</p>
+                            </div>
+                        ) : (
+                            <section>
+                                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                    <Plus size={20} className="text-teal-600" />
+                                    Preguntas Frecuentes
+                                </h2>
+                                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden mb-6">
+                                    <div className="p-6 space-y-4">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Pregunta del Paciente</label>
+                                            <input type="text" id="faq-question" placeholder="Ej: ¿Qué obras sociales aceptan?" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Respuesta del Asistente</label>
+                                            <textarea id="faq-answer" rows={2} placeholder="Ej: Aceptamos OSDE, Swiss Medical y Galeno..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all" />
+                                        </div>
+                                        <button
+                                            onClick={handleAddFAQ}
+                                            className="w-full py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <Plus size={18} />
+                                            <span>Guardar Pregunta</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {faqs.map(faq => (
+                                        <div key={faq.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex flex-col gap-2 animate-in fade-in">
+                                            <div className="flex justify-between items-start gap-4">
+                                                <div className="flex-1 space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        value={faq.question}
+                                                        onChange={(e) => handleUpdateFAQ(faq.id, { question: e.target.value })}
+                                                        placeholder="Pregunta"
+                                                        className="w-full bg-transparent font-bold text-gray-800 text-sm border-none focus:ring-1 focus:ring-teal-100 rounded p-1 outline-none"
+                                                    />
+                                                    <textarea
+                                                        value={faq.answer}
+                                                        rows={2}
+                                                        onChange={(e) => handleUpdateFAQ(faq.id, { answer: e.target.value })}
+                                                        placeholder="Respuesta"
+                                                        className="w-full bg-transparent text-xs text-gray-500 border-none focus:ring-1 focus:ring-teal-100 rounded p-1 outline-none resize-none"
+                                                    />
                                                 </div>
                                                 <button onClick={() => handleDeleteFAQ(faq.id)} className="p-2 text-gray-300 hover:text-red-500 transition-all">
                                                     <Trash2 size={16} />
                                                 </button>
                                             </div>
-                                        ))}
-                                    </div>
-                                </section>
-
-                            </>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
                         )}
                     </div>
                 )}
