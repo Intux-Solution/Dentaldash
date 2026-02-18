@@ -1,7 +1,8 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-16 - FINAL VERSION
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../config/supabaseClient';
-import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard, Briefcase } from 'lucide-react';
+import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard, Briefcase, MessageSquare, Upload } from 'lucide-react';
+import { QRCode, message, Upload as AntUpload, Button } from 'antd';
 
 
 const DAYS = [
@@ -32,6 +33,10 @@ export default function SettingsView() {
     const [googleAvatar, setGoogleAvatar] = useState(null);
     const [avatarFile, setAvatarFile] = useState(null);
     const [avatarPreview, setAvatarPreview] = useState(null);
+    const [tenant, setTenant] = useState(null);
+    const [qrCodeData, setQrCodeData] = useState(null);
+    const [instanceStatus, setInstanceStatus] = useState('disconnected');
+    const [pollingActive, setPollingActive] = useState(false);
     const fileInputRef = useRef(null);
 
     useEffect(() => {
@@ -80,6 +85,21 @@ export default function SettingsView() {
                 .order('start_time');
 
             setSchedules(scheduleData || []);
+
+            // Fetch tenant data
+            const { data: tenantData } = await supabase
+                .from('tenants')
+                .select('*')
+                .eq('user_id', session.user.id)
+                .single();
+
+            if (tenantData) {
+                setTenant(tenantData);
+                setInstanceStatus(tenantData.whatsapp_status);
+                if (tenantData.whatsapp_status === 'connecting') {
+                    setPollingActive(true);
+                }
+            }
         } catch (err) {
             console.error('Error fetching settings:', err);
         } finally {
@@ -152,8 +172,9 @@ export default function SettingsView() {
         setError('');
         setSuccess('');
         try {
-            if (activeTab === 'profile' || activeTab === 'insurances' || activeTab === 'services' || activeTab === 'chatbot') await saveProfile();
+            if (activeTab === 'profile' || activeTab === 'insurances' || activeTab === 'services') await saveProfile();
             else if (activeTab === 'schedule') await saveSchedules();
+            else if (activeTab === 'chatbot') await saveChatbotSettings();
             setSuccess('Configuración guardada correctamente.');
         } catch (err) {
             setError(err.message);
@@ -161,6 +182,61 @@ export default function SettingsView() {
             setSaving(false);
         }
     };
+
+    const saveChatbotSettings = async () => {
+        const { error } = await supabase
+            .from('tenants')
+            .update({ system_prompt: tenant.system_prompt })
+            .eq('id', tenant.id);
+        if (error) throw error;
+    };
+
+    const handleConnectWhatsApp = async () => {
+        try {
+            setSaving(true);
+            const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
+                body: { action: 'create', tenant_id: tenant.id }
+            });
+            if (error) throw error;
+            setPollingActive(true);
+            message.success('Iniciando conexión con WhatsApp...');
+        } catch (err) {
+            message.error('Error al conectar WhatsApp: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const checkConnectionStatus = async () => {
+        if (!tenant?.whatsapp_instance) return;
+        try {
+            const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
+                body: { action: 'get_qr', tenant_id: tenant.id }
+            });
+            if (error) return;
+
+            if (data.qrcode) {
+                setQrCodeData(data.qrcode.base64 || data.qrcode.code);
+            }
+
+            if (data.instance?.status === 'open') {
+                setInstanceStatus('connected');
+                setPollingActive(false);
+                setQrCodeData(null);
+                await supabase.from('tenants').update({ whatsapp_status: 'connected' }).eq('id', tenant.id);
+            }
+        } catch (err) {
+            console.error('Polling error:', err);
+        }
+    };
+
+    useEffect(() => {
+        let interval;
+        if (pollingActive) {
+            interval = setInterval(checkConnectionStatus, 5000);
+        }
+        return () => clearInterval(interval);
+    }, [pollingActive, tenant]);
 
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
@@ -188,6 +264,7 @@ export default function SettingsView() {
                 <button onClick={() => setActiveTab('insurances')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'insurances' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'insurances' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Obras Sociales</button>
                 <button onClick={() => setActiveTab('services')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'services' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'services' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Servicios</button>
                 <button onClick={() => setActiveTab('schedule')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'schedule' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'schedule' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Horarios</button>
+                <button onClick={() => setActiveTab('chatbot')} className={`px-6 py-3 font-medium text-sm relative ${activeTab === 'chatbot' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'chatbot' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Chatbot AI</button>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -316,6 +393,121 @@ export default function SettingsView() {
                                 </div>
                             );
                         })}
+                    </div>
+                )}
+
+                {activeTab === 'chatbot' && (
+                    <div className="p-8 space-y-8">
+                        {!tenant ? (
+                            <div className="text-center py-12">
+                                <p className="text-gray-500 mb-4">Primero completa tu perfil para habilitar el chatbot.</p>
+                                <button
+                                    onClick={async () => {
+                                        const { data: { session } } = await supabase.auth.getSession();
+                                        const { data, error } = await supabase.from('tenants').insert({
+                                            user_id: session.user.id,
+                                            business_name: profile.full_name || 'Mi Clínica',
+                                        }).select().single();
+                                        if (!error) setTenant(data);
+                                    }}
+                                    className="px-6 py-2 bg-teal-600 text-white rounded-xl font-bold"
+                                >
+                                    Habilitar Chatbot
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <section>
+                                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                        <MessageSquare size={20} className="text-teal-600" />
+                                        Conexión de WhatsApp
+                                    </h2>
+                                    <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 flex flex-col md:flex-row items-center gap-8">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className={`w-3 h-3 rounded-full ${instanceStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                                <span className="font-bold text-gray-700">
+                                                    Estado: {instanceStatus === 'connected' ? 'Conectado' : 'Desconectado'}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-gray-500 mb-4">
+                                                Conecta tu cuenta de WhatsApp para que el asistente pueda responder a tus pacientes automáticamente.
+                                            </p>
+                                            {instanceStatus !== 'connected' && (
+                                                <button
+                                                    onClick={handleConnectWhatsApp}
+                                                    disabled={saving || pollingActive}
+                                                    className="px-6 py-2 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50"
+                                                >
+                                                    {pollingActive ? 'Esperando conexión...' : 'Conectar WhatsApp'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        {qrCodeData && instanceStatus !== 'connected' && (
+                                            <div className="p-4 bg-white rounded-2xl shadow-sm border border-gray-100">
+                                                <QRCode value={qrCodeData} size={180} />
+                                                <p className="text-[10px] text-center mt-2 text-gray-400 font-bold uppercase">Escanea con WhatsApp</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+
+                                <section>
+                                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                        <Briefcase size={20} className="text-teal-600" />
+                                        Personalidad del Asistente
+                                    </h2>
+                                    <div className="space-y-4">
+                                        <label className="block text-sm font-semibold text-gray-700">System Prompt (Instrucciones)</label>
+                                        <textarea
+                                            value={tenant.system_prompt}
+                                            onChange={(e) => setTenant({ ...tenant, system_prompt: e.target.value })}
+                                            rows={4}
+                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all text-sm"
+                                            placeholder="Ej: Eres un asistente dental amable. Responde siempre con profesionalismo..."
+                                        />
+                                    </div>
+                                </section>
+
+                                <section>
+                                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                        <Upload size={20} className="text-teal-600" />
+                                        Base de Conocimiento (RAG)
+                                    </h2>
+                                    <p className="text-sm text-gray-500 mb-4">Sube archivos PDF con información de tu clínica (precios, tratamientos, políticas) para que el asistente pueda responder dudas específicas.</p>
+                                    <AntUpload.Dragger
+                                        customRequest={async ({ file, onSuccess, onError }) => {
+                                            try {
+                                                const fileName = `${tenant.id}/${Date.now()}-${file.name}`;
+                                                const { data, error } = await supabase.storage
+                                                    .from('clinic-docs')
+                                                    .upload(fileName, file);
+
+                                                if (error) throw error;
+
+                                                // Trigger RAG processing
+                                                await supabase.functions.invoke('process-pdf', {
+                                                    body: { file_path: fileName, tenant_id: tenant.id }
+                                                });
+
+                                                onSuccess("ok");
+                                                message.success(`${file.name} procesado correctamente.`);
+                                            } catch (err) {
+                                                onError(err);
+                                                message.error(`Error al procesar ${file.name}: ${err.message}`);
+                                            }
+                                        }}
+                                        showUploadList={false}
+                                    >
+                                        <p className="ant-upload-drag-icon flex justify-center text-teal-600">
+                                            <Upload size={48} />
+                                        </p>
+                                        <p className="ant-upload-text font-bold text-gray-700">Haz clic o arrastra un PDF aquí</p>
+                                        <p className="ant-upload-hint text-xs text-gray-400 px-8">Solo se permiten archivos PDF. El contenido será indexado para el asistente.</p>
+                                    </AntUpload.Dragger>
+                                </section>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
