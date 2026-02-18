@@ -36,10 +36,11 @@ export default function ModalShell({ title, onClose, children, footer, maxWidth 
             <h3 className="text-lg font-semibold text-gray-900 truncate pr-4">{title}</h3>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+              type="button"
+              className="relative z-20 p-2.5 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors"
               aria-label="Cerrar"
             >
-              <X size={18} />
+              <X size={20} />
             </button>
           </div>
 

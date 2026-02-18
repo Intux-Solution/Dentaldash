@@ -38,8 +38,15 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
   const openAddPatient = useCallback(() => setShowAddModal(true), []);
   const closeAddPatient = useCallback(() => setShowAddModal(false), []);
   const closeEditPatient = useCallback(() => setShowEditModal(false), []);
-  const closeRecordModal = useCallback(() => setShowRecordModal(false), []);
-  const closeOdontogram = useCallback(() => setShowOdontogramModal(false), []);
+  const closeRecordModal = useCallback(() => {
+    setShowRecordModal(false);
+    setSelectedPatient(null);
+  }, []);
+
+  const closeOdontogram = useCallback(() => {
+    setShowOdontogramModal(false);
+    setSelectedPatient(null);
+  }, []);
 
   const onOpenOdontogram = useCallback((p) => {
     const id = p?.id || p?._id;

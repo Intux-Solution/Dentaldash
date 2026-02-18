@@ -11,6 +11,16 @@ const OdontogramModal = ({ isOpen, onClose, patient }) => {
     const [error, setError] = useState(null);
 
     useEffect(() => {
+        const onKey = (e) => {
+            if (e.key === 'Escape' && isOpen) {
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [isOpen, onClose]);
+
+    useEffect(() => {
         if (isOpen && patient?.id) {
             loadOdontogram();
         }
