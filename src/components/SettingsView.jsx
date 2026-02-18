@@ -116,17 +116,6 @@ export default function SettingsView() {
         }
     };
 
-    const handleAvatarChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        setAvatarFile(file);
-        setAvatarPreview(URL.createObjectURL(file));
-    };
-
-    const handleProfileChange = (field, value) => {
-        setProfile(prev => ({ ...prev, [field]: value }));
-    };
-
     const handleAutoSaveProfile = async (updates) => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -134,65 +123,103 @@ export default function SettingsView() {
                 .from('profiles')
                 .update({ ...updates, updated_at: new Date() })
                 .eq('id', session.user.id);
+
             if (error) throw error;
             message.success('Actualizado correctamente');
             // Notify other components (Header) to refresh user data
             window.dispatchEvent(new CustomEvent('profile:updated'));
         } catch (err) {
-            message.error('Error al actualizar: ' + err.message);
+            console.error('AutoSave error:', err);
         }
     };
 
-    const saveProfile = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        let avatarPath = profile.avatar_url;
+    const handleAvatarChange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
 
-        if (avatarFile) {
-            const fileName = `${session.user.id}-${Math.random()}.${avatarFile.name.split('.').pop()}`;
+        try {
+            setSaving(true);
+            const { data: { session } } = await supabase.auth.getSession();
+            const fileName = `${session.user.id}-${Math.random()}.${file.name.split('.').pop()}`;
+
             const { error: uploadError } = await supabase.storage
                 .from('avatars')
-                .upload(fileName, avatarFile);
+                .upload(fileName, file);
+
             if (uploadError) throw uploadError;
-            avatarPath = fileName;
+
+            const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ avatar_url: fileName, updated_at: new Date() })
+                .eq('id', session.user.id);
+
+            if (updateError) throw updateError;
+
+            // Update local state
+            const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+            setAvatarPreview(publicUrl);
+            setProfile(prev => ({ ...prev, avatar_url: fileName }));
+
+            message.success('Avatar actualizado');
+            window.dispatchEvent(new CustomEvent('profile:updated'));
+        } catch (err) {
+            message.error('Error al subir avatar: ' + err.message);
+        } finally {
+            setSaving(false);
         }
-
-        const updates = {
-            id: session.user.id,
-            full_name: profile.full_name,
-            avatar_url: avatarPath,
-            updated_at: new Date(),
-        };
-
-        const { error } = await supabase.from('profiles').upsert(updates);
-        if (error) throw error;
-        setProfile(prev => ({ ...prev, avatar_url: avatarPath }));
-        message.success('Perfil actualizado');
-        // Notify other components (Header) to refresh user data
-        window.dispatchEvent(new CustomEvent('profile:updated'));
     };
 
-    const saveSchedules = async () => {
-        const { data: dbSchedules } = await supabase.from('schedules').select('id');
-        const dbIds = dbSchedules.map(s => s.id);
-        const currentIds = schedules.filter(s => !s.isNew).map(s => s.id);
-        const toDelete = dbIds.filter(id => !currentIds.includes(id));
+    const handleProfileChange = (field, value) => {
+        setProfile(prev => ({ ...prev, [field]: value }));
+    };
 
-        if (toDelete.length > 0) {
-            await supabase.from('schedules').delete().in('id', toDelete);
-        }
-
-        const toUpsert = schedules.map(s => {
-            const { id, isNew, created_at, updated_at, ...rest } = s;
-            // If it's new, we don't send the ID so Supabase generates a valid UUID
-            return isNew ? rest : { id, ...rest };
-        });
-
-        if (toUpsert.length > 0) {
-            const { error } = await supabase.from('schedules').upsert(toUpsert);
+    const handleUpdateScheduleSlot = async (slotId, updates) => {
+        try {
+            const { error } = await supabase
+                .from('schedules')
+                .update(updates)
+                .eq('id', slotId);
             if (error) throw error;
-            message.success('Horarios guardados');
+            setSchedules(prev => prev.map(sc => sc.id === slotId ? { ...sc, ...updates } : sc));
+            message.success('Horario actualizado');
+        } catch (err) {
+            message.error('Error al actualizar horario: ' + err.message);
         }
-        await fetchData();
+    };
+
+    const handleAddScheduleSlot = async (dayId) => {
+        try {
+            const newSlot = {
+                day_of_week: dayId,
+                start_time: '09:00:00',
+                end_time: '18:00:00',
+                is_active: true
+            };
+            const { data, error } = await supabase
+                .from('schedules')
+                .insert(newSlot)
+                .select()
+                .single();
+            if (error) throw error;
+            setSchedules(prev => [...prev, data]);
+            message.success('Horario agregado');
+        } catch (err) {
+            message.error('Error al agregar horario: ' + err.message);
+        }
+    };
+
+    const handleDeleteScheduleSlot = async (slotId) => {
+        try {
+            const { error } = await supabase
+                .from('schedules')
+                .delete()
+                .eq('id', slotId);
+            if (error) throw error;
+            setSchedules(prev => prev.filter(sc => sc.id !== slotId));
+            message.success('Horario eliminado');
+        } catch (err) {
+            message.error('Error al eliminar horario: ' + err.message);
+        }
     };
 
     const handleAddFAQ = async () => {
@@ -232,28 +259,18 @@ export default function SettingsView() {
         }
     };
 
-    const handleSave = async () => {
-        setSaving(true);
-        setError('');
-        setSuccess('');
+    const handleAutoSaveChatbot = async (updates) => {
         try {
-            if (activeTab === 'profile' || activeTab === 'insurances' || activeTab === 'services') await saveProfile();
-            else if (activeTab === 'schedule') await saveSchedules();
-            else if (activeTab === 'chatbot') await saveChatbotSettings();
-            setSuccess('Configuración guardada correctamente.');
+            const { error } = await supabase
+                .from('tenants')
+                .update(updates)
+                .eq('id', tenant.id);
+            if (error) throw error;
+            setTenant(prev => ({ ...prev, ...updates }));
+            message.success('Ajustes del chatbot actualizados');
         } catch (err) {
-            setError(err.message);
-        } finally {
-            setSaving(false);
+            message.error('Error al actualizar chatbot: ' + err.message);
         }
-    };
-
-    const saveChatbotSettings = async () => {
-        const { error } = await supabase
-            .from('tenants')
-            .update({ system_prompt: tenant.system_prompt })
-            .eq('id', tenant.id);
-        if (error) throw error;
     };
 
     const handleConnectWhatsApp = async () => {
@@ -311,18 +328,7 @@ export default function SettingsView() {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
                 </div>
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-6 py-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-all shadow-sm"
-                >
-                    {saving ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
-                    <span>Guardar Cambios</span>
-                </button>
             </div>
-
-            {error && <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in fade-in"><AlertCircle size={20} />{error}</div>}
-            {success && <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in fade-in"><Check size={20} />{success}</div>}
 
             <div className="flex border-b mb-6 border-gray-100 overflow-x-auto">
                 <button onClick={() => setActiveTab('profile')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'profile' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'profile' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Perfil</button>
@@ -491,13 +497,13 @@ export default function SettingsView() {
                                     <div className="flex-1 space-y-3">
                                         {daySlots.length === 0 ? <div className="text-sm text-gray-400 italic">No laborable</div> : daySlots.map(slot => (
                                             <div key={slot.id} className="flex items-center gap-3 animate-in slide-in-from-left-2">
-                                                <input type="time" value={slot.start_time.slice(0, 5)} onChange={(e) => setSchedules(schedules.map(sc => sc.id === slot.id ? { ...sc, start_time: e.target.value } : sc))} className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500" />
+                                                <input type="time" value={slot.start_time.slice(0, 5)} onChange={(e) => handleUpdateScheduleSlot(slot.id, { start_time: e.target.value })} className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500" />
                                                 <span className="text-gray-300">-</span>
-                                                <input type="time" value={slot.end_time.slice(0, 5)} onChange={(e) => setSchedules(schedules.map(sc => sc.id === slot.id ? { ...sc, end_time: e.target.value } : sc))} className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500" />
-                                                <Trash2 size={16} className="text-gray-400 hover:text-red-500 cursor-pointer transition-colors" onClick={() => setSchedules(schedules.filter(sc => sc.id !== slot.id))} />
+                                                <input type="time" value={slot.end_time.slice(0, 5)} onChange={(e) => handleUpdateScheduleSlot(slot.id, { end_time: e.target.value })} className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500" />
+                                                <Trash2 size={16} className="text-gray-400 hover:text-red-500 cursor-pointer transition-colors" onClick={() => handleDeleteScheduleSlot(slot.id)} />
                                             </div>
                                         ))}
-                                        <button onClick={() => setSchedules([...schedules, { id: `new-${Date.now()}`, day_of_week: day.id, start_time: '09:00', end_time: '18:00', is_active: true, isNew: true }])} className="text-sm text-teal-600 font-bold flex items-center gap-1 hover:text-teal-700 transition-all mt-2"><Plus size={16} /> Agregar horario</button>
+                                        <button onClick={() => handleAddScheduleSlot(day.id)} className="text-sm text-teal-600 font-bold flex items-center gap-1 hover:text-teal-700 transition-all mt-2"><Plus size={16} /> Agregar horario</button>
                                     </div>
                                 </div>
                             );
@@ -606,6 +612,6 @@ export default function SettingsView() {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 }
