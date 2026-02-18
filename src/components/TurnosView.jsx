@@ -11,17 +11,17 @@ function groupByDate(events) {
   for (const ev of events) {
     const dayKey = (ev.start || ev.startTime || ev.startDate || ev.start_at);
     if (!dayKey) continue; // Skip events without start time
-    
+
     const d = new Date(dayKey);
     if (isNaN(d.getTime())) continue; // Skip invalid dates
-    
+
     const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
     if (!by[key]) by[key] = [];
     by[key].push(ev);
   }
   // ordenar por hora
   for (const k of Object.keys(by)) {
-    by[k].sort((a,b)=> {
+    by[k].sort((a, b) => {
       const startA = new Date(a.start || a.startTime);
       const startB = new Date(b.start || b.startTime);
       return startA - startB;
@@ -38,22 +38,24 @@ const formatDateForInput = (date) => {
   return `${y}-${m}-${d}`;
 };
 
-// Fechas por defecto: hoy
+// Fechas por defecto: hoy hasta 7 días después
 const getDefaultDates = () => {
   const today = new Date();
+  const next7Days = new Date();
+  next7Days.setDate(today.getDate() + 7);
   return {
     from: formatDateForInput(today),
-    to: formatDateForInput(today),
+    to: formatDateForInput(next7Days),
   };
 };
 
 export default function TurnosView({ onOpenBooking, onViewTurno }) {
   // Fechas por defecto (2 semanas desde el lunes de esta semana)
   const defaultDates = useMemo(() => getDefaultDates(), []);
-  
+
   const [dateFrom, setDateFrom] = useState(defaultDates.from);
   const [dateTo, setDateTo] = useState(defaultDates.to);
-  
+
   // Usar el hook de turnos con las fechas seleccionadas
   const { turnos: events, loading, error, refreshTurnos } = useTurnos(dateFrom, dateTo);
 
@@ -62,7 +64,7 @@ export default function TurnosView({ onOpenBooking, onViewTurno }) {
   const handleDateFromChange = (e) => {
     const newFromDate = e.target.value;
     setDateFrom(newFromDate);
-    
+
     // Si la fecha "desde" es posterior a "hasta", ajustar "hasta"
     if (newFromDate && dateTo && new Date(newFromDate) > new Date(dateTo)) {
       setDateTo(newFromDate); // Alinear a la misma fecha
@@ -72,7 +74,7 @@ export default function TurnosView({ onOpenBooking, onViewTurno }) {
   const handleDateToChange = (e) => {
     const newToDate = e.target.value;
     setDateTo(newToDate);
-    
+
     // Si la fecha "hasta" es anterior a "desde", ajustar "desde"
     if (newToDate && dateFrom && new Date(newToDate) < new Date(dateFrom)) {
       setDateFrom(newToDate); // Alinear a la misma fecha
@@ -83,11 +85,25 @@ export default function TurnosView({ onOpenBooking, onViewTurno }) {
     refreshTurnos(dateFrom, dateTo);
   };
 
-  // Preset: solo Hoy
-  const applyPreset = () => {
+  // Presets
+  const applyPresetToday = () => {
     const todayStr = formatDateForInput(new Date());
     setDateFrom(todayStr);
     setDateTo(todayStr);
+  };
+
+  const applyPresetTomorrow = () => {
+    const tmr = new Date();
+    tmr.setDate(tmr.getDate() + 1);
+    const tmrStr = formatDateForInput(tmr);
+    setDateFrom(tmrStr);
+    setDateTo(tmrStr);
+  };
+
+  const applyPresetNext7Days = () => {
+    const def = getDefaultDates();
+    setDateFrom(def.from);
+    setDateTo(def.to);
   };
 
   // Escuchar pedido global de refresco (ej. después de cancelar turno desde otro modal)
@@ -114,55 +130,57 @@ export default function TurnosView({ onOpenBooking, onViewTurno }) {
             </div>
           </div>
 
-          {/* Filtros de fecha */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-            {/* Desde */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Desde
-              </label>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={handleDateFromChange}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
-              />
+          {/* Filtros de fecha y Botones */}
+          <div className="flex flex-col xl:flex-row xl:items-end gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 flex-grow max-w-xl">
+              {/* Desde */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Desde</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={handleDateFromChange}
+                  className="w-full h-10 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                />
+              </div>
+
+              {/* Hasta */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Hasta</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={handleDateToChange}
+                  className="w-full h-10 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                />
+              </div>
             </div>
 
-            {/* Hasta */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Hasta
-              </label>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={handleDateToChange}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
-              />
-            </div>
-
-            {/* Preset: Hoy (alineado en altura con Actualizar) */}
-            <div>
-              <label className="hidden">
-                Accesos rápidos
-              </label>
+            {/* Fila de botones con mismo tamaño */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-grow items-end">
               <button
-                onClick={applyPreset}
-                className="w-full h-10 inline-flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors"
+                onClick={applyPresetToday}
+                className="w-full h-10 inline-flex items-center justify-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors font-medium border border-gray-200"
               >
                 Hoy
               </button>
-            </div>
-
-            {/* Botón Nuevo turno al lado de Hoy con mismo tamaño */}
-            <div>
-              <label className="hidden">Nuevo</label>
+              <button
+                onClick={applyPresetTomorrow}
+                className="w-full h-10 inline-flex items-center justify-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors font-medium border border-gray-200"
+              >
+                Mañana
+              </button>
+              <button
+                onClick={applyPresetNext7Days}
+                className="w-full h-10 inline-flex items-center justify-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors font-medium border border-gray-200"
+              >
+                Próximos Turnos
+              </button>
               <button
                 onClick={onOpenBooking}
-                className="w-full h-10 inline-flex items-center justify-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700 transition-colors"
+                className="w-full h-10 inline-flex items-center justify-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700 transition-colors shadow-sm"
               >
-                <Plus size={16} /> Nuevo turno
+                <Plus size={16} /> <span className="hidden sm:inline">Nuevo turno</span><span className="sm:hidden">Nuevo</span>
               </button>
             </div>
           </div>
@@ -176,11 +194,11 @@ export default function TurnosView({ onOpenBooking, onViewTurno }) {
               Cargando turnos del {dateFrom} al {dateTo}...
             </div>
           )}
-          
+
           {!loading && error && (
             <div className="p-4 rounded-lg border text-sm bg-red-50 text-red-900 border-red-200 mb-4">
               {error}
-              <button 
+              <button
                 onClick={handleRefresh}
                 className="ml-2 underline hover:no-underline"
               >
@@ -236,12 +254,12 @@ export default function TurnosView({ onOpenBooking, onViewTurno }) {
                   const title = ev.title || ev.summary || 'Turno';
                   const who = ev.patientName || ev.paciente || '';
                   const small = ev.description || ev.location || '';
-                  
+
                   // Validar que la fecha sea válida
                   if (isNaN(start.getTime())) {
                     return null;
                   }
-                  
+
                   return (
                     <div key={ev.id || `${start.toISOString()}-${title}`} className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                       <div className="flex items-start justify-between">
