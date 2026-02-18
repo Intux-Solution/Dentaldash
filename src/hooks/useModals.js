@@ -246,6 +246,7 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     onBookingSuccess,
     onTurnoSaved,
     onTurnoDeleted,
+    showOdontogramModal,
     refreshPatients,
   ]);
 
