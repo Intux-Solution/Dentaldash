@@ -136,6 +136,8 @@ export default function SettingsView() {
                 .eq('id', session.user.id);
             if (error) throw error;
             message.success('Actualizado correctamente');
+            // Notify other components (Header) to refresh user data
+            window.dispatchEvent(new CustomEvent('profile:updated'));
         } catch (err) {
             message.error('Error al actualizar: ' + err.message);
         }
@@ -165,6 +167,8 @@ export default function SettingsView() {
         if (error) throw error;
         setProfile(prev => ({ ...prev, avatar_url: avatarPath }));
         message.success('Perfil actualizado');
+        // Notify other components (Header) to refresh user data
+        window.dispatchEvent(new CustomEvent('profile:updated'));
     };
 
     const saveSchedules = async () => {

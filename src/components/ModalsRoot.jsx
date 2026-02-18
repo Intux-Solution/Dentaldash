@@ -46,6 +46,7 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient })
     closeRecordModal,
     closeOdontogram,
     onOpenOdontogram,
+    onOpenRecord,
   } = useModals();
 
   return (

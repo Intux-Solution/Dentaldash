@@ -15,6 +15,7 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
   });
 
   useEffect(() => {
+    window.addEventListener('profile:updated', fetchUserData);
     fetchUserData();
 
     const profileSubscription = supabase
@@ -25,6 +26,7 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
       .subscribe();
 
     return () => {
+      window.removeEventListener('profile:updated', fetchUserData);
       supabase.removeChannel(profileSubscription);
     };
   }, []);
