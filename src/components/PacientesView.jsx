@@ -10,7 +10,6 @@ export default function PacientesView({
   setStatusFilter,
   onAddPatient,
   onViewPatient,
-  onOpenRecord,
   onDeletePatient,
   patients = [],
   loading = false
@@ -73,7 +72,6 @@ export default function PacientesView({
             patients={filteredPacientes}
             onView={onViewPatient}
             onOpenRecord={onOpenRecord}
-            onOpenOdontogram={onOpenOdontogram}
             onDelete={onDeletePatient}
             showActions={false}
           />
