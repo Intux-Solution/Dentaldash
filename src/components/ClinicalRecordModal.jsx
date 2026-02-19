@@ -176,13 +176,36 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
           <div className="flex justify-center items-center h-[60vh] border rounded-lg bg-gray-50">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
           </div>
-        ) : !displayUrl ? (
+        ) : !rawUrl ? (
+          /* Caso 1: No hay archivo asignado en BD */
           <div className="flex flex-col items-center justify-center p-12 rounded-xl border-2 border-dashed bg-gray-50 text-gray-500">
             <div className="text-sm font-medium mb-4">No hay historia clínica asociada.</div>
             <label className="cursor-pointer px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all shadow-sm">
               Subir Historia Clínica
               <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
             </label>
+          </div>
+        ) : !displayUrl ? (
+          /* Caso 2: Hay path en BD pero no se pudo obtener URL (Archivo borrado/invalido) */
+          <div className="flex flex-col items-center justify-center h-[60vh] rounded-xl border-2 border-dashed border-red-200 bg-red-50 p-8 text-center">
+            <AlertTriangle size={48} className="text-red-400 mb-4" />
+            <h3 className="text-lg font-bold text-red-700 mb-2">Archivo No Encontrado</h3>
+            <p className="text-sm text-red-600 mb-6 max-w-sm">
+              El archivo figura en la base de datos pero no se encuentra en el servidor de almacenamiento. Es posible que haya sido eliminado externamente.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors shadow-sm"
+              >
+                Limpiar Registro Roto
+              </button>
+              <label className="cursor-pointer px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors shadow-sm">
+                Subir Nuevo
+                <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
+              </label>
+            </div>
+            <p className="text-xs text-gray-400 mt-4 font-mono">{rawUrl}</p>
           </div>
         ) : (isPdf(displayUrl) || (typeof rawUrl === 'string' && rawUrl.includes("drive.google.com"))) ? (
           <div className="h-[60vh] rounded-lg border overflow-hidden">
