@@ -188,8 +188,6 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     closeEditPatient,
     onOpenRecord,
     closeRecordModal,
-    onOpenOdontogram,
-    closeOdontogram,
     onSavedPatient,
     onCreatedPatient,
     // Turno actions
@@ -221,8 +219,6 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     closeEditPatient,
     onOpenRecord,
     closeRecordModal,
-    onOpenOdontogram,
-    closeOdontogram,
     onSavedPatient,
     onCreatedPatient,
     openBookingModal,
