@@ -37,14 +37,14 @@ export class PatientService {
   }
 
   /**
-   * Buscar paciente por DNI
+   * Buscar paciente por ID
    */
-  static async getPatientByDni(dni) {
+  static async getPatientById(id) {
     try {
       const { data, error } = await supabase
         .from('patients')
         .select('*')
-        .eq('dni', dni)
+        .eq('id', id)
         .single();
 
       if (error) {
@@ -58,12 +58,17 @@ export class PatientService {
         numeroAfiliado: data.numero_afiliado,
         fechaNacimiento: data.fecha_nacimiento,
         historiaClinica: data.historia_clinica_url || data.historia_clinica,
+        estado: data.estado || 'Activo',
       };
     } catch (error) {
-      console.error('Error getting patient by DNI:', error);
+      console.error('Error getting patient by ID:', error);
       throw error;
     }
   }
+
+  /**
+   * Buscar paciente por DNI
+   */
 
   /**
    * Subir archivo a Storage y retornar PATH (no URL pública)

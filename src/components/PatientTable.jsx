@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Eye, XCircle } from 'lucide-react';
 
-export default React.memo(function PatientTable({ patients, onView, onOpenRecord, onOpenOdontogram, onDelete, showActions = false }) {
+export default React.memo(function PatientTable({ patients, onView, onOpenRecord, onDelete, showActions = false }) {
+  const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -82,7 +83,7 @@ export default React.memo(function PatientTable({ patients, onView, onOpenRecord
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOpenOdontogram && onOpenOdontogram(paciente);
+                        navigate(`/pacientes/${paciente.id}/odontograma`);
                       }}
                       className="text-emerald-600 hover:underline font-medium text-xs lg:text-sm"
                       aria-label={`Abrir odontograma de ${paciente.nombre}`}

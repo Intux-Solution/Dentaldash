@@ -15,7 +15,6 @@ export default function DashboardView({
   onAddPatient,
   onViewPatient,
   onOpenRecord,
-  onOpenOdontogram,
   onOpenBooking, // Nueva prop para abrir el modal de turnos
   onViewTurno,
   patients = [],

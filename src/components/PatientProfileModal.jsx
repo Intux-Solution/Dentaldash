@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ModalShell from './ModalShell';
 import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope } from 'lucide-react';
 import { initials } from '../utils/helpers';
 
-export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage, onOpenOdontogram, onOpenRecord }) {
+export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage, onOpenRecord }) {
+  const navigate = useNavigate();
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -280,7 +282,10 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
             label="Odontograma"
             value={
               <button
-                onClick={() => onOpenOdontogram && onOpenOdontogram(patient)}
+                onClick={() => {
+                  onClose && onClose();
+                  navigate(`/pacientes/${patient.id}/odontograma`);
+                }}
                 className="text-teal-600 underline hover:text-teal-700 font-medium"
               >
                 Abrir Odontograma

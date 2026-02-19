@@ -5,6 +5,7 @@ import DashboardView from '../components/DashboardView';
 import PacientesView from '../components/PacientesView';
 import TurnosView from '../components/TurnosView';
 import SettingsView from '../components/SettingsView';
+import OdontogramView from '../components/OdontogramView';
 
 import { useModals } from '../hooks/useModals';
 import { PatientService } from '../services/PatientService';
@@ -17,7 +18,6 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
     onOpenRecord,
     openBookingModal,
     onViewTurno,
-    onOpenOdontogram,
   } = useModals();
 
   // Local UI state moved from App.js
@@ -76,7 +76,6 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
             onOpenRecord={onOpenRecord}
             onOpenBooking={openBookingModal}
             onViewTurno={onViewTurno}
-            onOpenOdontogram={onOpenOdontogram}
             patients={patientsForViews}
             latestPatients={latestPatients}
             loading={loading}
@@ -98,7 +97,6 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
             onAddPatient={openAddPatient}
             onViewPatient={onViewPatient}
             onOpenRecord={onOpenRecord}
-            onOpenOdontogram={onOpenOdontogram}
             patients={patientsForViews}
             loading={loading}
             onDeletePatient={handleDeletePatient}
@@ -112,6 +110,10 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
       <Route path="/update-password" element={<Navigate to="/" />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+        path="/pacientes/:id/odontograma"
+        element={<OdontogramView />}
+      />
     </Routes>
   );
 }

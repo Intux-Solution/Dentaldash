@@ -11,7 +11,6 @@ export default function PacientesView({
   onAddPatient,
   onViewPatient,
   onOpenRecord,
-  onOpenOdontogram,
   onDeletePatient,
   patients = [],
   loading = false
