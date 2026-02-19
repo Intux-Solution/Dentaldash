@@ -333,7 +333,6 @@ export default function DashboardView({
               patients={filteredPacientes}
               onView={onViewPatient}
               onOpenRecord={onOpenRecord}
-              onOpenOdontogram={onOpenOdontogram}
             />
           )}
         </div>
