@@ -289,8 +289,18 @@ export default function SettingsView() {
     const handleConnectWhatsApp = async () => {
         try {
             setSaving(true);
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                message.error('No se pudo verificar la sesión. Recarga la página.');
+                setSaving(false);
+                return;
+            }
+
             const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
-                body: { action: 'create', tenant_id: tenant.id }
+                body: { action: 'create', tenant_id: tenant.id },
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
+                }
             });
             if (error) throw error;
             setPollingActive(true);
@@ -305,8 +315,14 @@ export default function SettingsView() {
     const checkConnectionStatus = async () => {
         if (!tenant?.whatsapp_instance) return;
         try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return; // Silent fail in polling if no session
+
             const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
-                body: { action: 'get_qr', tenant_id: tenant.id }
+                body: { action: 'get_qr', tenant_id: tenant.id },
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
+                }
             });
             if (error) return;
 
