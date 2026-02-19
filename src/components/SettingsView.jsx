@@ -303,6 +303,12 @@ export default function SettingsView() {
                 }
             });
             if (error) throw error;
+
+            // Actualizar el tenant local con el nombre de la instancia para que el polling funcione
+            if (data?.instance?.instanceName) {
+                setTenant(prev => ({ ...prev, whatsapp_instance: data.instance.instanceName }));
+            }
+
             setPollingActive(true);
             message.success('Iniciando conexión con WhatsApp...');
         } catch (err) {
@@ -327,6 +333,7 @@ export default function SettingsView() {
             if (error) return;
 
             if (data.qrcode) {
+                // Si es base64, lo guardamos tal cual para un <img>. Si es texto, para <QRCode>
                 setQrCodeData(data.qrcode.base64 || data.qrcode.code);
             }
 
@@ -589,7 +596,11 @@ export default function SettingsView() {
                                     </div>
                                     {qrCodeData && instanceStatus !== 'connected' && (
                                         <div className="p-4 bg-white rounded-2xl shadow-sm border border-gray-100">
-                                            <QRCode value={qrCodeData} size={180} />
+                                            {qrCodeData.startsWith('data:image') ? (
+                                                <img src={qrCodeData} alt="WhatsApp QR" className="w-[180px] h-[180px] object-contain" />
+                                            ) : (
+                                                <QRCode value={qrCodeData} size={180} />
+                                            )}
                                             <p className="text-[10px] text-center mt-2 text-gray-400 font-bold uppercase">Escanea con WhatsApp</p>
                                         </div>
                                     )}
