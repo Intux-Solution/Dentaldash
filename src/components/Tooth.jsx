@@ -23,7 +23,10 @@ const Tooth = ({ number, data = {}, onZoneClick, disabled = false }) => {
 
             <div className="relative w-12 h-12">
                 {isMissing ? (
-                    <div className="absolute inset-0 flex items-center justify-center">
+                    <div
+                        className="absolute inset-0 flex items-center justify-center cursor-pointer"
+                        onClick={() => !disabled && onZoneClick(number, 'all')}
+                    >
                         <div className="w-full h-0.5 bg-red-500 rotate-45 absolute" />
                         <div className="w-full h-0.5 bg-red-500 -rotate-45 absolute" />
                     </div>
