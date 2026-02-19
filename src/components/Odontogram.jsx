@@ -10,8 +10,8 @@ const TOOLS = [
     { id: 'caries', label: 'Caries', color: 'bg-red-500' },
     { id: 'tratado', label: 'Tratado', color: 'bg-blue-500' },
     { id: 'pendiente', label: 'Pendiente', color: 'bg-amber-500' },
-    { id: 'limpiar', label: 'Limpiar', color: 'bg-white border' },
     { id: 'ausente', label: 'Ausente', color: 'bg-gray-200' },
+    { id: 'limpiar', label: 'Borrador', color: 'bg-white border' },
 ];
 
 const Odontogram = ({ data = {}, onChange, readOnly = false }) => {
