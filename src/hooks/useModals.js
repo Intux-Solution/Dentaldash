@@ -10,7 +10,7 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRecordModal, setShowRecordModal] = useState(false);
-  const [showOdontogramModal, setShowOdontogramModal] = useState(false);
+  const [showRecordModal, setShowRecordModal] = useState(false);
 
   // Turnos
   const [selectedTurno, setSelectedTurno] = useState(null);
@@ -43,20 +43,9 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     setSelectedPatient(null);
   }, []);
 
-  const closeOdontogram = useCallback(() => {
-    setShowOdontogramModal(false);
+  const closeRecordModal = useCallback(() => {
+    setShowRecordModal(false);
     setSelectedPatient(null);
-  }, []);
-
-  const onOpenOdontogram = useCallback((p) => {
-    const id = p?.id || p?._id;
-    if (!id) {
-      alert('Error: El paciente no tiene un ID válido para el odontograma.');
-      return;
-    }
-    setSelectedPatient({ ...p, id });
-    setShowProfileModal(false);
-    setShowOdontogramModal(true);
   }, []);
 
   const onOpenRecord = useCallback((p) => {
@@ -190,8 +179,8 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     showProfileModal,
     showEditModal,
     showAddModal,
+    showAddModal,
     showRecordModal,
-    showOdontogramModal,
     // Turno state
     selectedTurno,
     showBookingModal,
@@ -253,7 +242,6 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     onBookingSuccess,
     onTurnoSaved,
     onTurnoDeleted,
-    showOdontogramModal,
     refreshPatients,
   ]);
 
