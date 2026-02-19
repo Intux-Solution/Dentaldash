@@ -25,7 +25,55 @@ export default function DashboardView({
   // Hook para turnos (próximos 7 días para el dashboard)
   const { turnos: events, loading: turnosLoading, error: turnosError } = useTurnos();
 
-  // ... (keeping turnos logic unchanged)
+  // Procesar eventos para el dashboard
+  const turnos = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return events
+      .filter(event => {
+        const startDate = new Date(event.start || event.startTime);
+        return !isNaN(startDate.getTime()) && startDate >= today;
+      })
+      .map(event => {
+        const start = new Date(event.start || event.startTime);
+        const end = event.end ? new Date(event.end) : null;
+
+        const fmtDate = new Intl.DateTimeFormat('es-AR', {
+          weekday: 'long',
+          day: '2-digit',
+          month: 'long'
+        });
+        const fmtTime = new Intl.DateTimeFormat('es-AR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+
+        const rawSummary = event.summary || event.title || '';
+        const pacienteFromEvent = event.patientName || event.paciente || '';
+        const [summaryTipo, summaryPaciente] = rawSummary.includes(' - ')
+          ? rawSummary.split(' - ')
+          : [rawSummary, ''];
+        const tipo = event.tipoTurnoNombre || summaryTipo || event.title || 'Consulta';
+        const paciente = pacienteFromEvent || summaryPaciente || 'Sin nombre';
+        const titulo = rawSummary || `${tipo}${paciente ? ` - ${paciente}` : ''}`;
+        const descripcion = event.description || event.location || '';
+
+        return {
+          id: event.id,
+          fecha: fmtDate.format(start),
+          hora: `${fmtTime.format(start)} hs${end && !isNaN(end.getTime()) ? ` - ${fmtTime.format(end)} hs` : ''}`,
+          titulo,
+          descripcion,
+          startDate: start,
+          htmlLink: event.htmlLink,
+          raw: event
+        };
+      })
+      .sort((a, b) => a.startDate - b.startDate)
+      .slice(0, 3); // Mostrar solo los próximos 3
+  }, [events]);
 
   const filteredPacientes = useMemo(() => {
     const term = norm((dashboardSearchTerm || '').trim());
