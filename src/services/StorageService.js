@@ -81,6 +81,10 @@ export const StorageService = {
             }
             return data.signedUrl;
         } catch (error) {
+            // Ignore abort errors (component unmounted or rapid changes)
+            if (error.message && (error.message.includes('aborted') || error.name === 'AbortError')) {
+                return null;
+            }
             console.error('Error in getSignedUrl:', error);
             return null;
         }

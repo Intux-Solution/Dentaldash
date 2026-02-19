@@ -177,9 +177,15 @@ export function ModalsProvider({ children, patients = [], turnos = [], addPatien
     if (selectedPatient && Array.isArray(patients)) {
       const updated = patients.find(p => (p.id || p._id) === (selectedPatient.id || selectedPatient._id));
       if (updated) {
-        // Mantener la URL firmada si ya la tenemos y los IDs coinciden, 
-        // pero actualizar el resto de los datos
-        setSelectedPatient(prev => ({ ...updated, historiaUrl: prev?.historiaUrl }));
+        // Evitar loop infinito: solo actualizar si los datos (sin historiaUrl) han cambiado realmente
+        const { historiaUrl: currentUrl, ...currentRest } = selectedPatient;
+        const { historiaUrl: newUrl, ...newRest } = updated;
+
+        if (JSON.stringify(currentRest) !== JSON.stringify(newRest)) {
+          // Mantener la URL firmada si ya la tenemos y los IDs coinciden, 
+          // pero actualizar el resto de los datos
+          setSelectedPatient(prev => ({ ...updated, historiaUrl: prev?.historiaUrl }));
+        }
       }
     }
   }, [selectedPatient, patients]);
@@ -190,7 +196,10 @@ export function ModalsProvider({ children, patients = [], turnos = [], addPatien
       const idSearch = selectedTurno.id || selectedTurno.eventId || selectedTurno._id;
       const updated = turnos.find(t => (t.id || t.eventId || t._id) === idSearch);
       if (updated) {
-        setSelectedTurno(updated);
+        // Evitar loop infinito
+        if (JSON.stringify(selectedTurno) !== JSON.stringify(updated)) {
+          setSelectedTurno(updated);
+        }
       }
     }
   }, [selectedTurno, turnos]);
