@@ -124,9 +124,11 @@ export default function DashboardView({
 
     return base
       .filter((p) => {
-        const nameMatches = norm(p?.nombre || '').includes(term);
-        const statusMatches = !statusFilter || statusFilter === 'Todos' || p?.estado === statusFilter;
-        return nameMatches && statusMatches;
+        const matchesSearch = norm(p?.nombre || '').includes(term);
+        const matchesStatus = statusFilter === 'Todos'
+          ? (p?.estado !== 'Inactivo')
+          : (p?.estado === statusFilter);
+        return matchesSearch && matchesStatus;
       })
       .sort((a, b) => ts(b) - ts(a))
       .slice(0, 4);

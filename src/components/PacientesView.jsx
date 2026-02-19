@@ -22,7 +22,9 @@ export default function PacientesView({
     return patients
       .filter((p) => {
         const matchesSearch = norm(p?.nombre || '').includes(term);
-        const matchesStatus = !statusFilter || statusFilter === 'Todos' || p?.estado === statusFilter;
+        const matchesStatus = statusFilter === 'Todos'
+          ? (p?.estado !== 'Inactivo')
+          : (p?.estado === statusFilter);
         return matchesSearch && matchesStatus;
       })
       .slice()

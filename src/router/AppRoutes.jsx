@@ -34,7 +34,11 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
     })
   ), [normalizedPatients, locallyDeleted]);
 
-  const latestPatients = useMemo(() => patientsForViews.slice(0, 4), [patientsForViews]);
+  const latestPatients = useMemo(() => {
+    return patientsForViews
+      .filter(p => p?.estado !== 'Inactivo')
+      .slice(0, 4);
+  }, [patientsForViews]);
 
   const handleDeletePatient = useCallback(async (patientData) => {
     try {
