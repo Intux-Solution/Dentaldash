@@ -10,6 +10,7 @@ export default function PacientesView({
   setStatusFilter,
   onAddPatient,
   onViewPatient,
+  onOpenRecord,
   onDeletePatient,
   patients = [],
   loading = false
