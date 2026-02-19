@@ -24,20 +24,15 @@ const Odontogram = ({ data = {}, onChange, readOnly = false }) => {
         let newToothData;
 
         if (selectedTool === 'limpiar') {
-            // Limpiar puede quitar el estado 'ausente' o una zona específica
-            if (currentTooth.all === 'ausente') {
-                newToothData = {};
-            } else {
-                const { [zone]: _, ...rest } = currentTooth;
-                newToothData = rest;
-            }
+            // Si está ausente o usamos la herramienta de limpieza, vaciamos el diente
+            newToothData = {};
         } else if (selectedTool === 'ausente') {
-            // Toggle de ausencia: si ya está ausente, se limpia.
+            // Toggle de ausencia: si ya estaba ausente, lo limpiamos
             newToothData = currentTooth.all === 'ausente' ? {} : { all: 'ausente' };
         } else {
-            // Si el diente está marcado como ausente, cualquier otro click con herramienta lo "revive"
+            // Si el diente está marcado como ausente, cualquier click lo limpia primero para poder marcarlo
             if (currentTooth.all === 'ausente') {
-                newToothData = { [zone]: selectedTool };
+                newToothData = { [zone === 'all' ? 'oclusal' : zone]: selectedTool };
             } else {
                 // Toque Inteligente: Si la zona ya tiene la herramienta actual, se limpia.
                 if (currentTooth[zone] === selectedTool) {

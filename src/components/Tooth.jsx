@@ -24,11 +24,14 @@ const Tooth = ({ number, data = {}, onZoneClick, disabled = false }) => {
             <div className="relative w-12 h-12">
                 {isMissing ? (
                     <div
-                        className="absolute inset-0 flex items-center justify-center cursor-pointer"
-                        onClick={() => !disabled && onZoneClick(number, 'all')}
+                        className="absolute inset-0 flex items-center justify-center cursor-pointer z-10"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (!disabled) onZoneClick(number, 'all');
+                        }}
                     >
-                        <div className="w-full h-0.5 bg-red-500 rotate-45 absolute" />
-                        <div className="w-full h-0.5 bg-red-500 -rotate-45 absolute" />
+                        <div className="w-full h-0.5 bg-gray-400 rotate-45 absolute pointer-events-none" />
+                        <div className="w-full h-0.5 bg-gray-400 -rotate-45 absolute pointer-events-none" />
                     </div>
                 ) : (
                     <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-sm">
