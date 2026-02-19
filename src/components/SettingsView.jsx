@@ -330,21 +330,25 @@ export default function SettingsView() {
                     Authorization: `Bearer ${session.access_token}`
                 }
             });
-            if (error) return;
+            if (error) {
+                console.error('Invoke error:', error);
+                return;
+            }
+
+            console.log('Polling data:', data);
 
             if (data.qrcode) {
-                // Si es base64, lo guardamos tal cual para un <img>. Si es texto, para <QRCode>
                 setQrCodeData(data.qrcode.base64 || data.qrcode.code);
             }
 
-            if (data.instance?.status === 'open') {
+            if (data.instance?.status === 'open' || data.instance?.state === 'open' || data.instance?.connectionStatus === 'open') {
                 setInstanceStatus('connected');
                 setPollingActive(false);
                 setQrCodeData(null);
                 await supabase.from('tenants').update({ whatsapp_status: 'connected' }).eq('id', tenant.id);
             }
         } catch (err) {
-            console.error('Polling error:', err);
+            console.error('Polling catch error:', err);
         }
     };
 
