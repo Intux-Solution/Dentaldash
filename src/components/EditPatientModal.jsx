@@ -89,9 +89,13 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
     setOk(false);
 
     try {
+      // Forzar obtención del estado actual del form
+      const finalEstado = form.estado || 'Activo';
+
       const updatedPatientData = {
         ...patient,
         ...form,
+        estado: finalEstado
       };
 
       if (historiaClinicaFile) {

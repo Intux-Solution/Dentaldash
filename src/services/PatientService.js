@@ -28,6 +28,7 @@ export class PatientService {
         fechaNacimiento: p.fecha_nacimiento,
         historiaClinica: p.historia_clinica_url || p.historia_clinica,
         ultimaVisita: p.ultima_visita,
+        estado: p.estado || 'Activo',
       }));
     } catch (error) {
       console.error('Error fetching patients:', error);
@@ -178,6 +179,7 @@ export class PatientService {
         numeroAfiliado: data.numero_afiliado,
         fechaNacimiento: data.fecha_nacimiento,
         historiaClinica: data.historia_clinica_url || data.historia_clinica,
+        estado: data.estado,
       };
     } catch (error) {
       console.error('Error updating patient:', error);

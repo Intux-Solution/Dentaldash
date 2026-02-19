@@ -24,8 +24,15 @@ const normalizePatient = (p) => {
   const createdTime = p.createdTime ?? createdIso ?? '';
   const createdMs = toMs(createdTime) || (typeof p._createdAt === 'number' ? p._createdAt : Date.now());
 
+  // Normalización básica para evitar inconsistencias en el estado local después de un UPDATE
   return {
     ...p,
+    id: p.id || p._id || p.dni,
+    nombre: p.nombre || p.name,
+    obraSocial: p.obraSocial || p.obra_social,
+    numeroAfiliado: p.numeroAfiliado || p.numero_afiliado,
+    historiaClinica: p.historiaClinica || p.historia_clinica_url || p.historia_clinica,
+    estado: p.estado || p.Estado || 'Activo',
     createdTime,
     _createdAt: createdMs,
   };

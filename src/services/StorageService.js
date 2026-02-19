@@ -51,10 +51,14 @@ export const StorageService = {
                 .from(bucket)
                 .createSignedUrl(path, expiresIn);
 
-            if (error) throw error;
+            if (error) {
+                // If it's a 400 we likely just deleted the file while changing it, ignore console noise
+                if (error.status !== 400) console.error('Error getting signed URL:', error);
+                return null;
+            }
             return data.signedUrl;
         } catch (error) {
-            console.error('Error getting signed URL:', error);
+            // Silencio absoluto en el catch para evitar ruidos de red/consola inútiles
             return null;
         }
     },

@@ -58,6 +58,7 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
     }
 
     if (open && patient) {
+      setSignedUrl(null); // Limpiar URL previa al cambiar paciente o abrir
       fetchUrl();
     } else {
       setSignedUrl(null);
