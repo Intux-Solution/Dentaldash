@@ -45,6 +45,17 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
         return;
       }
 
+      // Prevenir intentos de firmar placeholders o strings inválidos
+      const isLikelyPath = typeof rawUrl === 'string' &&
+        rawUrl.length > 5 &&
+        !rawUrl.includes(' ') &&
+        !['Sin archivo', 'Sin historia clínica', 'Sin historia clinica', '-'].includes(rawUrl);
+
+      if (!isLikelyPath) {
+        if (active) setSignedUrl(null);
+        return;
+      }
+
       // Otherwise, assume it's a Storage path and get a signed URL
       try {
         if (active) setLoading(true);

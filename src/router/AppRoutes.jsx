@@ -22,7 +22,9 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
 
   // Local UI state moved from App.js
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Todos');
   const [dashboardSearchTerm, setDashboardSearchTerm] = useState('');
+  const [dashboardStatusFilter, setDashboardStatusFilter] = useState('Todos');
   const [locallyDeleted, setLocallyDeleted] = useState([]);
 
   const patientsForViews = useMemo(() => (
@@ -67,6 +69,8 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
           <DashboardView
             dashboardSearchTerm={dashboardSearchTerm}
             setDashboardSearchTerm={setDashboardSearchTerm}
+            statusFilter={dashboardStatusFilter}
+            setStatusFilter={setDashboardStatusFilter}
             onAddPatient={openAddPatient}
             onViewPatient={onViewPatient}
             onOpenRecord={onOpenRecord}
@@ -89,6 +93,8 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
           <PacientesView
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
             onAddPatient={openAddPatient}
             onViewPatient={onViewPatient}
             onOpenRecord={onOpenRecord}

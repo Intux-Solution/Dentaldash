@@ -32,79 +32,97 @@ export default React.memo(function PatientTable({ patients, onView, onOpenRecord
             <th className="text-left p-3 lg:p-4 text-sm font-medium text-gray-700 whitespace-nowrap">Obra Social</th>
             <th className="text-left p-3 lg:p-4 text-sm font-medium text-gray-700 whitespace-nowrap">Historia Clínica</th>
             <th className="text-left p-3 lg:p-4 text-sm font-medium text-gray-700 whitespace-nowrap">Telefono</th>
+            <th className="text-left p-3 lg:p-4 text-sm font-medium text-gray-700 whitespace-nowrap">Estado</th>
             {showActions && (
               <th className="text-right p-3 lg:p-4 text-sm font-medium text-gray-700 whitespace-nowrap">Acciones</th>
             )}
           </tr>
         </thead>
         <tbody>
-          {patients.map((paciente) => (
-            <tr key={paciente.id} className="group border-b hover:bg-gray-50">
-              <td className="p-3 lg:p-4 text-sm whitespace-nowrap">
-                <button
-                  type="button"
-                  onClick={() => onView && onView(paciente)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView && onView(paciente); } }}
-                  className="p-0 m-0 bg-transparent text-left text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-teal-500 rounded-sm cursor-pointer"
-                  aria-label={`Ver perfil de ${paciente.nombre}`}
-                >
-                  {paciente.nombre}
-                </button>
-              </td>
+          {patients.map((paciente) => {
+            const getEstadoColor = (estado = '') => {
+              const lower = String(estado).toLowerCase();
+              if (lower.includes('activo')) return 'bg-green-100 text-green-800';
+              if (lower.includes('tratamiento')) return 'bg-blue-100 text-blue-800';
+              if (lower.includes('alta')) return 'bg-purple-100 text-purple-800';
+              if (lower.includes('inactivo')) return 'bg-gray-100 text-gray-800';
+              return 'bg-gray-100 text-gray-800';
+            };
 
-              <td className="p-3 lg:p-4 text-sm text-blue-600 whitespace-nowrap">{paciente.obraSocial}</td>
-
-              <td className="p-3 lg:p-4 text-sm whitespace-nowrap">
-                <div className="flex flex-col gap-1 items-start">
+            return (
+              <tr key={paciente.id} className="group border-b hover:bg-gray-50">
+                <td className="p-3 lg:p-4 text-sm whitespace-nowrap">
                   <button
                     type="button"
-                    onClick={() => onOpenRecord && onOpenRecord({
-                      ...paciente,
-                      historiaUrl: paciente.historiaClinica || paciente.historiaClinicaUrl || paciente.odontogramaUrl || paciente.historiaUrl || ''
-                    })}
-                    className="text-teal-600 hover:underline font-medium text-xs lg:text-sm"
-                    aria-label={`Abrir historia clínica de ${paciente.nombre}`}
+                    onClick={() => onView && onView(paciente)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView && onView(paciente); } }}
+                    className="p-0 m-0 bg-transparent text-left text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-teal-500 rounded-sm cursor-pointer"
+                    aria-label={`Ver perfil de ${paciente.nombre}`}
                   >
-                    H. Clínica
+                    {paciente.nombre}
                   </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenOdontogram && onOpenOdontogram(paciente);
-                    }}
-                    className="text-emerald-600 hover:underline font-medium text-xs lg:text-sm"
-                    aria-label={`Abrir odontograma de ${paciente.nombre}`}
-                  >
-                    Odontograma
-                  </button>
-                </div>
-              </td>
+                </td>
 
-              <td className="p-3 lg:p-4 text-sm text-gray-900 whitespace-nowrap">{paciente.telefono || '—'}</td>
+                <td className="p-3 lg:p-4 text-sm text-blue-600 whitespace-nowrap">{paciente.obraSocial}</td>
 
-              {showActions && (
-                <td className="p-3 lg:p-4">
-                  <div className="flex justify-end items-center gap-2 opacity-60 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <td className="p-3 lg:p-4 text-sm whitespace-nowrap">
+                  <div className="flex flex-col gap-1 items-start">
                     <button
-                      className="inline-flex items-center rounded-md p-1.5 text-gray-600 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-300"
-                      onClick={() => onView && onView(paciente)}
-                      aria-label={`Ver perfil de ${paciente.nombre}`}
+                      type="button"
+                      onClick={() => onOpenRecord && onOpenRecord({
+                        ...paciente,
+                        historiaUrl: paciente.historiaClinica || paciente.historiaClinicaUrl || paciente.odontogramaUrl || paciente.historiaUrl || ''
+                      })}
+                      className="text-teal-600 hover:underline font-medium text-xs lg:text-sm"
+                      aria-label={`Abrir historia clínica de ${paciente.nombre}`}
                     >
-                      <Eye size={16} />
+                      H. Clínica
                     </button>
                     <button
-                      className="inline-flex items-center rounded-md p-1.5 text-gray-600 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-300"
-                      onClick={() => setPendingDelete(paciente)}
-                      aria-label={`Eliminar ${paciente.nombre}`}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenOdontogram && onOpenOdontogram(paciente);
+                      }}
+                      className="text-emerald-600 hover:underline font-medium text-xs lg:text-sm"
+                      aria-label={`Abrir odontograma de ${paciente.nombre}`}
                     >
-                      <XCircle size={16} />
+                      Odontograma
                     </button>
                   </div>
                 </td>
-              )}
-            </tr>
-          ))}
+
+                <td className="p-3 lg:p-4 text-sm text-gray-900 whitespace-nowrap">{paciente.telefono || '—'}</td>
+
+                <td className="p-3 lg:p-4 text-sm whitespace-nowrap">
+                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getEstadoColor(paciente.estado)}`}>
+                    {paciente.estado || 'Activo'}
+                  </span>
+                </td>
+
+                {showActions && (
+                  <td className="p-3 lg:p-4">
+                    <div className="flex justify-end items-center gap-2 opacity-60 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                      <button
+                        className="inline-flex items-center rounded-md p-1.5 text-gray-600 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-300"
+                        onClick={() => onView && onView(paciente)}
+                        aria-label={`Ver perfil de ${paciente.nombre}`}
+                      >
+                        <Eye size={16} />
+                      </button>
+                      <button
+                        className="inline-flex items-center rounded-md p-1.5 text-gray-600 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-300"
+                        onClick={() => setPendingDelete(paciente)}
+                        aria-label={`Eliminar ${paciente.nombre}`}
+                      >
+                        <XCircle size={16} />
+                      </button>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 

@@ -6,6 +6,8 @@ import PatientTable from './PatientTable';
 export default function PacientesView({
   searchTerm,
   setSearchTerm,
+  statusFilter = 'Todos',
+  setStatusFilter,
   onAddPatient,
   onViewPatient,
   onOpenRecord,
@@ -15,13 +17,18 @@ export default function PacientesView({
   loading = false
 }) {
   const collator = useMemo(() => new Intl.Collator('es', { sensitivity: 'base' }), []);
+
   const filteredPacientes = useMemo(() => {
     const term = norm(searchTerm || '');
     return patients
-      .filter((p) => norm(p?.nombre || '').includes(term))
+      .filter((p) => {
+        const matchesSearch = norm(p?.nombre || '').includes(term);
+        const matchesStatus = !statusFilter || statusFilter === 'Todos' || p?.estado === statusFilter;
+        return matchesSearch && matchesStatus;
+      })
       .slice()
       .sort((a, b) => collator.compare(a?.nombre || '', b?.nombre || ''));
-  }, [searchTerm, patients, collator]);
+  }, [searchTerm, statusFilter, patients, collator]);
 
   return (
     <div className="p-4 lg:p-8 bg-gray-50 min-h-screen">
@@ -31,6 +38,17 @@ export default function PacientesView({
             Pacientes
           </h2>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter?.(e.target.value)}
+              className="rounded-xl border border-transparent bg-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-0 focus:shadow-none focus:border-transparent mr-2 min-w-[120px]"
+            >
+              <option value="Todos">Todos</option>
+              <option value="Activo">Activo</option>
+              <option value="Inactivo">Inactivo</option>
+              <option value="En Tratamiento">En Tratamiento</option>
+              <option value="Alta">Alta</option>
+            </select>
             <SearchInput
               value={searchTerm}
               onChange={(e) => setSearchTerm?.(e.target.value)}

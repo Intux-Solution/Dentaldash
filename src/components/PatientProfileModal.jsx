@@ -252,11 +252,27 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
           />
 
           {/* 8. Historia Clínica */}
-          <InfoRow
-            icon={FileText}
-            label="Historia Clínica"
-            value={historiaClinicaValue}
-          />
+          {(() => {
+            const url = historiaClinicaUrl;
+            const hasFile = url && url !== '-' && url !== 'Sin archivo' && url !== 'Sin historia clínica' && url !== 'Sin historia clinica';
+
+            if (!hasFile) return null;
+
+            return (
+              <InfoRow
+                icon={FileText}
+                label="Historia Clínica"
+                value={
+                  <button
+                    onClick={() => onOpenRecord && onOpenRecord(patient)}
+                    className="text-emerald-600 hover:text-emerald-700 underline font-bold text-left"
+                  >
+                    Ver Historia Clínica
+                  </button>
+                }
+              />
+            );
+          })()}
 
           {/* 8b. Odontograma */}
           <InfoRow
