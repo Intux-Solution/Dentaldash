@@ -10,7 +10,6 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRecordModal, setShowRecordModal] = useState(false);
-  const [showRecordModal, setShowRecordModal] = useState(false);
 
   // Turnos
   const [selectedTurno, setSelectedTurno] = useState(null);
@@ -38,11 +37,6 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
   const openAddPatient = useCallback(() => setShowAddModal(true), []);
   const closeAddPatient = useCallback(() => setShowAddModal(false), []);
   const closeEditPatient = useCallback(() => setShowEditModal(false), []);
-  const closeRecordModal = useCallback(() => {
-    setShowRecordModal(false);
-    setSelectedPatient(null);
-  }, []);
-
   const closeRecordModal = useCallback(() => {
     setShowRecordModal(false);
     setSelectedPatient(null);
@@ -178,7 +172,6 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     selectedPatient,
     showProfileModal,
     showEditModal,
-    showAddModal,
     showAddModal,
     showRecordModal,
     // Turno state

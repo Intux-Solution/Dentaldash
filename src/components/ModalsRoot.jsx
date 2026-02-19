@@ -8,7 +8,6 @@ import ClinicalRecordModal from './ClinicalRecordModal';
 import BookingModal from './BookingModal';
 import TurnoDetailsModal from './TurnoDetailsModal';
 import EditTurnoModal from './EditTurnoModal';
-import EditTurnoModal from './EditTurnoModal';
 
 export default function ModalsRoot({ patientsLoading = false, onDeletePatient }) {
   const {
@@ -17,7 +16,6 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient })
     showProfileModal,
     showEditModal,
     showAddModal,
-    showRecordModal,
     showRecordModal,
     closeProfile,
     onEditFromProfile,
@@ -43,7 +41,6 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient })
     // extra closers
     closeAddPatient,
     closeEditPatient,
-    closeRecordModal,
     closeRecordModal,
     onOpenRecord,
   } = useModals();
