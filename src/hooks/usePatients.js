@@ -154,8 +154,14 @@ export function usePatients() {
       if (!touchesPatients) return;
       loadPatients();
     };
+    const handleRefresh = () => loadPatients();
+
     window.addEventListener('webhook:mutated', handleWebhookMutation);
-    return () => window.removeEventListener('webhook:mutated', handleWebhookMutation);
+    window.addEventListener('patients:refresh', handleRefresh);
+    return () => {
+      window.removeEventListener('webhook:mutated', handleWebhookMutation);
+      window.removeEventListener('patients:refresh', handleRefresh);
+    };
   }, [loadPatients]);
 
   return {

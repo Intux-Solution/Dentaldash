@@ -74,6 +74,7 @@ export default function OdontogramView() {
         try {
             setSaving(true);
             await OdontogramService.saveOdontogram(id, odontogramData);
+            window.dispatchEvent(new CustomEvent('patients:refresh'));
             // Mostrar un indicador temporal de éxito si se desea
         } catch (err) {
             console.error('Error saving:', err);
@@ -94,6 +95,7 @@ export default function OdontogramView() {
                 ...newNote,
                 tooth_number: newNote.tooth_number ? parseInt(newNote.tooth_number) : null
             });
+            window.dispatchEvent(new CustomEvent('patients:refresh'));
             setHistory([entry, ...history]);
             setNewNote({ tooth_number: '', procedure_type: '', description: '' });
         } catch (err) {
@@ -108,6 +110,7 @@ export default function OdontogramView() {
         if (!window.confirm('¿Eliminar este registro del historial?')) return;
         try {
             await EvolutionService.deleteEntry(historyId);
+            window.dispatchEvent(new CustomEvent('patients:refresh'));
             setHistory(history.filter(h => h.id !== historyId));
         } catch (err) {
             alert('Error al eliminar');

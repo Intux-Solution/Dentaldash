@@ -44,7 +44,7 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }) {
   }, []);
 
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients();
-  const { refreshTurnos } = useTurnos();
+  const { turnos, refreshTurnos } = useTurnos();
 
   const { normalizedPatients } = useNormalizedPatients(patients);
 
@@ -80,6 +80,8 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }) {
 
   return (
     <ModalsProvider
+      patients={normalizedPatients}
+      turnos={turnos}
       addPatient={addPatient}
       updatePatient={updatePatient}
       refreshTurnos={refreshTurnos}

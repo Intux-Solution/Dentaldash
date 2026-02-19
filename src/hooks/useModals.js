@@ -3,7 +3,7 @@ import { AppointmentService } from '../services/AppointmentService';
 
 const ModalsContext = createContext(null);
 
-export function ModalsProvider({ children, addPatient, updatePatient, refreshTurnos, refreshPatients }) {
+export function ModalsProvider({ children, patients = [], turnos = [], addPatient, updatePatient, refreshTurnos, refreshPatients }) {
   // Pacientes
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -39,7 +39,8 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
   const closeEditPatient = useCallback(() => setShowEditModal(false), []);
   const closeRecordModal = useCallback(() => {
     setShowRecordModal(false);
-    setSelectedPatient(null);
+    // Don't clear selectedPatient immediately if we might be viewing it in profile
+    // setSelectedPatient(null);
   }, []);
 
   const onOpenRecord = useCallback((p) => {
@@ -90,6 +91,7 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
     // Notificar globalmente para que otras vistas con su propio hook se refresquen
     try {
       window.dispatchEvent(new CustomEvent('turnos:refresh'));
+      window.dispatchEvent(new CustomEvent('patients:refresh'));
     } catch { }
     closeBookingModal();
   }, [refreshTurnos, refreshPatients, closeBookingModal]);
@@ -139,6 +141,7 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
       if (typeof refreshPatients === 'function') {
         refreshPatients();
       }
+      window.dispatchEvent(new CustomEvent('patients:refresh'));
       setShowEditModal(false);
       setSelectedPatient(null);
     } catch (err) {
@@ -160,12 +163,46 @@ export function ModalsProvider({ children, addPatient, updatePatient, refreshTur
       if (typeof refreshPatients === 'function') {
         refreshPatients();
       }
+      // Notificar a otros posibles escuchas
+      window.dispatchEvent(new CustomEvent('patients:refresh'));
       return created;
     } catch (err) {
       alert(`Error: ${err.message || 'No se pudo crear el paciente'}`);
       throw err;
     }
   }, [addPatient, refreshPatients]);
+
+  // Sincronizar selectedPatient con la lista actualizada de pacientes
+  React.useEffect(() => {
+    if (selectedPatient && Array.isArray(patients)) {
+      const updated = patients.find(p => (p.id || p._id) === (selectedPatient.id || selectedPatient._id));
+      if (updated) {
+        // Mantener la URL firmada si ya la tenemos y los IDs coinciden, 
+        // pero actualizar el resto de los datos
+        setSelectedPatient(prev => ({ ...updated, historiaUrl: prev?.historiaUrl }));
+      }
+    }
+  }, [selectedPatient, patients]);
+
+  // Sincronizar selectedTurno con la lista actualizada de turnos
+  React.useEffect(() => {
+    if (selectedTurno && Array.isArray(turnos)) {
+      const idSearch = selectedTurno.id || selectedTurno.eventId || selectedTurno._id;
+      const updated = turnos.find(t => (t.id || t.eventId || t._id) === idSearch);
+      if (updated) {
+        setSelectedTurno(updated);
+      }
+    }
+  }, [selectedTurno, turnos]);
+
+  // Escuchar eventos de refresco
+  React.useEffect(() => {
+    const handleRefresh = () => {
+      if (typeof refreshPatients === 'function') refreshPatients();
+    };
+    window.addEventListener('patients:refresh', handleRefresh);
+    return () => window.removeEventListener('patients:refresh', handleRefresh);
+  }, [refreshPatients]);
 
   const value = useMemo(() => ({
     // Paciente state
