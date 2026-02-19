@@ -186,10 +186,38 @@ export class PatientService {
   }
 
   /**
+   * Eliminar la historia clínica de un paciente (Archivo y URL)
+   */
+  static async deleteClinicalRecord(patientId, filePath) {
+    try {
+      if (!patientId) throw new Error("ID de paciente requerido");
+
+      // 1. Borrar de Storage si hay un path
+      if (filePath && !filePath.startsWith('http')) {
+        await StorageService.deleteFile(filePath, 'clinical-records');
+      }
+
+      // 2. Limpiar el campo en la BD
+      const { error } = await supabase
+        .from('patients')
+        .update({ historia_clinica_url: null })
+        .eq('id', patientId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting clinical record:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Eliminar un paciente
    */
   static async deletePatient(id) {
     try {
+      // Opcional: Podríamos borrar el archivo de historia clínica antes del paciente
+      // Pero primero hagamos el delete simple de la tabla.
       const { error } = await supabase
         .from('patients')
         .delete()

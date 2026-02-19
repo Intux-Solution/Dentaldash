@@ -57,5 +57,24 @@ export const StorageService = {
             console.error('Error getting signed URL:', error);
             return null;
         }
+    },
+
+    /**
+     * Delete a file from Supabase Storage
+     * @param {string} path - The path of the file to delete
+     * @param {string} bucket - The bucket name (default: 'clinical-records')
+     */
+    async deleteFile(path, bucket = 'clinical-records') {
+        try {
+            if (!path) return;
+            const { error } = await supabase.storage
+                .from(bucket)
+                .remove([path]);
+
+            if (error) throw error;
+        } catch (error) {
+            console.error('Error deleting file from storage:', error);
+            throw error;
+        }
     }
 };

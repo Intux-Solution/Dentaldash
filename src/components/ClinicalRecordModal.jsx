@@ -77,18 +77,85 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
 
   const displayUrl = signedUrl;
 
+  const handleDelete = async () => {
+    if (!window.confirm("¿Estás seguro de que deseas eliminar este archivo? Esta acción borrará el archivo de la base de datos definitivamente.")) return;
+
+    try {
+      setLoading(true);
+      await StorageService.deleteFile(rawUrl, 'clinical-records');
+
+      // Update DB
+      const { supabase } = await import('../config/supabaseClient');
+      await supabase.from('patients').update({ historia_clinica_url: null }).eq('id', patient.id);
+
+      onClose();
+      // Notify parent to refresh
+      window.dispatchEvent(new CustomEvent('patients:refresh'));
+    } catch (err) {
+      alert("Error al eliminar el archivo: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      setLoading(true);
+
+      // 1. Upload new file
+      const { PatientService } = await import('../services/PatientService');
+      const newPath = await PatientService.uploadClinicalRecord(file, patient.nombre);
+
+      // 2. Delete old file if exists and it is a path
+      if (rawUrl && !rawUrl.startsWith('http')) {
+        await StorageService.deleteFile(rawUrl, 'clinical-records');
+      }
+
+      // 3. Update DB
+      const { supabase } = await import('../config/supabaseClient');
+      await supabase.from('patients').update({ historia_clinica_url: newPath }).eq('id', patient.id);
+
+      onClose();
+      // Notify parent to refresh
+      window.dispatchEvent(new CustomEvent('patients:refresh'));
+    } catch (err) {
+      alert("Error al cambiar el archivo: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <ModalShell title="Historia Clínica" onClose={onClose}>
-      <div className="mb-4">
-        <div className="text-lg font-semibold text-gray-900">
-          {patient.nombre}
+      <div className="mb-4 flex justify-between items-start">
+        <div>
+          <div className="text-lg font-semibold text-gray-900">
+            {patient.nombre}
+          </div>
+          <div className="mt-1 text-sm text-gray-600">
+            <span className="font-medium text-gray-700">Último turno: </span>
+            {ultimaVisita}
+            <span className="mx-2">•</span>
+            <span className="font-medium text-gray-700">Motivo: </span>
+            {ultimoMotivo}
+          </div>
         </div>
-        <div className="mt-1 text-sm text-gray-600">
-          <span className="font-medium text-gray-700">Último turno: </span>
-          {ultimaVisita}
-          <span className="mx-2">•</span>
-          <span className="font-medium text-gray-700">Motivo: </span>
-          {ultimoMotivo}
+        <div className="flex gap-2">
+          <label className="cursor-pointer px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors">
+            Cambiar Archivo
+            <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
+          </label>
+          {rawUrl && (
+            <button
+              onClick={handleDelete}
+              className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+            >
+              Eliminar
+            </button>
+          )}
         </div>
       </div>
 
@@ -98,10 +165,14 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
           </div>
         ) : !displayUrl ? (
-          <div className="p-4 rounded-lg border bg-gray-50 text-sm text-gray-600">
-            No hay historia clínica asociada o no se pudo cargar.
+          <div className="flex flex-col items-center justify-center p-12 rounded-xl border-2 border-dashed bg-gray-50 text-gray-500">
+            <div className="text-sm font-medium mb-4">No hay historia clínica asociada.</div>
+            <label className="cursor-pointer px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all shadow-sm">
+              Subir Historia Clínica
+              <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
+            </label>
           </div>
-        ) : (isPdf(displayUrl) || rawUrl.includes("drive.google.com")) ? (
+        ) : (isPdf(displayUrl) || (typeof rawUrl === 'string' && rawUrl.includes("drive.google.com"))) ? (
           <div className="h-[60vh] rounded-lg border overflow-hidden">
             <iframe title="Historia Clínica" src={displayUrl} className="w-full h-full" />
           </div>
@@ -140,7 +211,7 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
         )}
         <button
           onClick={onClose}
-          className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50"
+          className="px-6 py-2 rounded-lg bg-gray-900 text-white font-bold hover:bg-black transition-all"
         >
           Cerrar
         </button>

@@ -99,25 +99,14 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
   // Render link label for Historia Clínica (avoid long URL overflow)
   const historiaClinicaValue = (() => {
     const url = historiaClinicaUrl;
-    const invalid = !url || url === '-' || url === 'Sin archivo';
-    if (invalid) return 'Sin archivo';
-    // If it doesn't look like a URL, just show the text as fallback
-    // If it doesn't look like a URL, it might be a storage path
-    const looksLikeUrl = /^https?:\/\//i.test(url);
-    if (!looksLikeUrl) {
-      // If it looks like a path (e.g., filename with extension), we can at least show it or allow opening the Modal
-      return (
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500 italic max-w-[150px] truncate" title={url}>{url}</span>
-        </div>
-      );
-    }
+    const hasFile = url && url !== '-' && url !== 'Sin archivo';
+
     return (
       <button
         onClick={() => onOpenRecord && onOpenRecord(patient)}
-        className="text-emerald-600 underline hover:text-emerald-700 font-medium text-left"
+        className={`${hasFile ? 'text-emerald-600 hover:text-emerald-700' : 'text-orange-600 hover:text-orange-700'} underline font-bold text-left`}
       >
-        {looksLikeUrl ? 'Ver archivo' : (url || 'Abrir historial')}
+        {hasFile ? 'Ver Historia Clínica' : 'Subir Historia Clínica'}
       </button>
     );
   })();
