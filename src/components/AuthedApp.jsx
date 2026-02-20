@@ -44,15 +44,26 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }) {
     }
   }, []);
 
-  // Sync pendientes con Google Calendar al iniciar
+  // Sync pendientes con Google Calendar al iniciar y periódicamente
   useEffect(() => {
     const runSync = async () => {
-      // Pequeño delay para no bloquear la carga inicial de UI
-      setTimeout(() => {
-        AppointmentService.syncPendingAppointments();
-      }, 2000);
+      try {
+        await AppointmentService.syncPendingAppointments();
+      } catch (e) {
+        console.error("Auto-Sync failed:", e);
+      }
     };
-    runSync();
+
+    // 1. Ejecutar al inicio (con delay)
+    const initialTimer = setTimeout(runSync, 2000);
+
+    // 2. Ejecutar cada 5 minutos (300000 ms)
+    const interval = setInterval(runSync, 300000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
   }, []);
 
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients();
