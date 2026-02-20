@@ -44,6 +44,44 @@ export default function SettingsView() {
         fetchData();
     }, []);
 
+    const checkConnectionStatus = async (tenantData = null) => {
+        const targetTenant = tenantData || tenant;
+        if (!targetTenant?.whatsapp_instance) return;
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+
+            const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
+                body: { action: 'get_qr', tenant_id: targetTenant.id },
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
+                }
+            });
+
+            if (error) {
+                if (error.status === 404) {
+                    setPollingActive(false);
+                    setInstanceStatus('disconnected');
+                }
+                return;
+            }
+
+            if (data.qrcode || data.base64 || data.code) {
+                setQrCodeData(data.qrcode?.base64 || data.qrcode?.code || data.base64 || data.code);
+            }
+
+            if (data.instance?.status === 'open' || data.instance?.state === 'open' || data.instance?.connectionStatus === 'open' || data.status === 'connected') {
+                setInstanceStatus('connected');
+                setPollingActive(false);
+                setQrCodeData(null);
+                await supabase.from('tenants').update({ whatsapp_status: 'connected' }).eq('id', targetTenant.id);
+            }
+        } catch (err) {
+            console.error('Connection check error:', err);
+        }
+    };
+
     const fetchData = async () => {
         try {
             setLoading(true);
@@ -99,6 +137,9 @@ export default function SettingsView() {
                 setInstanceStatus(tenantData.whatsapp_status);
                 if (tenantData.whatsapp_status === 'connecting') {
                     setPollingActive(true);
+                } else if (tenantData.whatsapp_status === 'connected') {
+                    // Sincronizar webhook automáticamente al cargar si ya está conectado
+                    checkConnectionStatus(tenantData);
                 }
 
                 // Fetch FAQs
@@ -343,47 +384,7 @@ export default function SettingsView() {
         }
     };
 
-    const checkConnectionStatus = async () => {
-        if (!tenant?.whatsapp_instance) return;
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return; // Silent fail in polling if no session
 
-            const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
-                body: { action: 'get_qr', tenant_id: tenant.id },
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`
-                }
-            });
-            if (error) {
-                console.error('Invoke error:', error);
-                // Si el error es 404 (instancia no existe), dejamos de pedir QR
-                if (error.status === 404) {
-                    setPollingActive(false);
-                    setInstanceStatus('disconnected');
-                }
-                return;
-            }
-
-            console.log('Polling data:', data);
-
-            if (data.qrcode) {
-                setQrCodeData(data.qrcode.base64 || data.qrcode.code);
-            } else if (data.base64 || data.code) {
-                setQrCodeData(data.base64 || data.code);
-            }
-
-            if (data.instance?.status === 'open' || data.instance?.state === 'open' || data.instance?.connectionStatus === 'open' || data.status === 'connected') {
-                setInstanceStatus('connected');
-                setPollingActive(false);
-                setQrCodeData(null);
-                // El edge function ya actualiza la DB, pero lo hacemos aquí también por si acaso (para UI inmediata)
-                await supabase.from('tenants').update({ whatsapp_status: 'connected' }).eq('id', tenant.id);
-            }
-        } catch (err) {
-            console.error('Polling catch error:', err);
-        }
-    };
 
     useEffect(() => {
         let interval;
