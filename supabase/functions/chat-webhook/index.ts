@@ -73,6 +73,15 @@ serve(async (req) => {
         if (!bodyText) return new Response('Empty body', { status: 200 });
         payload = JSON.parse(bodyText);
 
+        // --- DEBUG LOGGING ---
+        try {
+            await supabase.from('debug_payloads').insert({
+                function_name: 'chat-webhook-incoming',
+                payload: payload
+            });
+        } catch (e) { console.error("Debug Log Fail", e); }
+        // ---------------------
+
         const instanceName = payload.data?.instance || payload.instance;
         // console.log("Webhook Payload:", JSON.stringify(payload, null, 2));
 
@@ -195,7 +204,7 @@ serve(async (req) => {
             .select('*')
             .eq('telefono', cleanPhone)
             .eq('organization_id', tenant.user_id)
-            .single();
+            .maybeSingle(); // Changed from single() to avoid error on not found
 
         // Fetch Rest of Context
         const [profileRes, schedulesRes, historyRes] = await Promise.all([
@@ -285,7 +294,7 @@ serve(async (req) => {
                     .select('id')
                     .eq('telefono', phone)
                     .eq('organization_id', tenant.user_id)
-                    .single();
+                    .maybeSingle(); // Changed from single()
 
                 if (!patient) {
                     const { data: newPatient, error: createError } = await supabase
