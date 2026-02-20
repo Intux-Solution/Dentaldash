@@ -74,7 +74,7 @@ serve(async (req) => {
         payload = JSON.parse(bodyText);
 
         const instanceName = payload.data?.instance || payload.instance;
-        console.log("Webhook Payload:", JSON.stringify(payload, null, 2));
+        // console.log("Webhook Payload:", JSON.stringify(payload, null, 2));
 
         let messageObj = payload.data?.messages?.[0] || payload.messages?.[0];
 
@@ -105,14 +105,75 @@ serve(async (req) => {
         if (!EVOLUTION_URL_RAW || !EVOLUTION_KEY) throw new Error("Missing Evolution Secrets");
         const EVOLUTION_API_URL = sanitizeUrl(EVOLUTION_URL_RAW);
 
-        // Fetch context
-        const [tenantRes, schedulesRes] = await Promise.all([
-            supabase.from('tenants').select('*').eq('whatsapp_instance', instanceName).single(),
-            supabase.from('schedules').select('*').eq('is_active', true).order('day_of_week', { ascending: true })
-        ]);
-
-        const tenant = tenantRes.data;
+        // Fetch context (Tenant)
+        const { data: tenant } = await supabase.from('tenants').select('*').eq('whatsapp_instance', instanceName).single();
         if (!tenant) throw new Error(`Tenant not found for instance: ${instanceName}`);
+
+        // ---------------------------------------------------------
+        // MESSAGE BATCHING / DEBOUNCE LOGIC
+        // ---------------------------------------------------------
+
+        // 1. Insert incoming message as 'pending'
+        const { data: insertedMsg, error: insertError } = await supabase.from('chat_history').insert({
+            tenant_id: tenant.id,
+            whatsapp_instance: instanceName,
+            jid: remoteJid,
+            role: 'user',
+            content: messageText,
+            status: 'pending' // New column
+        }).select().single();
+
+        if (insertError) throw new Error("Failed to insert message: " + insertError.message);
+
+        console.log(`Msg ${insertedMsg.id} inserted. Waiting for debounce...`);
+
+        // 2. Wait 5-7 seconds
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        // 3. Check for newer pending messages from same User
+        const { data: newerMessages } = await supabase
+            .from('chat_history')
+            .select('id')
+            .eq('jid', remoteJid)
+            .eq('role', 'user')
+            .eq('status', 'pending')
+            .gt('created_at', insertedMsg.created_at) // Newer than current
+            .limit(1);
+
+        if (newerMessages && newerMessages.length > 0) {
+            console.log(`Msg ${insertedMsg.id}: Newer messages detected. Exiting trace.`);
+            return new Response('Debounce: Newer message handles response', { status: 200 });
+        }
+
+        // 4. If no newer messages, we are the designated handler.
+        // Fetch ALL pending messages to combine
+        const { data: pendingBatch } = await supabase
+            .from('chat_history')
+            .select('*')
+            .eq('jid', remoteJid)
+            .eq('role', 'user')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: true });
+
+        if (!pendingBatch || pendingBatch.length === 0) {
+            console.log(`Msg ${insertedMsg.id}: No pending batch found (maybe processed by another thread?). Exiting.`);
+            return new Response('Debounce: Batch already processed', { status: 200 });
+        }
+
+        // Combine text
+        const finalMessageText = pendingBatch.map((m: any) => m.content).join(' ');
+        console.log(`Processing batch of ${pendingBatch.length} messages: "${finalMessageText}"`);
+
+        // Mark all as processed immediately to prevent double-processing
+        const batchIds = pendingBatch.map((m: any) => m.id);
+        await supabase
+            .from('chat_history')
+            .update({ status: 'processed' })
+            .in('id', batchIds);
+
+        // ---------------------------------------------------------
+        // Core Logic (Patient ID, Context, AI)
+        // ---------------------------------------------------------
 
         // Identify Patient
         const cleanPhone = sanitizePhone(remoteJid);
@@ -123,33 +184,32 @@ serve(async (req) => {
             .eq('organization_id', tenant.user_id)
             .single();
 
-        const [profileRes, faqsRes, historyRes] = await Promise.all([
+        // Fetch Rest of Context
+        const [profileRes, schedulesRes, historyRes] = await Promise.all([
             supabase.from('profiles').select('*').eq('id', tenant.user_id).single(),
-            supabase.from('tenant_faqs').select('question, answer').eq('tenant_id', tenant.id),
+            supabase.from('schedules').select('*').eq('is_active', true).order('day_of_week', { ascending: true }),
             supabase.from('chat_history')
                 .select('role, content')
                 .eq('jid', remoteJid)
                 .eq('whatsapp_instance', instanceName)
+                .eq('status', 'processed') // Only historical processed messages
+                .neq('id', insertedMsg.id) // Exclude current ones (we just processed them, but better to use clean history)
+                // Actually, historyRes should NOT include the current batch we just processed if we want proper flow?
+                // Or proper flow includes them? 
+                // Standard: User says "Hi". History: [Hi]. AI: "Hello".
+                // Here: User says "Hi", "Help". Batch: "Hi Help". History should effectively reflect "Hi Help".
+                // We'll append the combined text to the Prompt History manually.
                 .order('created_at', { ascending: false })
                 .limit(10)
         ]);
 
         const profile = profileRes.data;
-        const history = (historyRes.data || []).reverse();
+        // Filter out the ids we just processed from history fetch just in case they slipped in
+        const history = (historyRes.data || [])
+            .filter((m: any) => !batchIds.includes(m.id))
+            .reverse();
 
-        // Save incoming message
-        await supabase.from('chat_history').insert({
-            tenant_id: tenant.id,
-            whatsapp_instance: instanceName,
-            jid: remoteJid,
-            role: 'user',
-            content: messageText
-        });
-
-        // ---------------------------------------------------------
         // Tool Implementations
-        // ---------------------------------------------------------
-
         const getAvailableSlots = async (dateStr: string) => {
             try {
                 const date = new Date(dateStr);
@@ -160,15 +220,13 @@ serve(async (req) => {
                 if (!schedule) return "La clínica está cerrada este día.";
 
                 // 2. Fetch existing appointments
-                // Filter appointments that overlap with this day
-                // To be safe, checking precise range
                 const startOfDay = new Date(`${dateStr}T00:00:00`).toISOString();
                 const endOfDay = new Date(`${dateStr}T23:59:59`).toISOString();
 
                 const { data: appointments } = await supabase
                     .from('appointments')
                     .select('start_time, end_time')
-                    .eq('organization_id', tenant.user_id) // Assuming tenant.user_id maps to organization_id or similar
+                    .eq('organization_id', tenant.user_id)
                     .gte('start_time', startOfDay)
                     .lte('start_time', endOfDay);
 
@@ -184,19 +242,15 @@ serve(async (req) => {
 
                     if (slotEnd > endTime) break;
 
-                    // Check collision
                     const isOccupied = appointments?.some((appt: any) => {
                         const apptStart = new Date(appt.start_time);
                         const apptEnd = new Date(appt.end_time);
-                        // Simple overlap check
                         return (slotStart < apptEnd && slotEnd > apptStart);
                     });
 
                     if (!isOccupied) {
-                        const timeString = slotStart.toTimeString().substring(0, 5);
-                        slots.push(timeString);
+                        slots.push(slotStart.toTimeString().substring(0, 5));
                     }
-
                     currentTime = slotEnd;
                 }
 
@@ -213,7 +267,6 @@ serve(async (req) => {
             try {
                 const phone = sanitizePhone(remoteJid);
 
-                // 1. Find or create patient
                 let { data: patient } = await supabase
                     .from('patients')
                     .select('id')
@@ -239,12 +292,8 @@ serve(async (req) => {
                     if (createError) throw new Error("Error creating patient: " + createError.message);
                     patient = newPatient;
                 }
-
-                if (!patient) throw new Error("Could not resolve patient.");
-
-                // 2. Create Appointment
                 const startDateTime = new Date(`${date}T${time}:00`);
-                const endDateTime = new Date(startDateTime.getTime() + 30 * 60000); // 30 min duration
+                const endDateTime = new Date(startDateTime.getTime() + 30 * 60000);
 
                 const { data: appointment, error: apptError } = await supabase
                     .from('appointments')
@@ -262,20 +311,26 @@ serve(async (req) => {
                     .select()
                     .single();
 
+
                 if (apptError) throw new Error("Error creating appointment: " + apptError.message);
 
-                return `Turno agendado con éxito para el ${date} a las ${time}. ID: ${appointment.id}`;
+                // Detailed confirmation prompt for the AI
+                return `Turno RESERVADO con éxito. ID: ${appointment.id}. 
+INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes añadir emojis):
+✅ *Turno Confirmado*
+📅 Fecha: ${date}
+⏰ Hora: ${time}
+👤 Paciente: ${patientName}
+🏥 Clínica: ${tenant.business_name}
+
+¡Te esperamos! Si necesitas reagendar, avísanos.`;
 
             } catch (e: any) {
+
                 console.error("Error creating appointment:", e);
                 return `Error al agendar: ${e.message}`;
             }
         };
-
-
-        // ---------------------------------------------------------
-        // AI Execution Logic with Function Calling
-        // ---------------------------------------------------------
 
         // Context construction
         let contextInfo = `Clínica: ${tenant.business_name}\n`;
@@ -287,19 +342,19 @@ serve(async (req) => {
 
         if (profile?.services) contextInfo += `Servicios: ${JSON.stringify(profile.services)}\n`;
         if (profile?.accepted_insurances) contextInfo += `Obras Sociales: ${JSON.stringify(profile.accepted_insurances)}\n`;
-        // schedules info is now strictly for the AI to know general hours, but it should use the tool for specifics
         if (schedulesRes.data) {
             const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
             contextInfo += "Horarios de Atención General:\n" + schedulesRes.data.map((s: any) => `- ${days[s.day_of_week]}: ${s.start_time}-${s.end_time}`).join('\n');
         }
 
+        const now = new Date();
+        const options: Intl.DateTimeFormatOptions = { timeZone: 'America/Argentina/Buenos_Aires', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const currentDateString = now.toLocaleDateString('es-AR', options);
+
         const systemPrompt = (AGENT_PROMPT || `Eres la secretaria de "${tenant.business_name}". Atiende dudas de forma amable.`) +
-            `\n\nContexto actual de la clínica:\n${contextInfo}\n\nIMPORTANTE: Para agendar turnos, SIEMPRE usa las herramientas (functions) provistas. Si el usuario quiere un turno, primero verifica disponibilidad con 'get_available_slots'. Luego usa 'create_appointment', pero asegúrate de tener todos los datos requeridos (Nombre, DNI, Obra Social).`;
+            `\n\nHOY ES: ${currentDateString}.\n\nContexto actual de la clínica:\n${contextInfo}\n\nIMPORTANTE: Para agendar turnos, SIEMPRE usa las herramientas (functions) provistas. Si el usuario quiere un turno, primero verifica disponibilidad con 'get_available_slots'. Luego usa 'create_appointment', pero asegúrate de tener todos los datos requeridos (Nombre, DNI, Obra Social).`;
 
         let aiResponse = "";
-
-        // For now, defaulting to OpenAI because handling function calling multi-turn loop is simpler/more standard with their SDK 
-        // or constructing manual loops. I will implement a basic flow.
 
         if (OPENAI_KEY) {
             try {
@@ -308,10 +363,9 @@ serve(async (req) => {
                 const messages: any[] = [
                     { role: "system", content: systemPrompt },
                     ...history.map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
-                    { role: "user", content: messageText }
+                    { role: "user", content: finalMessageText } // Use the BATCHED message
                 ];
 
-                // First Call
                 const runner = await openai.chat.completions.create({
                     model: "gpt-4o-mini",
                     messages: messages,
@@ -321,12 +375,8 @@ serve(async (req) => {
 
                 const responseMessage = runner.choices[0].message;
 
-                // Check for Tool Calls
                 if (responseMessage.tool_calls) {
-                    // Append assistant's function call intent to history not to break conversation flow? 
-                    // Actually standard is: user -> assistant(tool_calls) -> tool -> assistant(response)
                     messages.push(responseMessage);
-
                     for (const toolCall of responseMessage.tool_calls) {
                         const fnName = toolCall.function.name;
                         const fnArgs = JSON.parse(toolCall.function.arguments);
@@ -349,35 +399,26 @@ serve(async (req) => {
                         });
                     }
 
-                    // Second Call (Get final answer)
                     const secondResponse = await openai.chat.completions.create({
                         model: "gpt-4o-mini",
                         messages: messages
                     });
-
                     aiResponse = secondResponse.choices[0].message?.content || "";
-
                 } else {
                     aiResponse = responseMessage.content || "";
                 }
-
             } catch (err: any) {
                 console.error("OpenAI Logic Error:", err);
             }
         }
 
-        // Fallback or Gemini implementation (Simplified: Gemini support for function calling requires different structure,
-        // for stability I'll rely on OpenAI if available for this complex task, or just basic text for Gemini if OpenAI fails, 
-        // but user likely has OpenAI or we can fail gracefully).
-        // If no AI response yet (e.g. OpenAI failed or not present), try Gemini (No tools for now on Gemini fallback to keep it simple or implement if needed)
-
         if (!aiResponse && GEMINI_KEY) {
+            // Context: Gemini Fallback
             try {
                 const genAI = new GoogleGenerativeAI(GEMINI_KEY);
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                // Note: Not implementing tools for Gemini in this step to avoid complexity explosion, defaulting to text.
                 const historyText = history.map((m: any) => `${m.role === 'user' ? 'Paciente' : 'Asistente'}: ${m.content}`).join('\n');
-                const result = await model.generateContent(`${systemPrompt}\n\nHistorial:\n${historyText}\n\nPaciente: ${messageText}`);
+                const result = await model.generateContent(`${systemPrompt}\n\nHistorial:\n${historyText}\n\nPaciente: ${finalMessageText}`);
                 aiResponse = result.response.text();
             } catch (err: any) {
                 console.error("Gemini failed:", err.message);
@@ -396,13 +437,14 @@ serve(async (req) => {
 
         if (!sendRes.ok) throw new Error(`Evolution send failed: ${sendRes.status}`);
 
-        // Persist AI Response
+        // Persist AI Response with processed status
         await supabase.from('chat_history').insert({
             tenant_id: tenant.id,
             whatsapp_instance: instanceName,
             jid: remoteJid,
             role: 'assistant',
-            content: aiResponse
+            content: aiResponse,
+            status: 'processed'
         });
 
         return new Response('Success', { status: 200 });
@@ -412,4 +454,3 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: error.message }), { status: 500 });
     }
 });
-

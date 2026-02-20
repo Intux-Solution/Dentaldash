@@ -379,6 +379,76 @@ ${data.notas || 'Sin notas adicionales'}
     }
 
     /**
+     * Sincronizar turnos pendientes con Google Calendar (Client-Side)
+     * Se llama al iniciar la app para asegurar que turnos creados por Bot/Backend se suban a Google.
+     */
+    static async syncPendingAppointments() {
+        try {
+            const today = new Date().toISOString();
+
+            // 1. Buscar turnos futuros, confirmados y SIN google_event_id
+            const { data: pending, error } = await supabase
+                .from('appointments')
+                .select(`
+                    *,
+                    patient:patients (
+                        nombre,
+                        dni,
+                        telefono,
+                        email,
+                        obra_social,
+                        numero_afiliado
+                    )
+                `)
+                .eq('status', 'confirmed')
+                .is('google_event_id', null)
+                .gte('start_time', today);
+
+            if (error) throw error;
+            if (!pending || pending.length === 0) return;
+
+            console.log(`[Sync] Found ${pending.length} appointments to sync with Google Calendar.`);
+
+            // 2. Iterar y crear evento en Google
+            for (const appt of pending) {
+                // Preparar datos para el formateo
+                const eventData = {
+                    ...appt,
+                    tipoTurnoNombre: appt.appointment_type, // Mapping type
+                    nombre: appt.patient?.nombre,
+                    dni: appt.patient?.dni,
+                    telefono: appt.patient?.telefono,
+                    email: appt.patient?.email,
+                    obraSocial: appt.patient?.obra_social,
+                    numeroAfiliado: appt.patient?.numero_afiliado,
+                    notas: appt.notes
+                };
+
+                const description = this.formatEventDescription(eventData);
+
+                const googleEvent = await GoogleCalendarService.createEvent({
+                    title: appt.title,
+                    start_time: appt.start_time,
+                    end_time: appt.end_time,
+                    patientEmail: appt.patient?.email,
+                    notes: description
+                });
+
+                // 3. Update DB
+                if (googleEvent && googleEvent.id) {
+                    await supabase
+                        .from('appointments')
+                        .update({ google_event_id: googleEvent.id })
+                        .eq('id', appt.id);
+                    console.log(`[Sync] Synced appointment ${appt.id} -> GoogleID: ${googleEvent.id}`);
+                }
+            }
+        } catch (error) {
+            console.error('[Sync] Error syncing pending appointments:', error);
+        }
+    }
+
+    /**
      * Eliminar (cancelar) turno
      */
     static async deleteAppointment(id) {

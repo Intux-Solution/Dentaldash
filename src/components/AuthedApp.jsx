@@ -15,6 +15,7 @@ import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
 
 import { checkTokenExpiry } from '../utils/auth';
 import { PatientService } from '../services/PatientService';
+import { AppointmentService } from '../services/AppointmentService';
 
 
 const titleByPath = (pathname) => {
@@ -41,6 +42,17 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }) {
     if (process.env.NODE_ENV === 'development') {
       // Debug deshabilitado: evitar logs en consola
     }
+  }, []);
+
+  // Sync pendientes con Google Calendar al iniciar
+  useEffect(() => {
+    const runSync = async () => {
+      // Pequeño delay para no bloquear la carga inicial de UI
+      setTimeout(() => {
+        AppointmentService.syncPendingAppointments();
+      }, 2000);
+    };
+    runSync();
   }, []);
 
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients();
