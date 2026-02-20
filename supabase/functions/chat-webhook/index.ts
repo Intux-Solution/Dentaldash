@@ -281,104 +281,109 @@ serve(async (req) => {
                 return `Horarios disponibles para ${dateStr}: ${slots.join(', ')}`;
 
             } catch (e: any) {
-                const createAppointment = async (date: string, time: string, patientName: string, dni: string, obraSocial: string, email: string | undefined, notes: string, telefono: string | undefined) => {
-                    try {
-                        // Should prioritize the provided phone if available, otherwise use sanitizePhone(remoteJid)
-                        // But sanitizePhone(remoteJid) is the one we use for lookup.
-                        // If user provides a DIFFERENT phone, we should probably update it or use it for creation.
-                        // For simplicity, let's use the JID as the primary identifier for lookup, 
-                        // but if creating a NEW patient, we can use the provided phone if valid.
+                console.error("Error getting slots:", e);
+                return `Error al consultar disponibilidad: ${e.message}`;
+            }
+        };
 
-                        const jidPhone = sanitizePhone(remoteJid);
-                        // If the user explicitly provided a phone number, use that for the record. 
-                        // Otherwise use the WhatsApp one.
-                        const finalPhone = telefono ? telefono.trim() : jidPhone;
+        const createAppointment = async (date: string, time: string, patientName: string, dni: string, obraSocial: string, email: string | undefined, notes: string, telefono: string | undefined) => {
+            try {
+                // Should prioritize the provided phone if available, otherwise use sanitizePhone(remoteJid)
+                // But sanitizePhone(remoteJid) is the one we use for lookup.
+                // If user provides a DIFFERENT phone, we should probably update it or use it for creation.
+                // For simplicity, let's use the JID as the primary identifier for lookup, 
+                // but if creating a NEW patient, we can use the provided phone if valid.
 
-                        // Lookup by JID phone first (since they are messaging from there)
-                        // OR by the provided phone? 
-                        // Let's stick to JID for lookup to maintain thread continuity.
-                        // If they provide a different phone for contact, we store it.
+                const jidPhone = sanitizePhone(remoteJid);
+                // If the user explicitly provided a phone number, use that for the record. 
+                // Otherwise use the WhatsApp one.
+                const finalPhone = telefono ? telefono.trim() : jidPhone;
 
-                        let { data: patient } = await supabase
+                // Lookup by JID phone first (since they are messaging from there)
+                // OR by the provided phone? 
+                // Let's stick to JID for lookup to maintain thread continuity.
+                // If they provide a different phone for contact, we store it.
+
+                let { data: patient } = await supabase
+                    .from('patients')
+                    .select('id')
+                    .eq('telefono', jidPhone) // Still lookup by WA number? Or by finalPhone?
+                    // If I change numbers, I might break history. Let's lookup by JID phone.
+                    // If not found, create with JID phone (or provided phone).
+                    .eq('organization_id', tenant.user_id)
+                    .maybeSingle();
+
+                if (!patient) {
+                    // Check if patient exists with the PROVIDED phone (if different)
+                    if (telefono && telefono !== jidPhone) {
+                        const { data: existingByProvided } = await supabase
                             .from('patients')
                             .select('id')
-                            .eq('telefono', jidPhone) // Still lookup by WA number? Or by finalPhone?
-                            // If I change numbers, I might break history. Let's lookup by JID phone.
-                            // If not found, create with JID phone (or provided phone).
+                            .eq('telefono', finalPhone)
                             .eq('organization_id', tenant.user_id)
                             .maybeSingle();
 
-                        if (!patient) {
-                            // Check if patient exists with the PROVIDED phone (if different)
-                            if (telefono && telefono !== jidPhone) {
-                                const { data: existingByProvided } = await supabase
-                                    .from('patients')
-                                    .select('id')
-                                    .eq('telefono', finalPhone)
-                                    .eq('organization_id', tenant.user_id)
-                                    .maybeSingle();
+                        if (existingByProvided) patient = existingByProvided;
+                    }
+                }
 
-                                if (existingByProvided) patient = existingByProvided;
-                            }
-                        }
+                if (!patient) {
+                    const { data: newPatient, error: createError } = await supabase
+                        .from('patients')
+                        .insert({
+                            nombre: patientName,
+                            telefono: finalPhone, // Use the preferred phone
+                            dni: dni,
+                            obra_social: obraSocial,
+                            email: email || null,
+                            organization_id: tenant.user_id,
+                            estado: 'Activo'
+                        })
+                        .select()
+                        .single();
 
-                        if (!patient) {
-                            const { data: newPatient, error: createError } = await supabase
-                                .from('patients')
-                                .insert({
-                                    nombre: patientName,
-                                    telefono: finalPhone, // Use the preferred phone
-                                    dni: dni,
-                                    obra_social: obraSocial,
-                                    email: email || null,
-                                    organization_id: tenant.user_id,
-                                    estado: 'Activo'
-                                })
-                                .select()
-                                .single();
+                    if (createError) throw new Error("Error creating patient: " + createError.message);
+                    patient = newPatient;
+                }
 
-                            if (createError) throw new Error("Error creating patient: " + createError.message);
-                            patient = newPatient;
-                        }
+                // FIX: Force Argentina Timezone (-03:00) so that 14:00 matches 14:00 AR, not 14:00 UTC (11:00 AR)
+                const startDateTime = new Date(`${date}T${time}:00-03:00`);
+                const endDateTime = new Date(startDateTime.getTime() + 30 * 60000);
 
-                        // FIX: Force Argentina Timezone (-03:00) so that 14:00 matches 14:00 AR, not 14:00 UTC (11:00 AR)
-                        const startDateTime = new Date(`${date}T${time}:00-03:00`);
-                        const endDateTime = new Date(startDateTime.getTime() + 30 * 60000);
-
-                        const { data: appointment, error: apptError } = await supabase
-                            .from('appointments')
-                            .insert({
-                                title: `Turno WhatsApp - ${patientName}`,
-                                patient_id: patient.id,
-                                organization_id: tenant.user_id,
-                                start_time: startDateTime.toISOString(),
-                                end_time: endDateTime.toISOString(),
-                                duration: 30,
-                                status: 'confirmed',
-                                notes: notes || "Agendado vía WhatsApp",
-                                appointment_type: 'Consulta General'
-                            })
-                            .select()
-                            .single();
+                const { data: appointment, error: apptError } = await supabase
+                    .from('appointments')
+                    .insert({
+                        title: `Turno WhatsApp - ${patientName}`,
+                        patient_id: patient.id,
+                        organization_id: tenant.user_id,
+                        start_time: startDateTime.toISOString(),
+                        end_time: endDateTime.toISOString(),
+                        duration: 30,
+                        status: 'confirmed',
+                        notes: notes || "Agendado vía WhatsApp",
+                        appointment_type: 'Consulta General'
+                    })
+                    .select()
+                    .single();
 
 
-                        if (apptError) throw new Error("Error creating appointment: " + apptError.message);
+                if (apptError) throw new Error("Error creating appointment: " + apptError.message);
 
-                        // --- Notify Dentist (New Feature) ---
-                        if (tenant.notification_phone) {
-                            const notifyMsg = `🔔 *Nuevo Turno Agendado*\n\n👤 Paciente: ${patientName}\n📅 Fecha: ${date}\n⏰ Hora: ${time}\n🆔 DNI: ${dni}\n🏥 Obra Social: ${obraSocial}\n📝 Notas: ${notes || '-'}\n\n_Agendado vía WhatsApp Bot_`;
+                // --- Notify Dentist (New Feature) ---
+                if (tenant.notification_phone) {
+                    const notifyMsg = `🔔 *Nuevo Turno Agendado*\n\n👤 Paciente: ${patientName}\n📅 Fecha: ${date}\n⏰ Hora: ${time}\n🆔 DNI: ${dni}\n🏥 Obra Social: ${obraSocial}\n📝 Notas: ${notes || '-'}\n\n_Agendado vía WhatsApp Bot_`;
 
-                            // Send asynchronously (don't block response to user)
-                            fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
-                                body: JSON.stringify({ number: tenant.notification_phone, text: notifyMsg })
-                            }).catch(err => console.error("Error notifying dentist:", err));
-                        }
-                        // ------------------------------------
+                    // Send asynchronously (don't block response to user)
+                    fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+                        body: JSON.stringify({ number: tenant.notification_phone, text: notifyMsg })
+                    }).catch(err => console.error("Error notifying dentist:", err));
+                }
+                // ------------------------------------
 
-                        // Detailed confirmation prompt for the AI
-                        return `Turno RESERVADO con éxito. ID: ${appointment.id}. 
+                // Detailed confirmation prompt for the AI
+                return `Turno RESERVADO con éxito. ID: ${appointment.id}. 
 INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes añadir emojis):
 ✅ *Turno Confirmado*
 📅 Fecha: ${date}
@@ -388,60 +393,60 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 
 ¡Te esperamos! Si necesitas reagendar, avísanos.`;
 
-                    } catch (e: any) {
+            } catch (e: any) {
 
-                        console.error("Error creating appointment:", e);
-                        return `Error al agendar: ${e.message}`;
-                    }
-                };
+                console.error("Error creating appointment:", e);
+                return `Error al agendar: ${e.message}`;
+            }
+        };
 
-                const dentistName = profile?.full_name || tenant.business_name || 'el Profesional';
-                const contactPhone = profile?.contact_phone || null;
+        const dentistName = profile?.full_name || tenant.business_name || 'el Profesional';
+        const contactPhone = profile?.contact_phone || null;
 
-                // Base prompt with dynamic injection
-                let basePrompt = (AGENT_PROMPT || `Eres la asistente del Od. {{nombre_odontologo}}. Atiende dudas de forma amable.`)
-                    .replace(/{{nombre_odontologo}}/gi, dentistName);
+        // Base prompt with dynamic injection
+        let basePrompt = (AGENT_PROMPT || `Eres la asistente del Od. {{nombre_odontologo}}. Atiende dudas de forma amable.`)
+            .replace(/{{nombre_odontologo}}/gi, dentistName);
 
-                let contextInfo = `--- DATOS ESTRUCTURADOS ---\nProf: Od. ${dentistName}\n`;
-                if (profile?.services) contextInfo += `Servicios: ${JSON.stringify(profile.services)}\n`;
-                if (profile?.accepted_insurances) contextInfo += `Obras Sociales: ${JSON.stringify(profile.accepted_insurances)}\n`;
-                if (profile?.faqs) contextInfo += `FAQs: ${JSON.stringify(profile.faqs)}\n`;
-                if (contactPhone) contextInfo += `Contacto Humano (dáselo si no sabes responder o lo piden): ${contactPhone}\n`;
+        let contextInfo = `--- DATOS ESTRUCTURADOS ---\nProf: Od. ${dentistName}\n`;
+        if (profile?.services) contextInfo += `Servicios: ${JSON.stringify(profile.services)}\n`;
+        if (profile?.accepted_insurances) contextInfo += `Obras Sociales: ${JSON.stringify(profile.accepted_insurances)}\n`;
+        if (profile?.faqs) contextInfo += `FAQs: ${JSON.stringify(profile.faqs)}\n`;
+        if (contactPhone) contextInfo += `Contacto Humano (dáselo si no sabes responder o lo piden): ${contactPhone}\n`;
 
-                if (schedulesRes.data && schedulesRes.data.length > 0) {
-                    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-                    const horariosRaw = schedulesRes.data.map((s: any) => ({
-                        d: days[s.day_of_week],
-                        h: `${s.start_time.substring(0, 5)}-${s.end_time.substring(0, 5)}`
-                    }));
-                    contextInfo += `Horarios: ${JSON.stringify(horariosRaw)}\n`;
-                }
+        if (schedulesRes.data && schedulesRes.data.length > 0) {
+            const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+            const horariosRaw = schedulesRes.data.map((s: any) => ({
+                d: days[s.day_of_week],
+                h: `${s.start_time.substring(0, 5)}-${s.end_time.substring(0, 5)}`
+            }));
+            contextInfo += `Horarios: ${JSON.stringify(horariosRaw)}\n`;
+        }
 
-                contextInfo += `\n--- ENTORNO ---\n`;
-                if (patientData) {
-                    contextInfo += `Paciente DB: ${JSON.stringify({ nombre: patientData.nombre })}\n(Llámalo por su nombre)\n`;
-                } else {
-                    contextInfo += `Paciente DB: null\n`;
-                }
+        contextInfo += `\n--- ENTORNO ---\n`;
+        if (patientData) {
+            contextInfo += `Paciente DB: ${JSON.stringify({ nombre: patientData.nombre })}\n(Llámalo por su nombre)\n`;
+        } else {
+            contextInfo += `Paciente DB: null\n`;
+        }
 
-                const now = new Date();
-                const arTimeParams = { timeZone: 'America/Argentina/Buenos_Aires' };
+        const now = new Date();
+        const arTimeParams = { timeZone: 'America/Argentina/Buenos_Aires' };
 
-                // Compact Calendar Injection as JSON to save tokens
-                const calContext = [];
-                for (let i = 0; i < 14; i++) {
-                    const d = new Date(now);
-                    d.setDate(d.getDate() + i);
-                    calContext.push({
-                        f: d.toISOString().split('T')[0],
-                        d: d.toLocaleDateString('es-AR', { ...arTimeParams, weekday: 'short' })
-                    });
-                }
+        // Compact Calendar Injection as JSON to save tokens
+        const calContext = [];
+        for (let i = 0; i < 14; i++) {
+            const d = new Date(now);
+            d.setDate(d.getDate() + i);
+            calContext.push({
+                f: d.toISOString().split('T')[0],
+                d: d.toLocaleDateString('es-AR', { ...arTimeParams, weekday: 'short' })
+            });
+        }
 
-                const options: Intl.DateTimeFormatOptions = { ...arTimeParams, weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
-                const currentDateTimeString = now.toLocaleDateString('es-AR', options);
+        const options: Intl.DateTimeFormatOptions = { ...arTimeParams, weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+        const currentDateTimeString = now.toLocaleDateString('es-AR', options);
 
-                const systemPrompt = `${basePrompt}
+        const systemPrompt = `${basePrompt}
 
 --- REGLAS DEL SISTEMA ---
 - IDENTIDAD: Eres estrictamente la asistente del Od. ${dentistName}. NO eres una clínica.
@@ -455,103 +460,103 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 
 ${contextInfo}`;
 
-                let aiResponse = "";
+        let aiResponse = "";
 
-                if (OPENAI_KEY) {
-                    try {
-                        const openai = new OpenAI({ apiKey: OPENAI_KEY });
+        if (OPENAI_KEY) {
+            try {
+                const openai = new OpenAI({ apiKey: OPENAI_KEY });
 
-                        const messages: any[] = [
-                            { role: "system", content: systemPrompt },
-                            ...history.map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
-                            { role: "user", content: finalMessageText } // Use the BATCHED message
-                        ];
+                const messages: any[] = [
+                    { role: "system", content: systemPrompt },
+                    ...history.map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
+                    { role: "user", content: finalMessageText } // Use the BATCHED message
+                ];
 
-                        const runner = await openai.chat.completions.create({
-                            model: "gpt-4o-mini",
-                            messages: messages,
-                            tools: toolsDefinition.map(t => ({ type: "function", function: t })),
-                            tool_choice: "auto"
-                        });
+                const runner = await openai.chat.completions.create({
+                    model: "gpt-4o-mini",
+                    messages: messages,
+                    tools: toolsDefinition.map(t => ({ type: "function", function: t })),
+                    tool_choice: "auto"
+                });
 
-                        const responseMessage = runner.choices[0].message;
+                const responseMessage = runner.choices[0].message;
 
-                        if (responseMessage.tool_calls) {
-                            messages.push(responseMessage);
-                            for (const toolCall of responseMessage.tool_calls) {
-                                const fnName = toolCall.function.name;
-                                const fnArgs = JSON.parse(toolCall.function.arguments);
-                                let fnResult = "";
+                if (responseMessage.tool_calls) {
+                    messages.push(responseMessage);
+                    for (const toolCall of responseMessage.tool_calls) {
+                        const fnName = toolCall.function.name;
+                        const fnArgs = JSON.parse(toolCall.function.arguments);
+                        let fnResult = "";
 
-                                console.log(`Executing tool ${fnName} with args:`, fnArgs);
+                        console.log(`Executing tool ${fnName} with args:`, fnArgs);
 
-                                if (fnName === "get_available_slots") {
-                                    fnResult = await getAvailableSlots(fnArgs.date);
-                                } else if (fnName === "create_appointment") {
-                                    fnResult = await createAppointment(fnArgs.date, fnArgs.time, fnArgs.patient_name, fnArgs.dni, fnArgs.obra_social, fnArgs.email, fnArgs.notes, fnArgs.telefono);
-                                } else {
-                                    fnResult = "Función no reconocida.";
-                                }
-
-                                messages.push({
-                                    role: "tool",
-                                    tool_call_id: toolCall.id,
-                                    content: fnResult
-                                });
-                            }
-
-                            const secondResponse = await openai.chat.completions.create({
-                                model: "gpt-4o-mini",
-                                messages: messages
-                            });
-                            aiResponse = secondResponse.choices[0].message?.content || "";
+                        if (fnName === "get_available_slots") {
+                            fnResult = await getAvailableSlots(fnArgs.date);
+                        } else if (fnName === "create_appointment") {
+                            fnResult = await createAppointment(fnArgs.date, fnArgs.time, fnArgs.patient_name, fnArgs.dni, fnArgs.obra_social, fnArgs.email, fnArgs.notes, fnArgs.telefono);
                         } else {
-                            aiResponse = responseMessage.content || "";
+                            fnResult = "Función no reconocida.";
                         }
-                    } catch (err: any) {
-                        console.error("OpenAI Logic Error:", err);
+
+                        messages.push({
+                            role: "tool",
+                            tool_call_id: toolCall.id,
+                            content: fnResult
+                        });
                     }
+
+                    const secondResponse = await openai.chat.completions.create({
+                        model: "gpt-4o-mini",
+                        messages: messages
+                    });
+                    aiResponse = secondResponse.choices[0].message?.content || "";
+                } else {
+                    aiResponse = responseMessage.content || "";
                 }
-
-                if (!aiResponse && GEMINI_KEY) {
-                    // Context: Gemini Fallback
-                    try {
-                        const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-                        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                        const historyText = history.map((m: any) => `${m.role === 'user' ? 'Paciente' : 'Asistente'}: ${m.content}`).join('\n');
-                        const result = await model.generateContent(`${systemPrompt}\n\nHistorial:\n${historyText}\n\nPaciente: ${finalMessageText}`);
-                        aiResponse = result.response.text();
-                    } catch (err: any) {
-                        console.error("Gemini failed:", err.message);
-                    }
-                }
-
-                if (!aiResponse) throw new Error("AI Generation failed");
-
-                // Send message
-                const sendUrl = `${EVOLUTION_API_URL}/message/sendText/${instanceName}`;
-                const sendRes = await fetch(sendUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
-                    body: JSON.stringify({ number: remoteJid, text: aiResponse, delay: 1200 })
-                });
-
-                if (!sendRes.ok) throw new Error(`Evolution send failed: ${sendRes.status}`);
-
-                // Persist AI Response with processed status
-                await supabase.from('chat_history').insert({
-                    tenant_id: tenant.id,
-                    whatsapp_instance: instanceName,
-                    jid: remoteJid,
-                    role: 'assistant',
-                    content: aiResponse,
-                    status: 'processed'
-                });
-
-                return new Response('Success', { status: 200 });
-
-            } catch (error: any) {
-                console.error('Webhook Error:', error.message);
-                return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+            } catch (err: any) {
+                console.error("OpenAI Logic Error:", err);
             }
+        }
+
+        if (!aiResponse && GEMINI_KEY) {
+            // Context: Gemini Fallback
+            try {
+                const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                const historyText = history.map((m: any) => `${m.role === 'user' ? 'Paciente' : 'Asistente'}: ${m.content}`).join('\n');
+                const result = await model.generateContent(`${systemPrompt}\n\nHistorial:\n${historyText}\n\nPaciente: ${finalMessageText}`);
+                aiResponse = result.response.text();
+            } catch (err: any) {
+                console.error("Gemini failed:", err.message);
+            }
+        }
+
+        if (!aiResponse) throw new Error("AI Generation failed");
+
+        // Send message
+        const sendUrl = `${EVOLUTION_API_URL}/message/sendText/${instanceName}`;
+        const sendRes = await fetch(sendUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+            body: JSON.stringify({ number: remoteJid, text: aiResponse, delay: 1200 })
         });
+
+        if (!sendRes.ok) throw new Error(`Evolution send failed: ${sendRes.status}`);
+
+        // Persist AI Response with processed status
+        await supabase.from('chat_history').insert({
+            tenant_id: tenant.id,
+            whatsapp_instance: instanceName,
+            jid: remoteJid,
+            role: 'assistant',
+            content: aiResponse,
+            status: 'processed'
+        });
+
+        return new Response('Success', { status: 200 });
+
+    } catch (error: any) {
+        console.error('Webhook Error:', error.message);
+        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    }
+});
