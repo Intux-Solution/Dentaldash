@@ -209,29 +209,12 @@ export default function DashboardView({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Cambiar el enlace externo por el botón del modal */}
               <button
                 onClick={onOpenBooking}
                 className="inline-flex items-center gap-1 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
               >
                 <Calendar size={14} />
                 Nuevo
-              </button>
-
-              <button
-                onClick={async () => {
-                  try {
-                    alert("Iniciando Sincronización Manual...");
-                    await AppointmentService.syncPendingAppointments();
-                    alert("Sincronización finalizada. Revisar consola para detalles.");
-                  } catch (e) {
-                    alert("Error sync: " + e.message);
-                  }
-                }}
-                className="text-xs text-gray-400 hover:text-gray-600 underline ml-2"
-                title="Forzar Sincronización Google"
-              >
-                Sync GCal
               </button>
             </div>
           </div>

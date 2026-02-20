@@ -1,8 +1,73 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-16 - FINAL VERSION
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../config/supabaseClient';
-import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard, Briefcase, MessageSquare } from 'lucide-react';
+import { Clock, Check, AlertCircle, Save, Plus, Trash2, User, Camera, Loader, X, CreditCard, Briefcase, MessageSquare, Pencil } from 'lucide-react';
 import { QRCode, message, Button } from 'antd';
+
+const FaqItem = ({ faq, onUpdate, onDelete }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [question, setQuestion] = useState(faq.question);
+    const [answer, setAnswer] = useState(faq.answer);
+
+    const handleSave = () => {
+        if (question !== faq.question || answer !== faq.answer) {
+            onUpdate(faq.id, { question, answer });
+        }
+        setIsEditing(false);
+        message.success("Pregunta modificada correctamente");
+    };
+
+    return (
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex flex-col gap-2 animate-in fade-in">
+            <div className="flex justify-between items-start gap-4">
+                <div className="flex-1 space-y-2">
+                    {isEditing ? (
+                        <>
+                            <input
+                                type="text"
+                                value={question}
+                                onChange={(e) => setQuestion(e.target.value)}
+                                placeholder="Pregunta"
+                                className="w-full bg-white font-bold text-gray-800 text-sm border focus:ring-1 focus:ring-teal-100 rounded p-2 outline-none"
+                                autoFocus
+                            />
+                            <textarea
+                                value={answer}
+                                rows={2}
+                                onChange={(e) => setAnswer(e.target.value)}
+                                placeholder="Respuesta"
+                                className="w-full bg-white text-xs text-gray-500 border focus:ring-1 focus:ring-teal-100 rounded p-2 outline-none resize-none"
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <div className="w-full bg-transparent font-bold text-gray-800 text-sm p-1">
+                                {faq.question}
+                            </div>
+                            <div className="w-full bg-transparent text-xs text-gray-500 p-1 whitespace-pre-wrap">
+                                {faq.answer}
+                            </div>
+                        </>
+                    )}
+                </div>
+                <div className="flex items-center gap-1">
+                    {isEditing ? (
+                        <button onClick={handleSave} className="p-2 text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg transition-all" title="Guardar cambios">
+                            <Save size={16} />
+                        </button>
+                    ) : (
+                        <button onClick={() => setIsEditing(true)} className="p-2 text-gray-400 hover:text-teal-600 transition-all rounded-lg" title="Editar">
+                            <Pencil size={16} />
+                        </button>
+                    )}
+                    <button onClick={() => onDelete(faq.id)} className="p-2 text-gray-400 hover:text-red-500 transition-all rounded-lg" title="Eliminar">
+                        <Trash2 size={16} />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 
 const DAYS = [
@@ -232,10 +297,19 @@ export default function SettingsView() {
 
     const handleAddScheduleSlot = async (dayId) => {
         try {
+            const existingSlots = schedules.filter(s => s.day_of_week === dayId);
+            let defaultStart = '09:00:00';
+            let defaultEnd = '18:00:00';
+
+            if (existingSlots.length > 0) {
+                defaultStart = '16:00:00';
+                defaultEnd = '20:00:00';
+            }
+
             const newSlot = {
                 day_of_week: dayId,
-                start_time: '09:00:00',
-                end_time: '18:00:00',
+                start_time: defaultStart,
+                end_time: defaultEnd,
                 is_active: true
             };
             const { data, error } = await supabase
@@ -451,7 +525,7 @@ export default function SettingsView() {
                                 </div>
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <label className="block text-sm font-semibold text-gray-700">Teléfono de Contacto Público (Pacientes)</label>
+                                        <label className="block text-sm font-semibold text-gray-700">Teléfono de Contacto</label>
                                     </div>
                                     <div className="flex gap-2">
                                         <input
@@ -594,15 +668,20 @@ export default function SettingsView() {
                                 <div key={day.id} className="p-6 flex flex-col md:flex-row gap-4 items-start">
                                     <div className="w-32 font-bold text-gray-900 pt-2">{day.name}</div>
                                     <div className="flex-1 space-y-3">
-                                        {daySlots.length === 0 ? <div className="text-sm text-gray-400 italic">No laborable</div> : daySlots.map(slot => (
+                                        {daySlots.length === 0 ? <div className="text-sm text-gray-400 italic">No laborable</div> : daySlots.map((slot, index) => (
                                             <div key={slot.id} className="flex items-center gap-3 animate-in slide-in-from-left-2">
-                                                <input type="time" value={slot.start_time.slice(0, 5)} onChange={(e) => handleUpdateScheduleSlot(slot.id, { start_time: e.target.value })} className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500" />
-                                                <span className="text-gray-300">-</span>
-                                                <input type="time" value={slot.end_time.slice(0, 5)} onChange={(e) => handleUpdateScheduleSlot(slot.id, { end_time: e.target.value })} className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500" />
-                                                <Trash2 size={16} className="text-gray-400 hover:text-red-500 cursor-pointer transition-colors" onClick={() => handleDeleteScheduleSlot(slot.id)} />
+                                                <div className="flex flex-col items-center">
+                                                    <span className="text-[10px] uppercase text-gray-400 font-bold mb-1">Bloque {index + 1}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <input type="time" value={slot.start_time.slice(0, 5)} onChange={(e) => handleUpdateScheduleSlot(slot.id, { start_time: e.target.value })} className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500" />
+                                                        <span className="text-gray-300">-</span>
+                                                        <input type="time" value={slot.end_time.slice(0, 5)} onChange={(e) => handleUpdateScheduleSlot(slot.id, { end_time: e.target.value })} className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500" />
+                                                        <Trash2 size={16} className="text-gray-400 hover:text-red-500 cursor-pointer transition-colors" onClick={() => handleDeleteScheduleSlot(slot.id)} />
+                                                    </div>
+                                                </div>
                                             </div>
                                         ))}
-                                        <button onClick={() => handleAddScheduleSlot(day.id)} className="text-sm text-teal-600 font-bold flex items-center gap-1 hover:text-teal-700 transition-all mt-2"><Plus size={16} /> Agregar horario</button>
+                                        <button onClick={() => handleAddScheduleSlot(day.id)} className="text-sm text-teal-600 font-bold flex items-center gap-1 hover:text-teal-700 transition-all mt-2 pl-1"><Plus size={16} /> Agregar bloque horario</button>
                                     </div>
                                 </div>
                             );
@@ -725,37 +804,12 @@ export default function SettingsView() {
 
                                 <div className="space-y-3">
                                     {faqs.map(faq => (
-                                        <div key={faq.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex flex-col gap-2 animate-in fade-in">
-                                            <div className="flex justify-between items-start gap-4">
-                                                <div className="flex-1 space-y-2">
-                                                    <input
-                                                        type="text"
-                                                        defaultValue={faq.question}
-                                                        onBlur={(e) => {
-                                                            if (e.target.value !== faq.question) {
-                                                                handleUpdateFAQ(faq.id, { question: e.target.value });
-                                                            }
-                                                        }}
-                                                        placeholder="Pregunta"
-                                                        className="w-full bg-transparent font-bold text-gray-800 text-sm border-none focus:ring-1 focus:ring-teal-100 rounded p-1 outline-none"
-                                                    />
-                                                    <textarea
-                                                        defaultValue={faq.answer}
-                                                        rows={2}
-                                                        onBlur={(e) => {
-                                                            if (e.target.value !== faq.answer) {
-                                                                handleUpdateFAQ(faq.id, { answer: e.target.value });
-                                                            }
-                                                        }}
-                                                        placeholder="Respuesta"
-                                                        className="w-full bg-transparent text-xs text-gray-500 border-none focus:ring-1 focus:ring-teal-100 rounded p-1 outline-none resize-none"
-                                                    />
-                                                </div>
-                                                <button onClick={() => handleDeleteFAQ(faq.id)} className="p-2 text-gray-300 hover:text-red-500 transition-all">
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <FaqItem
+                                            key={faq.id}
+                                            faq={faq}
+                                            onUpdate={handleUpdateFAQ}
+                                            onDelete={handleDeleteFAQ}
+                                        />
                                     ))}
                                 </div>
                             </section>

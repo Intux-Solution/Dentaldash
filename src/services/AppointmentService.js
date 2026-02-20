@@ -98,7 +98,11 @@ export class AppointmentService {
             // 3. Traer eventos de Google Calendar (si está conectado)
             const googleEvents = await GoogleCalendarService.listEvents(dayStartBound, dayEndBound);
 
-            // 4. Generar slots para CADA rango horario definido
+            // 4. Time buffer: filter out slots that are in the past or < 30 min from now
+            const nowTime = new Date();
+            const minTimeForAppt = new Date(nowTime.getTime() + 30 * 60000);
+
+            // 5. Generar slots para CADA rango horario definido
             const slots = [];
 
             for (const schedule of daySchedules) {
@@ -118,6 +122,12 @@ export class AppointmentService {
                     const slotEnd = new Date(current.getTime() + durationMinutes * 60000);
 
                     if (slotEnd > rangeEnd) break;
+
+                    // Si el turno completo (o su inicio) es anterior al tiempo mínimo, lo omitimos
+                    if (slotStart < minTimeForAppt) {
+                        current.setMinutes(current.getMinutes() + WORK_HOURS.interval);
+                        continue;
+                    }
 
                     // Verificar colisión con turnos locales
                     const isOccupiedLocal = existing.some(app => {

@@ -239,8 +239,8 @@ serve(async (req) => {
                 const dayOfWeek = date.getDay(); // 0 = Sun, 1 = Mon, ...
 
                 // 1. Check if open this day
-                const schedule = schedulesRes.data?.find((s: any) => s.day_of_week === dayOfWeek);
-                if (!schedule) return "La clínica está cerrada este día.";
+                const daySchedules = schedulesRes.data?.filter((s: any) => s.day_of_week === dayOfWeek);
+                if (!daySchedules || daySchedules.length === 0) return "La clínica está cerrada este día.";
 
                 // 2. Fetch existing appointments
                 const startOfDay = new Date(`${dateStr}T00:00:00`).toISOString();
@@ -251,31 +251,54 @@ serve(async (req) => {
                     .select('start_time, end_time')
                     .eq('organization_id', tenant.user_id)
                     .gte('start_time', startOfDay)
-                    .lte('start_time', endOfDay);
+                    .lte('start_time', endOfDay)
+                    .neq('status', 'cancelled');
 
-                // 3. Generate slots
-                const slots = [];
-                let currentTime = new Date(`${dateStr}T${schedule.start_time}`);
-                const endTime = new Date(`${dateStr}T${schedule.end_time}`);
+                // 3. Time buffer: filter out slots that are in the past or < 30 min from now
+                const nowTime = new Date();
+                // Ajustar al timezone correspondiente si fuera estrictamente necesario,
+                // asumiendolo corre localmente / server está en UTC y la clínica en un TZ.
+                // Como Vercel/Supabase corren en UTC, usaremos new Date(), pero lo compararemos
+                // con slotStart que también es UTC. Sin embargo, slotStart aquí se arma con `${dateStr}T${schedule.start_time}`,
+                // lo que en JS toma el TZ local de la Edge Function (UTC).
+                // Para simplificar, comparamos el timestamp actual + 30m.
+                const minTimeForAppt = new Date(nowTime.getTime() + 30 * 60000);
+
+                // 4. Generate slots
+                const slotsArray: string[] = [];
                 const slotDuration = 30; // minutes
 
-                while (currentTime < endTime) {
-                    const slotStart = currentTime;
-                    const slotEnd = new Date(currentTime.getTime() + slotDuration * 60000);
+                for (const schedule of daySchedules) {
+                    let currentTime = new Date(`${dateStr}T${schedule.start_time}`);
+                    const endTime = new Date(`${dateStr}T${schedule.end_time}`);
 
-                    if (slotEnd > endTime) break;
+                    while (currentTime < endTime) {
+                        const slotStart = currentTime;
+                        const slotEnd = new Date(currentTime.getTime() + slotDuration * 60000);
 
-                    const isOccupied = appointments?.some((appt: any) => {
-                        const apptStart = new Date(appt.start_time);
-                        const apptEnd = new Date(appt.end_time);
-                        return (slotStart < apptEnd && slotEnd > apptStart);
-                    });
+                        if (slotEnd > endTime) break;
 
-                    if (!isOccupied) {
-                        slots.push(slotStart.toTimeString().substring(0, 5));
+                        // Excluir si el slot es antes del tiempo mínimo permitido
+                        if (slotStart < minTimeForAppt) {
+                            currentTime = slotEnd;
+                            continue;
+                        }
+
+                        const isOccupied = appointments?.some((appt: any) => {
+                            const apptStart = new Date(appt.start_time);
+                            const apptEnd = new Date(appt.end_time);
+                            return (slotStart < apptEnd && slotEnd > apptStart);
+                        });
+
+                        if (!isOccupied) {
+                            slotsArray.push(slotStart.toTimeString().substring(0, 5));
+                        }
+                        currentTime = slotEnd;
                     }
-                    currentTime = slotEnd;
                 }
+
+                // Remove duplicates and sort, just in case schedules overlap
+                const slots = Array.from(new Set(slotsArray)).sort();
 
                 if (slots.length === 0) return "No hay turnos disponibles para esta fecha.";
                 return `Horarios disponibles para ${dateStr}: ${slots.join(', ')}`;
@@ -415,11 +438,16 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 
         if (schedulesRes.data && schedulesRes.data.length > 0) {
             const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-            const horariosRaw = schedulesRes.data.map((s: any) => ({
-                d: days[s.day_of_week],
-                h: `${s.start_time.substring(0, 5)}-${s.end_time.substring(0, 5)}`
-            }));
-            contextInfo += `Horarios: ${JSON.stringify(horariosRaw)}\n`;
+
+            // Group schedules by day
+            const groupedSchedules: Record<string, string[]> = {};
+            schedulesRes.data.forEach((s: any) => {
+                const dayName = days[s.day_of_week];
+                if (!groupedSchedules[dayName]) groupedSchedules[dayName] = [];
+                groupedSchedules[dayName].push(`${s.start_time.substring(0, 5)}-${s.end_time.substring(0, 5)}`);
+            });
+
+            contextInfo += `Horarios: ${JSON.stringify(groupedSchedules)}\n`;
         }
 
         contextInfo += `\n--- ENTORNO ---\n`;
