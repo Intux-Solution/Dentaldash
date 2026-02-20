@@ -384,7 +384,7 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 📅 Fecha: ${date}
 ⏰ Hora: ${time}
 👤 Paciente: ${patientName}
-🏥 Clínica: ${tenant.business_name}
+🏥 Odontologo: ${tenant.business_name}
 
 ¡Te esperamos! Si necesitas reagendar, avísanos.`;
 
@@ -395,41 +395,65 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
                     }
                 };
 
-                // Context construction
-                let contextInfo = `Clínica: ${tenant.business_name}\n`;
-                if (patientData) {
-                    contextInfo += `\nESTE ES EL PACIENTE IDENTIFICADO: ${patientData.nombre}. SALÚDALO POR SU NOMBRE.\n`;
-                } else {
-                    contextInfo += `\nPaciente NO identificado. Si quiere agendar, DEBES pedirle Nombre, DNI y Obra Social.\n`;
-                }
+                const dentistName = profile?.full_name || tenant.business_name || 'el Profesional';
+                const contactPhone = profile?.contact_phone || null;
 
+                // Base prompt with dynamic injection
+                let basePrompt = (AGENT_PROMPT || `Eres la asistente del Od. {{nombre_odontologo}}. Atiende dudas de forma amable.`)
+                    .replace(/{{nombre_odontologo}}/gi, dentistName);
+
+                let contextInfo = `--- DATOS ESTRUCTURADOS ---\nProf: Od. ${dentistName}\n`;
                 if (profile?.services) contextInfo += `Servicios: ${JSON.stringify(profile.services)}\n`;
                 if (profile?.accepted_insurances) contextInfo += `Obras Sociales: ${JSON.stringify(profile.accepted_insurances)}\n`;
-                if (schedulesRes.data) {
+                if (profile?.faqs) contextInfo += `FAQs: ${JSON.stringify(profile.faqs)}\n`;
+                if (contactPhone) contextInfo += `Contacto Humano (dáselo si no sabes responder o lo piden): ${contactPhone}\n`;
+
+                if (schedulesRes.data && schedulesRes.data.length > 0) {
                     const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-                    contextInfo += "Horarios de Atención General:\n" + schedulesRes.data.map((s: any) => `- ${days[s.day_of_week]}: ${s.start_time}-${s.end_time}`).join('\n');
+                    const horariosRaw = schedulesRes.data.map((s: any) => ({
+                        d: days[s.day_of_week],
+                        h: `${s.start_time.substring(0, 5)}-${s.end_time.substring(0, 5)}`
+                    }));
+                    contextInfo += `Horarios: ${JSON.stringify(horariosRaw)}\n`;
+                }
+
+                contextInfo += `\n--- ENTORNO ---\n`;
+                if (patientData) {
+                    contextInfo += `Paciente DB: ${JSON.stringify({ nombre: patientData.nombre })}\n(Llámalo por su nombre)\n`;
+                } else {
+                    contextInfo += `Paciente DB: null\n`;
                 }
 
                 const now = new Date();
-                // Force Argentina Time for calculations
                 const arTimeParams = { timeZone: 'America/Argentina/Buenos_Aires' };
 
-                // Generate Next 14 Days Calendar for Context
-                let calendarContext = "REFERENCIA DE FECHAS (Usa esto para resolver 'próximo jueves', etc):\n";
+                // Compact Calendar Injection as JSON to save tokens
+                const calContext = [];
                 for (let i = 0; i < 14; i++) {
                     const d = new Date(now);
                     d.setDate(d.getDate() + i);
-                    const dayName = d.toLocaleDateString('es-AR', { ...arTimeParams, weekday: 'long' });
-                    const dayNum = d.toLocaleDateString('es-AR', { ...arTimeParams, day: 'numeric', month: 'numeric' });
-                    const fullDate = d.toISOString().split('T')[0];
-                    calendarContext += `- ${dayName} ${dayNum} => ${fullDate}\n`;
+                    calContext.push({
+                        f: d.toISOString().split('T')[0],
+                        d: d.toLocaleDateString('es-AR', { ...arTimeParams, weekday: 'short' })
+                    });
                 }
 
-                const options: Intl.DateTimeFormatOptions = { ...arTimeParams, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+                const options: Intl.DateTimeFormatOptions = { ...arTimeParams, weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
                 const currentDateTimeString = now.toLocaleDateString('es-AR', options);
 
-                const systemPrompt = (AGENT_PROMPT || `Eres la secretaria de "${tenant.business_name}". Atiende dudas de forma amable.`) +
-                    `\n\nHOY ES: ${currentDateTimeString} (Hora Argentina).\n\n${calendarContext}\n\nContexto actual de la clínica:\n${contextInfo}\n\nREGLAS DE ORO:\n1. Si el usuario pide un turno o disponibilidad, **EJECUTA LA FUNCIÓN 'get_available_slots' INMEDIATAMENTE**. NO respondas con texto como "Permíteme verificar" o "Déjame ver". ACTÚA, NO HABLES SOBRE ACTUAR.\n2. SI ES UN PACIENTE NUEVO (no identificado), NECESITAS PEDIRLE:\n   - Nombre y Apellido\n   - DNI\n   - Teléfono\n   - Obra Social\n   (No inventes datos. Pídelos amablemente).\n3. Para confirmar un turno, USA 'create_appointment'.\n\nResponde de forma corta y concisa.`;
+                const systemPrompt = `${basePrompt}
+
+--- REGLAS DEL SISTEMA ---
+- IDENTIDAD: Eres estrictamente la asistente del Od. ${dentistName}. NO eres una clínica.
+- TONO: Profesional, amable y de CONCISIÓN EXTREMA. Usa bullet points si aplica. Cero introducciones largas.
+- FECHA ACTUAL: ${currentDateTimeString}
+- CALENDARIO (14 días): ${JSON.stringify(calContext)}
+
+--- FLUJO DE TURNOS ---
+1. DISPONIBILIDAD: OBLIGATORIO usar 'get_available_slots' ANTES de proponer cualquier horario. NO pidas permiso para revisar.
+2. AGENDAR: Usa 'create_appointment' SOLO cuando tengas: Nombre, DNI y Obra Social. Si faltan, pídelos directamente y con amabilidad.
+
+${contextInfo}`;
 
                 let aiResponse = "";
 

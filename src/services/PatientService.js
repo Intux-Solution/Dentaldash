@@ -69,6 +69,34 @@ export class PatientService {
   /**
    * Buscar paciente por DNI
    */
+  static async getPatientByDni(dni) {
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('dni', dni)
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw error;
+      }
+
+      if (!data) return null;
+
+      return {
+        ...data,
+        obraSocial: data.obra_social,
+        numeroAfiliado: data.numero_afiliado,
+        fechaNacimiento: data.fecha_nacimiento,
+        historiaClinica: data.historia_clinica_url || data.historia_clinica,
+        estado: data.estado || 'Activo',
+      };
+    } catch (error) {
+      console.error('Error getting patient by DNI:', error);
+      throw error;
+    }
+  }
 
   /**
    * Subir archivo a Storage y retornar PATH (no URL pública)

@@ -29,6 +29,7 @@ export default function SettingsView() {
         user_id: null,
         accepted_insurances: [],
         services: [],
+        contact_phone: '',
     });
     const [googleAvatar, setGoogleAvatar] = useState(null);
     const [avatarFile, setAvatarFile] = useState(null);
@@ -105,6 +106,7 @@ export default function SettingsView() {
                     user_id: session.user.id,
                     accepted_insurances: profileData.accepted_insurances || [],
                     services: profileData.services || [],
+                    contact_phone: profileData.contact_phone || '',
                 });
                 if (profileData.avatar_url) {
                     const { data: { publicUrl } } = supabase
@@ -448,6 +450,28 @@ export default function SettingsView() {
                                     </div>
                                 </div>
                                 <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <label className="block text-sm font-semibold text-gray-700">Teléfono de Contacto Público (Pacientes)</label>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="tel"
+                                            value={profile.contact_phone || ''}
+                                            onChange={(e) => handleProfileChange('contact_phone', e.target.value)}
+                                            placeholder="Ej: +54 9 11 1234-5678"
+                                            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+                                        />
+                                        <button
+                                            onClick={() => handleAutoSaveProfile({ contact_phone: profile.contact_phone })}
+                                            className="px-4 py-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-all flex items-center justify-center"
+                                            title="Guardar teléfono"
+                                        >
+                                            <Save size={18} />
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500">Este número será entregado por el asistente virtual cuando el paciente requiera contactar a un humano.</p>
+                                </div>
+                                <div className="space-y-4">
                                     <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-500 font-medium leading-relaxed">
                                         Gestiona tu email y contraseña desde tu cuenta de Google.
                                     </div>
@@ -706,15 +730,23 @@ export default function SettingsView() {
                                                 <div className="flex-1 space-y-2">
                                                     <input
                                                         type="text"
-                                                        value={faq.question}
-                                                        onChange={(e) => handleUpdateFAQ(faq.id, { question: e.target.value })}
+                                                        defaultValue={faq.question}
+                                                        onBlur={(e) => {
+                                                            if (e.target.value !== faq.question) {
+                                                                handleUpdateFAQ(faq.id, { question: e.target.value });
+                                                            }
+                                                        }}
                                                         placeholder="Pregunta"
                                                         className="w-full bg-transparent font-bold text-gray-800 text-sm border-none focus:ring-1 focus:ring-teal-100 rounded p-1 outline-none"
                                                     />
                                                     <textarea
-                                                        value={faq.answer}
+                                                        defaultValue={faq.answer}
                                                         rows={2}
-                                                        onChange={(e) => handleUpdateFAQ(faq.id, { answer: e.target.value })}
+                                                        onBlur={(e) => {
+                                                            if (e.target.value !== faq.answer) {
+                                                                handleUpdateFAQ(faq.id, { answer: e.target.value });
+                                                            }
+                                                        }}
                                                         placeholder="Respuesta"
                                                         className="w-full bg-transparent text-xs text-gray-500 border-none focus:ring-1 focus:ring-teal-100 rounded p-1 outline-none resize-none"
                                                     />
