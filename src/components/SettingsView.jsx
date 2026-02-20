@@ -310,6 +310,7 @@ export default function SettingsView() {
             }
 
             setPollingActive(true);
+            setInstanceStatus('connecting');
             message.success('Iniciando conexión con WhatsApp...');
         } catch (err) {
             message.error('Error al conectar WhatsApp: ' + err.message);
@@ -372,10 +373,11 @@ export default function SettingsView() {
                 setQrCodeData(data.base64 || data.code);
             }
 
-            if (data.instance?.status === 'open' || data.instance?.state === 'open' || data.instance?.connectionStatus === 'open') {
+            if (data.instance?.status === 'open' || data.instance?.state === 'open' || data.instance?.connectionStatus === 'open' || data.status === 'connected') {
                 setInstanceStatus('connected');
                 setPollingActive(false);
                 setQrCodeData(null);
+                // El edge function ya actualiza la DB, pero lo hacemos aquí también por si acaso (para UI inmediata)
                 await supabase.from('tenants').update({ whatsapp_status: 'connected' }).eq('id', tenant.id);
             }
         } catch (err) {
@@ -611,9 +613,9 @@ export default function SettingsView() {
                                 <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 flex flex-col md:flex-row items-center gap-8">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-2">
-                                            <div className={`w-3 h-3 rounded-full ${instanceStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                            <div className={`w-3 h-3 rounded-full ${instanceStatus === 'connected' ? 'bg-green-500' : instanceStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'}`} />
                                             <span className="font-bold text-gray-700">
-                                                Estado: {instanceStatus === 'connected' ? 'Conectado' : 'Desconectado'}
+                                                Estado: {instanceStatus === 'connected' ? 'Conectado' : instanceStatus === 'connecting' ? 'Conectando...' : 'Desconectado'}
                                             </span>
                                         </div>
                                         <p className="text-sm text-gray-500 mb-4">
