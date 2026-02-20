@@ -3,6 +3,7 @@ import ModalShell from './ModalShell';
 import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope, AlertCircle, Check, X, ArrowLeft } from 'lucide-react';
 import InsuranceAutocomplete from './InsuranceAutocomplete';
 import { cls } from '../utils/helpers';
+import { message } from 'antd';
 
 export default function EditPatientModal({ open, patient, onClose, onSaved, onBack }) {
   const savingRef = useRef(false);
@@ -24,7 +25,6 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
   const [historiaClinicaFile, setHistoriaClinicaFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [ok, setOk] = useState(false);
   const [shouldRemoveRecord, setShouldRemoveRecord] = useState(false);
   const [originalRecord, setOriginalRecord] = useState('');
 
@@ -60,7 +60,6 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
       setOriginalRecord(getValue(patient?.historiaClinica));
       setShouldRemoveRecord(false);
       setError('');
-      setOk(false);
       savingRef.current = false;
     }
   }, [open, patient]);
@@ -86,7 +85,6 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
     setSaving(true);
     savingRef.current = true;
     setError('');
-    setOk(false);
 
     try {
       // Forzar obtención del estado actual del form
@@ -111,11 +109,13 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
         await onSaved(updatedPatientData);
       }
 
-      setOk(true);
+      message.success('Paciente actualizado correctamente');
       setTimeout(onClose, 900);
 
     } catch (error) {
-      setError(error.message || 'Error actualizando el paciente');
+      const msg = error.message || 'Error actualizando el paciente';
+      setError(msg);
+      message.error(msg);
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -162,12 +162,6 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
             <div className="mb-4 mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center text-red-700 text-sm">
               <AlertCircle size={16} className="mr-2 shrink-0" />
               {error}
-            </div>
-          )}
-          {ok && (
-            <div className="mb-4 mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center text-green-700 text-sm">
-              <Check size={16} className="mr-2 shrink-0" />
-              Paciente actualizado correctamente
             </div>
           )}
           {/* Contenido scrollable */}

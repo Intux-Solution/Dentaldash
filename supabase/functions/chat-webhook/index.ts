@@ -51,7 +51,7 @@ const toolsDefinition = [
                 email: { type: "string", description: "Email del paciente (opcional)" },
                 notes: { type: "string", description: "Motivo de la consulta o notas adicionales" }
             },
-            required: ["date", "time", "patient_name", "dni", "obra_social"]
+            required: ["date", "time", "patient_name", "dni", "obra_social", "telefono"]
         }
     }
 ];
@@ -484,7 +484,7 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 
 --- FLUJO DE TURNOS ---
 1. DISPONIBILIDAD: OBLIGATORIO usar 'get_available_slots' ANTES de proponer cualquier horario. NO pidas permiso para revisar.
-2. AGENDAR: Usa 'create_appointment' SOLO cuando tengas: Nombre, DNI y Obra Social. Si faltan, pídelos directamente y con amabilidad.
+2. AGENDAR: Usa 'create_appointment' SOLO cuando tengas: Nombre, DNI, Teléfono (pídeselo aunque te escriba por WhatsApp para confirmar) y Obra Social. Si faltan, pídelos directamente y con amabilidad.
 
 ${contextInfo}`;
 

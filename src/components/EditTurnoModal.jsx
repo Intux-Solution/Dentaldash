@@ -5,6 +5,7 @@ import { PatientService } from '../services/PatientService';
 import './loader-spin.css';
 import './loader-spin.css';
 import { combineDateTimeToISO } from '../utils/helpers';
+import { message } from 'antd';
 
 // ...existing code...
 
@@ -276,9 +277,12 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
       }
 
       if (onSaved) onSaved(saved);
+      message.success('Turno guardado con éxito');
       onClose();
     } catch (err) {
-      setError(err.message || 'Error al actualizar el turno. Intenta nuevamente.');
+      const msg = err.message || 'Error al actualizar el turno. Intenta nuevamente.';
+      setError(msg);
+      message.error(msg);
     } finally {
       setLoading(false);
     }
@@ -290,9 +294,12 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     try {
       await AppointmentService.deleteAppointment(formData.id);
       if (onDeleted) onDeleted(turno);
+      message.success('Turno cancelado correctamente');
       onClose();
     } catch (err) {
-      setError(err.message || 'Error al cancelar el turno. Intenta nuevamente.');
+      const msg = err.message || 'Error al cancelar el turno. Intenta nuevamente.';
+      setError(msg);
+      message.error(msg);
     } finally {
       setDeleting(false);
     }

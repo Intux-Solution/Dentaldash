@@ -11,7 +11,6 @@ const TOOLS = [
     { id: 'tratado', label: 'Tratado', color: 'bg-blue-500' },
     { id: 'pendiente', label: 'Pendiente', color: 'bg-amber-500' },
     { id: 'ausente', label: 'Ausente', color: 'bg-gray-200' },
-    { id: 'limpiar', label: 'Borrador', color: 'bg-white border' },
 ];
 
 const Odontogram = ({ data = {}, onChange, readOnly = false }) => {
@@ -23,10 +22,7 @@ const Odontogram = ({ data = {}, onChange, readOnly = false }) => {
         const currentTooth = data[toothNumber] || {};
         let newToothData;
 
-        if (selectedTool === 'limpiar') {
-            // Si está ausente o usamos la herramienta de limpieza, vaciamos el diente
-            newToothData = {};
-        } else if (selectedTool === 'ausente') {
+        if (selectedTool === 'ausente') {
             // Toggle de ausencia: si ya estaba ausente, lo limpiamos
             newToothData = currentTooth.all === 'ausente' ? {} : { all: 'ausente' };
         } else {

@@ -14,6 +14,7 @@ import {
     Edit2,
     X
 } from 'lucide-react';
+import { message } from 'antd';
 import { PatientService } from '../services/PatientService';
 import { OdontogramService } from '../services/OdontogramService';
 import { EvolutionService } from '../services/EvolutionService';
@@ -86,10 +87,10 @@ export default function OdontogramView() {
             setSaving(true);
             await OdontogramService.saveOdontogram(id, odontogramData);
             window.dispatchEvent(new CustomEvent('patients:refresh'));
-            // Mostrar un indicador temporal de éxito si se desea
+            message.success('Odontograma guardado correctamente');
         } catch (err) {
             console.error('Error saving:', err);
-            alert('Error al guardar el odontograma');
+            message.error('Error al guardar el odontograma');
         } finally {
             setSaving(false);
         }
@@ -109,9 +110,10 @@ export default function OdontogramView() {
             window.dispatchEvent(new CustomEvent('patients:refresh'));
             setHistory([entry, ...history]);
             setNewNote({ tooth_number: '', procedure_type: '', description: '' });
+            message.success('Registro añadido correctamente');
         } catch (err) {
             console.error('Error adding history:', err);
-            alert('Error al añadir registro');
+            message.error('Error al añadir registro');
         } finally {
             setAddingNote(false);
         }
@@ -123,8 +125,9 @@ export default function OdontogramView() {
             await EvolutionService.deleteEntry(historyId);
             window.dispatchEvent(new CustomEvent('patients:refresh'));
             setHistory(history.filter(h => h.id !== historyId));
+            message.success('Registro eliminado');
         } catch (err) {
-            alert('Error al eliminar');
+            message.error('Error al eliminar');
         }
     };
 
@@ -157,9 +160,10 @@ export default function OdontogramView() {
             setHistory(history.map(item => item.id === historyId ? updatedEntry : item));
             setEditingId(null);
             window.dispatchEvent(new CustomEvent('patients:refresh'));
+            message.success('Cambios guardados con éxito');
         } catch (err) {
             console.error('Error updating history:', err);
-            alert('Error al guardar los cambios.');
+            message.error('Error al guardar los cambios');
         } finally {
             setSavingEdit(false);
         }

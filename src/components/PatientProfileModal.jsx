@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ModalShell from './ModalShell';
 import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope } from 'lucide-react';
 import { initials } from '../utils/helpers';
+import { message } from 'antd';
 
 export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage, onOpenRecord }) {
   const navigate = useNavigate();
@@ -82,7 +83,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
       onClose?.();
     } catch (e) {
       setDeleting(false);
-      alert(`Error al eliminar: ${e.message || 'Intente nuevamente'}`);
+      message.error(`Error al eliminar: ${e.message || 'Intente nuevamente'}`);
     }
   }
 

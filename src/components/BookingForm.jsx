@@ -6,6 +6,7 @@ import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import InsuranceAutocomplete from './InsuranceAutocomplete';
 import { combineDateTimeToISO } from '../utils/helpers';
+import { message } from 'antd';
 
 // ... (LOCAL_APPOINTMENT_TYPES or other constants if any)
 
@@ -239,7 +240,9 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
         if (onSuccess) onSuccess();
       }, 2000);
     } catch (err) {
-      setError(err.message || 'Error al crear el turno. Intenta nuevamente.');
+      const msg = err.message || 'Error al crear el turno. Intenta nuevamente.';
+      setError(msg);
+      message.error(msg);
     } finally {
       setLoading(false);
     }
