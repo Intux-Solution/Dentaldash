@@ -16,7 +16,7 @@ const sanitizeUrl = (url: string) => {
 
 // Helper: Format phone number (remove 549 prefix for Argentina)
 const sanitizePhone = (jid: string) => {
-    let phone = jid.replace('@s.whatsapp.net', '');
+    let phone = jid.replace('@s.whatsapp.net', '').replace('@lid', ''); // Handle both standard and LID
     if (phone.startsWith('549')) {
         phone = phone.substring(3); // Remove '549' to match DB '381...'
     }
@@ -46,6 +46,7 @@ const toolsDefinition = [
                 time: { type: "string", description: "Hora del turno (HH:mm)" },
                 patient_name: { type: "string", description: "Nombre completo del paciente" },
                 dni: { type: "string", description: "DNI del paciente (sin puntos)" },
+                telefono: { type: "string", description: "Teléfono del paciente (si es diferente al de WhatsApp)" },
                 obra_social: { type: "string", description: "Obra social del paciente (o 'Particular')" },
                 email: { type: "string", description: "Email del paciente (opcional)" },
                 notes: { type: "string", description: "Motivo de la consulta o notas adicionales" }
@@ -280,79 +281,104 @@ serve(async (req) => {
                 return `Horarios disponibles para ${dateStr}: ${slots.join(', ')}`;
 
             } catch (e: any) {
-                console.error("Error getting slots:", e);
-                return "Error al consultar disponibilidad.";
-            }
-        };
+                const createAppointment = async (date: string, time: string, patientName: string, dni: string, obraSocial: string, email: string | undefined, notes: string, telefono: string | undefined) => {
+                    try {
+                        // Should prioritize the provided phone if available, otherwise use sanitizePhone(remoteJid)
+                        // But sanitizePhone(remoteJid) is the one we use for lookup.
+                        // If user provides a DIFFERENT phone, we should probably update it or use it for creation.
+                        // For simplicity, let's use the JID as the primary identifier for lookup, 
+                        // but if creating a NEW patient, we can use the provided phone if valid.
 
-        const createAppointment = async (date: string, time: string, patientName: string, dni: string, obraSocial: string, email: string | undefined, notes: string) => {
-            try {
-                const phone = sanitizePhone(remoteJid);
+                        const jidPhone = sanitizePhone(remoteJid);
+                        // If the user explicitly provided a phone number, use that for the record. 
+                        // Otherwise use the WhatsApp one.
+                        const finalPhone = telefono ? telefono.trim() : jidPhone;
 
-                let { data: patient } = await supabase
-                    .from('patients')
-                    .select('id')
-                    .eq('telefono', phone)
-                    .eq('organization_id', tenant.user_id)
-                    .maybeSingle(); // Changed from single()
+                        // Lookup by JID phone first (since they are messaging from there)
+                        // OR by the provided phone? 
+                        // Let's stick to JID for lookup to maintain thread continuity.
+                        // If they provide a different phone for contact, we store it.
 
-                if (!patient) {
-                    const { data: newPatient, error: createError } = await supabase
-                        .from('patients')
-                        .insert({
-                            nombre: patientName,
-                            telefono: phone,
-                            dni: dni,
-                            obra_social: obraSocial,
-                            email: email || null,
-                            organization_id: tenant.user_id,
-                            estado: 'Activo'
-                        })
-                        .select()
-                        .single();
+                        let { data: patient } = await supabase
+                            .from('patients')
+                            .select('id')
+                            .eq('telefono', jidPhone) // Still lookup by WA number? Or by finalPhone?
+                            // If I change numbers, I might break history. Let's lookup by JID phone.
+                            // If not found, create with JID phone (or provided phone).
+                            .eq('organization_id', tenant.user_id)
+                            .maybeSingle();
 
-                    if (createError) throw new Error("Error creating patient: " + createError.message);
-                    patient = newPatient;
-                }
+                        if (!patient) {
+                            // Check if patient exists with the PROVIDED phone (if different)
+                            if (telefono && telefono !== jidPhone) {
+                                const { data: existingByProvided } = await supabase
+                                    .from('patients')
+                                    .select('id')
+                                    .eq('telefono', finalPhone)
+                                    .eq('organization_id', tenant.user_id)
+                                    .maybeSingle();
 
-                // FIX: Force Argentina Timezone (-03:00) so that 14:00 matches 14:00 AR, not 14:00 UTC (11:00 AR)
-                const startDateTime = new Date(`${date}T${time}:00-03:00`);
-                const endDateTime = new Date(startDateTime.getTime() + 30 * 60000);
+                                if (existingByProvided) patient = existingByProvided;
+                            }
+                        }
 
-                const { data: appointment, error: apptError } = await supabase
-                    .from('appointments')
-                    .insert({
-                        title: `Turno WhatsApp - ${patientName}`,
-                        patient_id: patient.id,
-                        organization_id: tenant.user_id,
-                        start_time: startDateTime.toISOString(),
-                        end_time: endDateTime.toISOString(),
-                        duration: 30,
-                        status: 'confirmed',
-                        notes: notes || "Agendado vía WhatsApp",
-                        appointment_type: 'Consulta General'
-                    })
-                    .select()
-                    .single();
+                        if (!patient) {
+                            const { data: newPatient, error: createError } = await supabase
+                                .from('patients')
+                                .insert({
+                                    nombre: patientName,
+                                    telefono: finalPhone, // Use the preferred phone
+                                    dni: dni,
+                                    obra_social: obraSocial,
+                                    email: email || null,
+                                    organization_id: tenant.user_id,
+                                    estado: 'Activo'
+                                })
+                                .select()
+                                .single();
+
+                            if (createError) throw new Error("Error creating patient: " + createError.message);
+                            patient = newPatient;
+                        }
+
+                        // FIX: Force Argentina Timezone (-03:00) so that 14:00 matches 14:00 AR, not 14:00 UTC (11:00 AR)
+                        const startDateTime = new Date(`${date}T${time}:00-03:00`);
+                        const endDateTime = new Date(startDateTime.getTime() + 30 * 60000);
+
+                        const { data: appointment, error: apptError } = await supabase
+                            .from('appointments')
+                            .insert({
+                                title: `Turno WhatsApp - ${patientName}`,
+                                patient_id: patient.id,
+                                organization_id: tenant.user_id,
+                                start_time: startDateTime.toISOString(),
+                                end_time: endDateTime.toISOString(),
+                                duration: 30,
+                                status: 'confirmed',
+                                notes: notes || "Agendado vía WhatsApp",
+                                appointment_type: 'Consulta General'
+                            })
+                            .select()
+                            .single();
 
 
-                if (apptError) throw new Error("Error creating appointment: " + apptError.message);
+                        if (apptError) throw new Error("Error creating appointment: " + apptError.message);
 
-                // --- Notify Dentist (New Feature) ---
-                if (tenant.notification_phone) {
-                    const notifyMsg = `🔔 *Nuevo Turno Agendado*\n\n👤 Paciente: ${patientName}\n📅 Fecha: ${date}\n⏰ Hora: ${time}\n🆔 DNI: ${dni}\n🏥 Obra Social: ${obraSocial}\n📝 Notas: ${notes || '-'}\n\n_Agendado vía WhatsApp Bot_`;
+                        // --- Notify Dentist (New Feature) ---
+                        if (tenant.notification_phone) {
+                            const notifyMsg = `🔔 *Nuevo Turno Agendado*\n\n👤 Paciente: ${patientName}\n📅 Fecha: ${date}\n⏰ Hora: ${time}\n🆔 DNI: ${dni}\n🏥 Obra Social: ${obraSocial}\n📝 Notas: ${notes || '-'}\n\n_Agendado vía WhatsApp Bot_`;
 
-                    // Send asynchronously (don't block response to user)
-                    fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
-                        body: JSON.stringify({ number: tenant.notification_phone, text: notifyMsg })
-                    }).catch(err => console.error("Error notifying dentist:", err));
-                }
-                // ------------------------------------
+                            // Send asynchronously (don't block response to user)
+                            fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+                                body: JSON.stringify({ number: tenant.notification_phone, text: notifyMsg })
+                            }).catch(err => console.error("Error notifying dentist:", err));
+                        }
+                        // ------------------------------------
 
-                // Detailed confirmation prompt for the AI
-                return `Turno RESERVADO con éxito. ID: ${appointment.id}. 
+                        // Detailed confirmation prompt for the AI
+                        return `Turno RESERVADO con éxito. ID: ${appointment.id}. 
 INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes añadir emojis):
 ✅ *Turno Confirmado*
 📅 Fecha: ${date}
@@ -362,132 +388,146 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 
 ¡Te esperamos! Si necesitas reagendar, avísanos.`;
 
-            } catch (e: any) {
+                    } catch (e: any) {
 
-                console.error("Error creating appointment:", e);
-                return `Error al agendar: ${e.message}`;
-            }
-        };
+                        console.error("Error creating appointment:", e);
+                        return `Error al agendar: ${e.message}`;
+                    }
+                };
 
-        // Context construction
-        let contextInfo = `Clínica: ${tenant.business_name}\n`;
-        if (patientData) {
-            contextInfo += `\nESTE ES EL PACIENTE IDENTIFICADO: ${patientData.nombre}. SALÚDALO POR SU NOMBRE.\n`;
-        } else {
-            contextInfo += `\nPaciente NO identificado. Si quiere agendar, DEBES pedirle Nombre, DNI y Obra Social.\n`;
-        }
+                // Context construction
+                let contextInfo = `Clínica: ${tenant.business_name}\n`;
+                if (patientData) {
+                    contextInfo += `\nESTE ES EL PACIENTE IDENTIFICADO: ${patientData.nombre}. SALÚDALO POR SU NOMBRE.\n`;
+                } else {
+                    contextInfo += `\nPaciente NO identificado. Si quiere agendar, DEBES pedirle Nombre, DNI y Obra Social.\n`;
+                }
 
-        if (profile?.services) contextInfo += `Servicios: ${JSON.stringify(profile.services)}\n`;
-        if (profile?.accepted_insurances) contextInfo += `Obras Sociales: ${JSON.stringify(profile.accepted_insurances)}\n`;
-        if (schedulesRes.data) {
-            const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-            contextInfo += "Horarios de Atención General:\n" + schedulesRes.data.map((s: any) => `- ${days[s.day_of_week]}: ${s.start_time}-${s.end_time}`).join('\n');
-        }
+                if (profile?.services) contextInfo += `Servicios: ${JSON.stringify(profile.services)}\n`;
+                if (profile?.accepted_insurances) contextInfo += `Obras Sociales: ${JSON.stringify(profile.accepted_insurances)}\n`;
+                if (schedulesRes.data) {
+                    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+                    contextInfo += "Horarios de Atención General:\n" + schedulesRes.data.map((s: any) => `- ${days[s.day_of_week]}: ${s.start_time}-${s.end_time}`).join('\n');
+                }
 
-        const now = new Date();
-        const options: Intl.DateTimeFormatOptions = { timeZone: 'America/Argentina/Buenos_Aires', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        const currentDateString = now.toLocaleDateString('es-AR', options);
+                const now = new Date();
+                // Force Argentina Time for calculations
+                const arTimeParams = { timeZone: 'America/Argentina/Buenos_Aires' };
 
-        const systemPrompt = (AGENT_PROMPT || `Eres la secretaria de "${tenant.business_name}". Atiende dudas de forma amable.`) +
-            `\n\nHOY ES: ${currentDateString}.\n\nContexto actual de la clínica:\n${contextInfo}\n\nIMPORTANTE: Para agendar turnos, SIEMPRE usa las herramientas (functions) provistas. Si el usuario quiere un turno, primero verifica disponibilidad con 'get_available_slots'. Luego usa 'create_appointment', pero asegúrate de tener todos los datos requeridos (Nombre, DNI, Obra Social).`;
+                // Generate Next 14 Days Calendar for Context
+                let calendarContext = "REFERENCIA DE FECHAS (Usa esto para resolver 'próximo jueves', etc):\n";
+                for (let i = 0; i < 14; i++) {
+                    const d = new Date(now);
+                    d.setDate(d.getDate() + i);
+                    const dayName = d.toLocaleDateString('es-AR', { ...arTimeParams, weekday: 'long' });
+                    const dayNum = d.toLocaleDateString('es-AR', { ...arTimeParams, day: 'numeric', month: 'numeric' });
+                    const fullDate = d.toISOString().split('T')[0];
+                    calendarContext += `- ${dayName} ${dayNum} => ${fullDate}\n`;
+                }
 
-        let aiResponse = "";
+                const options: Intl.DateTimeFormatOptions = { ...arTimeParams, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+                const currentDateTimeString = now.toLocaleDateString('es-AR', options);
 
-        if (OPENAI_KEY) {
-            try {
-                const openai = new OpenAI({ apiKey: OPENAI_KEY });
+                const systemPrompt = (AGENT_PROMPT || `Eres la secretaria de "${tenant.business_name}". Atiende dudas de forma amable.`) +
+                    `\n\nHOY ES: ${currentDateTimeString} (Hora Argentina).\n\n${calendarContext}\n\nContexto actual de la clínica:\n${contextInfo}\n\nIMPORTANTE: Para agendar turnos, SIEMPRE usa las herramientas (functions) provistas. Si el usuario quiere un turno, verifica disponibilidad con 'get_available_slots'.\n\nSI ES UN PACIENTE NUEVO (no identificado), NECESITAS PEDIRLE:\n1. Nombre y Apellido\n2. DNI\n3. Teléfono (si es distinto al de WhatsApp)\n4. Obra Social\n\n(No inventes datos. Pídelos amablemente).`;
 
-                const messages: any[] = [
-                    { role: "system", content: systemPrompt },
-                    ...history.map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
-                    { role: "user", content: finalMessageText } // Use the BATCHED message
-                ];
+                let aiResponse = "";
 
-                const runner = await openai.chat.completions.create({
-                    model: "gpt-4o-mini",
-                    messages: messages,
-                    tools: toolsDefinition.map(t => ({ type: "function", function: t })),
-                    tool_choice: "auto"
+                if (OPENAI_KEY) {
+                    try {
+                        const openai = new OpenAI({ apiKey: OPENAI_KEY });
+
+                        const messages: any[] = [
+                            { role: "system", content: systemPrompt },
+                            ...history.map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
+                            { role: "user", content: finalMessageText } // Use the BATCHED message
+                        ];
+
+                        const runner = await openai.chat.completions.create({
+                            model: "gpt-4o-mini",
+                            messages: messages,
+                            tools: toolsDefinition.map(t => ({ type: "function", function: t })),
+                            tool_choice: "auto"
+                        });
+
+                        const responseMessage = runner.choices[0].message;
+
+                        if (responseMessage.tool_calls) {
+                            messages.push(responseMessage);
+                            for (const toolCall of responseMessage.tool_calls) {
+                                const fnName = toolCall.function.name;
+                                const fnArgs = JSON.parse(toolCall.function.arguments);
+                                let fnResult = "";
+
+                                console.log(`Executing tool ${fnName} with args:`, fnArgs);
+
+                                if (fnName === "get_available_slots") {
+                                    fnResult = await getAvailableSlots(fnArgs.date);
+                                } else if (fnName === "create_appointment") {
+                                    fnResult = await createAppointment(fnArgs.date, fnArgs.time, fnArgs.patient_name, fnArgs.dni, fnArgs.obra_social, fnArgs.email, fnArgs.notes, fnArgs.telefono);
+                                } else {
+                                    fnResult = "Función no reconocida.";
+                                }
+
+                                messages.push({
+                                    role: "tool",
+                                    tool_call_id: toolCall.id,
+                                    content: fnResult
+                                });
+                            }
+
+                            const secondResponse = await openai.chat.completions.create({
+                                model: "gpt-4o-mini",
+                                messages: messages
+                            });
+                            aiResponse = secondResponse.choices[0].message?.content || "";
+                        } else {
+                            aiResponse = responseMessage.content || "";
+                        }
+                    } catch (err: any) {
+                        console.error("OpenAI Logic Error:", err);
+                    }
+                }
+
+                if (!aiResponse && GEMINI_KEY) {
+                    // Context: Gemini Fallback
+                    try {
+                        const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+                        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                        const historyText = history.map((m: any) => `${m.role === 'user' ? 'Paciente' : 'Asistente'}: ${m.content}`).join('\n');
+                        const result = await model.generateContent(`${systemPrompt}\n\nHistorial:\n${historyText}\n\nPaciente: ${finalMessageText}`);
+                        aiResponse = result.response.text();
+                    } catch (err: any) {
+                        console.error("Gemini failed:", err.message);
+                    }
+                }
+
+                if (!aiResponse) throw new Error("AI Generation failed");
+
+                // Send message
+                const sendUrl = `${EVOLUTION_API_URL}/message/sendText/${instanceName}`;
+                const sendRes = await fetch(sendUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+                    body: JSON.stringify({ number: remoteJid, text: aiResponse, delay: 1200 })
                 });
 
-                const responseMessage = runner.choices[0].message;
+                if (!sendRes.ok) throw new Error(`Evolution send failed: ${sendRes.status}`);
 
-                if (responseMessage.tool_calls) {
-                    messages.push(responseMessage);
-                    for (const toolCall of responseMessage.tool_calls) {
-                        const fnName = toolCall.function.name;
-                        const fnArgs = JSON.parse(toolCall.function.arguments);
-                        let fnResult = "";
+                // Persist AI Response with processed status
+                await supabase.from('chat_history').insert({
+                    tenant_id: tenant.id,
+                    whatsapp_instance: instanceName,
+                    jid: remoteJid,
+                    role: 'assistant',
+                    content: aiResponse,
+                    status: 'processed'
+                });
 
-                        console.log(`Executing tool ${fnName} with args:`, fnArgs);
+                return new Response('Success', { status: 200 });
 
-                        if (fnName === "get_available_slots") {
-                            fnResult = await getAvailableSlots(fnArgs.date);
-                        } else if (fnName === "create_appointment") {
-                            fnResult = await createAppointment(fnArgs.date, fnArgs.time, fnArgs.patient_name, fnArgs.dni, fnArgs.obra_social, fnArgs.email, fnArgs.notes);
-                        } else {
-                            fnResult = "Función no reconocida.";
-                        }
-
-                        messages.push({
-                            role: "tool",
-                            tool_call_id: toolCall.id,
-                            content: fnResult
-                        });
-                    }
-
-                    const secondResponse = await openai.chat.completions.create({
-                        model: "gpt-4o-mini",
-                        messages: messages
-                    });
-                    aiResponse = secondResponse.choices[0].message?.content || "";
-                } else {
-                    aiResponse = responseMessage.content || "";
-                }
-            } catch (err: any) {
-                console.error("OpenAI Logic Error:", err);
+            } catch (error: any) {
+                console.error('Webhook Error:', error.message);
+                return new Response(JSON.stringify({ error: error.message }), { status: 500 });
             }
-        }
-
-        if (!aiResponse && GEMINI_KEY) {
-            // Context: Gemini Fallback
-            try {
-                const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const historyText = history.map((m: any) => `${m.role === 'user' ? 'Paciente' : 'Asistente'}: ${m.content}`).join('\n');
-                const result = await model.generateContent(`${systemPrompt}\n\nHistorial:\n${historyText}\n\nPaciente: ${finalMessageText}`);
-                aiResponse = result.response.text();
-            } catch (err: any) {
-                console.error("Gemini failed:", err.message);
-            }
-        }
-
-        if (!aiResponse) throw new Error("AI Generation failed");
-
-        // Send message
-        const sendUrl = `${EVOLUTION_API_URL}/message/sendText/${instanceName}`;
-        const sendRes = await fetch(sendUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
-            body: JSON.stringify({ number: remoteJid, text: aiResponse, delay: 1200 })
         });
-
-        if (!sendRes.ok) throw new Error(`Evolution send failed: ${sendRes.status}`);
-
-        // Persist AI Response with processed status
-        await supabase.from('chat_history').insert({
-            tenant_id: tenant.id,
-            whatsapp_instance: instanceName,
-            jid: remoteJid,
-            role: 'assistant',
-            content: aiResponse,
-            status: 'processed'
-        });
-
-        return new Response('Success', { status: 200 });
-
-    } catch (error: any) {
-        console.error('Webhook Error:', error.message);
-        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-    }
-});
