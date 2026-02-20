@@ -318,6 +318,30 @@ export default function SettingsView() {
         }
     };
 
+    const handleDisconnectWhatsApp = async () => {
+        try {
+            setSaving(true);
+            const { data: { session } } = await supabase.auth.getSession();
+            await supabase.functions.invoke('whatsapp-manager', {
+                body: { action: 'logout', tenant_id: tenant.id },
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
+                }
+            });
+
+            // Forzar desconexión local aunque falle la API
+            setInstanceStatus('disconnected');
+            setPollingActive(false);
+            setQrCodeData(null);
+            setTenant(prev => ({ ...prev, whatsapp_instance: null }));
+            message.success('WhatsApp desconectado correctamente.');
+        } catch (err) {
+            message.error('Error al desconectar: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const checkConnectionStatus = async () => {
         if (!tenant?.whatsapp_instance) return;
         try {
@@ -332,6 +356,11 @@ export default function SettingsView() {
             });
             if (error) {
                 console.error('Invoke error:', error);
+                // Si el error es 404 (instancia no existe), dejamos de pedir QR
+                if (error.status === 404) {
+                    setPollingActive(false);
+                    setInstanceStatus('disconnected');
+                }
                 return;
             }
 
@@ -588,14 +617,36 @@ export default function SettingsView() {
                                         <p className="text-sm text-gray-500 mb-4">
                                             Conecta tu cuenta de WhatsApp para que el asistente pueda responder a tus pacientes automáticamente.
                                         </p>
-                                        {instanceStatus !== 'connected' && (
+                                        {instanceStatus === 'connected' ? (
                                             <button
-                                                onClick={handleConnectWhatsApp}
-                                                disabled={saving || pollingActive}
-                                                className="px-6 py-2 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50"
+                                                onClick={handleDisconnectWhatsApp}
+                                                disabled={saving}
+                                                className="px-6 py-2 bg-red-50 text-white border border-red-200 !text-red-600 rounded-xl font-bold hover:bg-red-100 transition-all disabled:opacity-50"
                                             >
-                                                {pollingActive ? 'Esperando conexión...' : 'Conectar WhatsApp'}
+                                                Desconectar WhatsApp
                                             </button>
+                                        ) : (
+                                            <div className="flex flex-col sm:flex-row gap-3">
+                                                <button
+                                                    onClick={handleConnectWhatsApp}
+                                                    disabled={saving || pollingActive}
+                                                    className="px-6 py-2 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50"
+                                                >
+                                                    {pollingActive ? 'Esperando conexión...' : 'Conectar WhatsApp'}
+                                                </button>
+                                                {pollingActive && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setPollingActive(false);
+                                                            setSaving(false);
+                                                            setInstanceStatus('disconnected');
+                                                        }}
+                                                        className="px-4 py-2 text-gray-400 hover:text-gray-600 font-medium transition-all"
+                                                    >
+                                                        Cancelar
+                                                    </button>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                     {qrCodeData && instanceStatus !== 'connected' && (
