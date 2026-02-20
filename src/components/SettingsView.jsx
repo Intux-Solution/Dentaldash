@@ -368,6 +368,8 @@ export default function SettingsView() {
 
             if (data.qrcode) {
                 setQrCodeData(data.qrcode.base64 || data.qrcode.code);
+            } else if (data.base64 || data.code) {
+                setQrCodeData(data.base64 || data.code);
             }
 
             if (data.instance?.status === 'open' || data.instance?.state === 'open' || data.instance?.connectionStatus === 'open') {
@@ -626,22 +628,19 @@ export default function SettingsView() {
                                                 Desconectar WhatsApp
                                             </button>
                                         ) : (
-                                            <div className="flex flex-col sm:flex-row gap-3">
+                                            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                                                 <button
                                                     onClick={handleConnectWhatsApp}
                                                     disabled={saving || pollingActive}
-                                                    className="px-6 py-2 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50"
+                                                    className="flex-1 px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50 whitespace-nowrap"
                                                 >
                                                     {pollingActive ? 'Esperando conexión...' : 'Conectar WhatsApp'}
                                                 </button>
                                                 {pollingActive && (
                                                     <button
-                                                        onClick={() => {
-                                                            setPollingActive(false);
-                                                            setSaving(false);
-                                                            setInstanceStatus('disconnected');
-                                                        }}
-                                                        className="px-4 py-2 text-gray-400 hover:text-gray-600 font-medium transition-all"
+                                                        onClick={handleDisconnectWhatsApp}
+                                                        disabled={saving}
+                                                        className="flex-1 px-6 py-2.5 bg-red-50 text-red-600 border border-red-100 rounded-xl font-bold hover:bg-red-100 transition-all disabled:opacity-50"
                                                     >
                                                         Cancelar
                                                     </button>
