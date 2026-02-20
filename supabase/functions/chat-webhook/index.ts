@@ -48,7 +48,16 @@ serve(async (req) => {
         payload = JSON.parse(bodyText);
 
         const instanceName = payload.data?.instance || payload.instance;
-        const messageObj = payload.data?.messages?.[0] || payload.messages?.[0];
+        console.log("Webhook Payload:", JSON.stringify(payload, null, 2));
+
+        let messageObj = payload.data?.messages?.[0] || payload.messages?.[0];
+
+        // Fallback for when data IS the message object (as seen in v2.3 logs)
+        if (!messageObj && payload.data?.key && (payload.data?.message || payload.data?.messageType)) {
+            console.log("Detected v2.3 single message payload format");
+            messageObj = payload.data;
+        }
+
         const remoteJid = messageObj?.key?.remoteJid;
         const messageText = messageObj?.message?.conversation ||
             messageObj?.message?.extendedTextMessage?.text ||
