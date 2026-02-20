@@ -6,6 +6,7 @@ import SearchInput from './SearchInput';
 import PatientTable from './PatientTable';
 import { Link } from 'react-router-dom';
 import { norm } from '../utils/helpers';
+import { AppointmentService } from '../services/AppointmentService';
 
 export default function DashboardView({
   dashboardSearchTerm,
@@ -215,6 +216,22 @@ export default function DashboardView({
               >
                 <Calendar size={14} />
                 Nuevo
+              </button>
+
+              <button
+                onClick={async () => {
+                  try {
+                    alert("Iniciando Sincronización Manual...");
+                    await AppointmentService.syncPendingAppointments();
+                    alert("Sincronización finalizada. Revisar consola para detalles.");
+                  } catch (e) {
+                    alert("Error sync: " + e.message);
+                  }
+                }}
+                className="text-xs text-gray-400 hover:text-gray-600 underline ml-2"
+                title="Forzar Sincronización Google"
+              >
+                Sync GCal
               </button>
             </div>
           </div>

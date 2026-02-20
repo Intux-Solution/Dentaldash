@@ -445,6 +445,7 @@ ${data.notas || 'Sin notas adicionales'}
             }
         } catch (error) {
             console.error('[Sync] Error syncing pending appointments:', error);
+            alert('[Sync Error] ' + error.message); // Visual feedback for the manual trigger
         }
     }
 

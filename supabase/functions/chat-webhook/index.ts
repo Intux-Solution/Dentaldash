@@ -85,6 +85,7 @@ serve(async (req) => {
         }
 
         const remoteJid = messageObj?.key?.remoteJid;
+        const messageId = messageObj?.key?.id;
         const messageText = messageObj?.message?.conversation ||
             messageObj?.message?.extendedTextMessage?.text ||
             messageObj?.message?.imageMessage?.caption ||
@@ -105,8 +106,20 @@ serve(async (req) => {
         if (!EVOLUTION_URL_RAW || !EVOLUTION_KEY) throw new Error("Missing Evolution Secrets");
         const EVOLUTION_API_URL = sanitizeUrl(EVOLUTION_URL_RAW);
 
+        // --- Mark Message as Read (Blue Ticks) ---
+        if (messageId) {
+            fetch(`${EVOLUTION_API_URL}/chat/markMessageAsRead/${instanceName}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+                body: JSON.stringify({
+                    readMessages: [{ remoteJid: remoteJid, fromMe: false, id: messageId }]
+                })
+            }).catch(err => console.error("Error marking read:", err));
+        }
+        // -----------------------------------------
+
         // Fetch context (Tenant)
-        const { data: tenant } = await supabase.from('tenants').select('*').eq('whatsapp_instance', instanceName).single();
+        const { data: tenant } = await supabase.from('tenants').select('*, notification_phone').eq('whatsapp_instance', instanceName).single();
         if (!tenant) throw new Error(`Tenant not found for instance: ${instanceName}`);
 
         // ---------------------------------------------------------
@@ -292,7 +305,9 @@ serve(async (req) => {
                     if (createError) throw new Error("Error creating patient: " + createError.message);
                     patient = newPatient;
                 }
-                const startDateTime = new Date(`${date}T${time}:00`);
+
+                // FIX: Force Argentina Timezone (-03:00) so that 14:00 matches 14:00 AR, not 14:00 UTC (11:00 AR)
+                const startDateTime = new Date(`${date}T${time}:00-03:00`);
                 const endDateTime = new Date(startDateTime.getTime() + 30 * 60000);
 
                 const { data: appointment, error: apptError } = await supabase
@@ -313,6 +328,19 @@ serve(async (req) => {
 
 
                 if (apptError) throw new Error("Error creating appointment: " + apptError.message);
+
+                // --- Notify Dentist (New Feature) ---
+                if (tenant.notification_phone) {
+                    const notifyMsg = `🔔 *Nuevo Turno Agendado*\n\n👤 Paciente: ${patientName}\n📅 Fecha: ${date}\n⏰ Hora: ${time}\n🆔 DNI: ${dni}\n🏥 Obra Social: ${obraSocial}\n📝 Notas: ${notes || '-'}\n\n_Agendado vía WhatsApp Bot_`;
+
+                    // Send asynchronously (don't block response to user)
+                    fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+                        body: JSON.stringify({ number: tenant.notification_phone, text: notifyMsg })
+                    }).catch(err => console.error("Error notifying dentist:", err));
+                }
+                // ------------------------------------
 
                 // Detailed confirmation prompt for the AI
                 return `Turno RESERVADO con éxito. ID: ${appointment.id}. 
