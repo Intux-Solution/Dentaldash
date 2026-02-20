@@ -10,7 +10,9 @@ import {
     ChevronRight,
     Trash2,
     Calendar,
-    Hash
+    Hash,
+    Edit2,
+    X
 } from 'lucide-react';
 import { PatientService } from '../services/PatientService';
 import { OdontogramService } from '../services/OdontogramService';
@@ -36,6 +38,15 @@ export default function OdontogramView() {
         description: ''
     });
     const [addingNote, setAddingNote] = useState(false);
+
+    // Estado para edición inline
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState({
+        tooth_number: '',
+        procedure_type: '',
+        description: ''
+    });
+    const [savingEdit, setSavingEdit] = useState(false);
 
     useEffect(() => {
         if (id) {
@@ -114,6 +125,43 @@ export default function OdontogramView() {
             setHistory(history.filter(h => h.id !== historyId));
         } catch (err) {
             alert('Error al eliminar');
+        }
+    };
+
+    const handleStartEdit = (entry) => {
+        setEditingId(entry.id);
+        setEditForm({
+            tooth_number: entry.tooth_number ? entry.tooth_number.toString() : '',
+            procedure_type: entry.procedure_type || '',
+            description: entry.description || ''
+        });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingId(null);
+        setEditForm({ tooth_number: '', procedure_type: '', description: '' });
+    };
+
+    const handleSaveEdit = async (historyId) => {
+        if (!editForm.procedure_type || !editForm.description) return;
+
+        try {
+            setSavingEdit(true);
+            const updatedEntry = await EvolutionService.updateEntry(historyId, {
+                tooth_number: editForm.tooth_number ? parseInt(editForm.tooth_number) : null,
+                procedure_type: editForm.procedure_type,
+                description: editForm.description
+            });
+
+            // Actualizar la lista localmente
+            setHistory(history.map(item => item.id === historyId ? updatedEntry : item));
+            setEditingId(null);
+            window.dispatchEvent(new CustomEvent('patients:refresh'));
+        } catch (err) {
+            console.error('Error updating history:', err);
+            alert('Error al guardar los cambios.');
+        } finally {
+            setSavingEdit(false);
         }
     };
 
@@ -268,30 +316,97 @@ export default function OdontogramView() {
                                         <div className="absolute left-[-9px] top-1 w-4 h-4 rounded-full bg-teal-500 border-4 border-white shadow-sm" />
 
                                         <div className="bg-gray-50/50 rounded-xl p-3 border border-transparent hover:border-gray-100 hover:bg-white transition-all group">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <Calendar size={12} className="text-teal-600" />
-                                                    <span className="text-[11px] font-bold text-gray-400 uppercase">
-                                                        {new Date(entry.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                                    </span>
+                                            {editingId === entry.id ? (
+                                                <div className="space-y-3 mt-2">
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <div className="col-span-1">
+                                                            <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Pieza</label>
+                                                            <input
+                                                                type="number"
+                                                                placeholder="--"
+                                                                className="w-full mt-1 px-2 py-1.5 rounded-lg border focus:ring-2 focus:ring-teal-500 outline-none text-xs"
+                                                                value={editForm.tooth_number}
+                                                                onChange={e => setEditForm(prev => ({ ...prev, tooth_number: e.target.value }))}
+                                                            />
+                                                        </div>
+                                                        <div className="col-span-2">
+                                                            <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Procedimiento</label>
+                                                            <input
+                                                                type="text"
+                                                                required
+                                                                className="w-full mt-1 px-2 py-1.5 rounded-lg border focus:ring-2 focus:ring-teal-500 outline-none text-xs font-semibold text-gray-900"
+                                                                value={editForm.procedure_type}
+                                                                onChange={e => setEditForm(prev => ({ ...prev, procedure_type: e.target.value }))}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Detalle / Notas</label>
+                                                        <textarea
+                                                            required
+                                                            rows={2}
+                                                            className="w-full mt-1 px-2 py-1.5 rounded-lg border focus:ring-2 focus:ring-teal-500 outline-none text-xs resize-none"
+                                                            value={editForm.description}
+                                                            onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div className="flex justify-end gap-2 pt-1 border-t border-gray-100">
+                                                        <button
+                                                            onClick={handleCancelEdit}
+                                                            disabled={savingEdit}
+                                                            className="px-3 py-1.5 flex items-center gap-1 text-xs font-semibold text-gray-500 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
+                                                        >
+                                                            <X size={12} />
+                                                            Cancelar
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleSaveEdit(entry.id)}
+                                                            disabled={savingEdit || !editForm.procedure_type}
+                                                            className="px-3 py-1.5 flex items-center gap-1 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-md transition-colors disabled:opacity-50"
+                                                        >
+                                                            {savingEdit ? <Loader size={12} className="animate-spin" /> : <Save size={12} />}
+                                                            Guardar
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <button
-                                                    onClick={() => handleDeleteHistory(entry.id)}
-                                                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 transition-all"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            </div>
+                                            ) : (
+                                                <>
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <Calendar size={12} className="text-teal-600" />
+                                                            <span className="text-[11px] font-bold text-gray-400 uppercase">
+                                                                {new Date(entry.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                            <button
+                                                                onClick={() => handleStartEdit(entry)}
+                                                                className="p-1 text-gray-300 hover:text-teal-600 transition-all rounded hover:bg-teal-50"
+                                                                title="Editar registro"
+                                                            >
+                                                                <Edit2 size={14} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteHistory(entry.id)}
+                                                                className="p-1 text-gray-300 hover:text-red-500 transition-all rounded hover:bg-red-50"
+                                                                title="Eliminar registro"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
 
-                                            <div className="flex items-center gap-2 mb-1">
-                                                {entry.tooth_number && (
-                                                    <span className="flex items-center gap-1 bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-black">
-                                                        <Hash size={10} /> {entry.tooth_number}
-                                                    </span>
-                                                )}
-                                                <h4 className="text-sm font-bold text-gray-900">{entry.procedure_type}</h4>
-                                            </div>
-                                            <p className="text-xs text-gray-600 leading-relaxed">{entry.description}</p>
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        {entry.tooth_number && (
+                                                            <span className="flex items-center gap-1 bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-black">
+                                                                <Hash size={10} /> {entry.tooth_number}
+                                                            </span>
+                                                        )}
+                                                        <h4 className="text-sm font-bold text-gray-900">{entry.procedure_type}</h4>
+                                                    </div>
+                                                    <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">{entry.description}</p>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 ))

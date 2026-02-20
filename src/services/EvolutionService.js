@@ -44,5 +44,25 @@ export const EvolutionService = {
             console.error('Error deleting treatment history entry:', error);
             throw error;
         }
+    },
+
+    async updateEntry(id, { tooth_number, procedure_type, description }) {
+        const { data, error } = await supabase
+            .from('treatment_history')
+            .update({
+                tooth_number,
+                procedure_type,
+                description,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error updating treatment history entry:', error);
+            throw error;
+        }
+        return data;
     }
 };

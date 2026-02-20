@@ -273,6 +273,11 @@ export default function TurnosView({ onOpenBooking, onViewTurno }) {
                               </span>
                               <span className="text-gray-400">-</span>
                               <span className="font-medium text-gray-900">{title}</span>
+                              {ev.notes?.toLowerCase().includes('whatsapp') && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#4ade80] text-white tracking-wide">
+                                  WhatsApp
+                                </span>
+                              )}
                             </div>
                             {who && (
                               <div className="text-gray-700 font-medium mb-1">{who}</div>

@@ -259,7 +259,14 @@ export default function DashboardView({
                       </div>
                     </div>
                     <div className="flex-1 sm:ml-4">
-                      <p className="font-medium text-gray-900">{turno.titulo}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900">{turno.titulo}</p>
+                        {turno.raw?.notes?.toLowerCase().includes('whatsapp') && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#4ade80] text-white tracking-wide">
+                            WhatsApp
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-500">{turno.detalle}</p>
                       {turno.descripcion && (
                         <p className="text-xs text-gray-500 mt-0.5 truncate">{turno.descripcion}</p>

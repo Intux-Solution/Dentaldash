@@ -376,7 +376,7 @@ serve(async (req) => {
                 const { data: appointment, error: apptError } = await supabase
                     .from('appointments')
                     .insert({
-                        title: `Turno WhatsApp - ${patientName}`,
+                        title: `Consulta General - ${patientName}`,
                         patient_id: patient.id,
                         organization_id: tenant.user_id,
                         start_time: startDateTime.toISOString(),
