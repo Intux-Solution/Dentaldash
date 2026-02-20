@@ -429,7 +429,7 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
                 const currentDateTimeString = now.toLocaleDateString('es-AR', options);
 
                 const systemPrompt = (AGENT_PROMPT || `Eres la secretaria de "${tenant.business_name}". Atiende dudas de forma amable.`) +
-                    `\n\nHOY ES: ${currentDateTimeString} (Hora Argentina).\n\n${calendarContext}\n\nContexto actual de la clínica:\n${contextInfo}\n\nIMPORTANTE: Para agendar turnos, SIEMPRE usa las herramientas (functions) provistas. Si el usuario quiere un turno, verifica disponibilidad con 'get_available_slots'.\n\nSI ES UN PACIENTE NUEVO (no identificado), NECESITAS PEDIRLE:\n1. Nombre y Apellido\n2. DNI\n3. Teléfono (si es distinto al de WhatsApp)\n4. Obra Social\n\n(No inventes datos. Pídelos amablemente).`;
+                    `\n\nHOY ES: ${currentDateTimeString} (Hora Argentina).\n\n${calendarContext}\n\nContexto actual de la clínica:\n${contextInfo}\n\nREGLAS DE ORO:\n1. Si el usuario pide un turno o disponibilidad, **EJECUTA LA FUNCIÓN 'get_available_slots' INMEDIATAMENTE**. NO respondas con texto como "Permíteme verificar" o "Déjame ver". ACTÚA, NO HABLES SOBRE ACTUAR.\n2. SI ES UN PACIENTE NUEVO (no identificado), NECESITAS PEDIRLE:\n   - Nombre y Apellido\n   - DNI\n   - Teléfono\n   - Obra Social\n   (No inventes datos. Pídelos amablemente).\n3. Para confirmar un turno, USA 'create_appointment'.\n\nResponde de forma corta y concisa.`;
 
                 let aiResponse = "";
 
