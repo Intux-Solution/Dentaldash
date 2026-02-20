@@ -1,0 +1,16 @@
+{
+    "event": "MESSAGES_UPSERT",
+    "data": {
+        "instance": "instance_130f0577",
+        "messages": [
+            {
+                "key": {
+                    "remoteJid": "5493813300100@s.whatsapp.net"
+                },
+                "message": {
+                    "conversation": "Hola, ¿cuáles son los horarios de atención?"
+                }
+            }
+        ]
+    }
+}

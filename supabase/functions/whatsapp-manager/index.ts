@@ -53,7 +53,7 @@ serve(async (req) => {
 
             if (response.ok) {
                 // Set Webhook
-                await fetch(`${baseUrl}/webhook/set/${instanceName}`, {
+                const webhookResp = await fetch(`${baseUrl}/webhook/instance/${instanceName}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
                     body: JSON.stringify({
@@ -62,6 +62,7 @@ serve(async (req) => {
                         events: ["MESSAGES_UPSERT"]
                     })
                 });
+                console.log(`Webhook set response for ${instanceName}:`, webhookResp.status, await webhookResp.text());
 
                 const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!)
                 await supabase.from('tenants').update({
@@ -86,7 +87,7 @@ serve(async (req) => {
 
             if (stateData?.instance?.state === 'open') {
                 // Auto-sync webhook just in case
-                await fetch(`${baseUrl}/webhook/set/${instanceName}`, {
+                await fetch(`${baseUrl}/webhook/instance/${instanceName}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
                     body: JSON.stringify({
@@ -119,7 +120,7 @@ serve(async (req) => {
         }
 
         if (action === 'sync_webhook') {
-            const response = await fetch(`${baseUrl}/webhook/set/${instanceName}`, {
+            const response = await fetch(`${baseUrl}/webhook/instance/${instanceName}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
                 body: JSON.stringify({
@@ -130,6 +131,23 @@ serve(async (req) => {
             });
             const data = await response.json();
             return new Response(JSON.stringify(data), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+            })
+        }
+
+        if (action === 'debug_instance') {
+            const instanceResponse = await fetch(`${baseUrl}/instance/fetchInstances?instanceName=${instanceName}`, {
+                headers: { 'apikey': EVOLUTION_API_KEY }
+            });
+            const instanceData = await instanceResponse.json();
+
+            const webhookResponse = await fetch(`${baseUrl}/webhook/instance/${instanceName}`, {
+                headers: { 'apikey': EVOLUTION_API_KEY }
+            });
+            const webhookData = await webhookResponse.json();
+
+            return new Response(JSON.stringify({ instance: instanceData, webhooks: webhookData, baseUrl, webhookUrl }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 200,
             })
