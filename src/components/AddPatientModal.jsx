@@ -1,3 +1,4 @@
+import React, { useState, useRef } from 'react';
 import { X, User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope, Paperclip } from 'lucide-react';
 import InsuranceAutocomplete from './InsuranceAutocomplete';
 import { message } from 'antd';
