@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import { message } from 'antd';
 
@@ -31,19 +31,7 @@ export function useSettings(session = null) {
     const [instanceStatus, setInstanceStatus] = useState('disconnected');
     const [pollingActive, setPollingActive] = useState(false);
 
-    useEffect(() => {
-        fetchSettings();
-    }, [fetchSettings]);
-
-    useEffect(() => {
-        let interval;
-        if (pollingActive) {
-            interval = setInterval(checkConnectionStatus, 5000);
-        }
-        return () => clearInterval(interval);
-    }, [pollingActive, profile.user_id]);
-
-    const checkConnectionStatus = async () => {
+    const checkConnectionStatus = useCallback(async () => {
         if (!profile.whatsapp_instance || !profile.user_id) return;
 
         try {
@@ -72,17 +60,17 @@ export function useSettings(session = null) {
         } catch (err) {
             console.error('Connection check error:', err);
         }
-    };
+    }, [profile.whatsapp_instance, profile.user_id]);
 
-    const fetchSettings = useCallback(async () => { // Renamed fetchData to fetchSettings and wrapped in useCallback
+    const fetchSettings = useCallback(async () => {
         try {
             setLoading(true);
 
             // Usar la sesión pasada por props si existe
-            const user = session?.user; // Replaced supabase.auth.getUser() with session prop
+            const user = session?.user;
 
             if (!user) {
-                console.warn("useSettings: No active user found in session"); // Updated console message
+                console.warn("useSettings: No active user found in session");
                 setLoading(false);
                 return;
             }
@@ -90,8 +78,8 @@ export function useSettings(session = null) {
             const userId = user.id;
 
             // Extract Google Session fallbacks
-            const sessionName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email; // Added user?.email fallback
-            const sessionAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture; // Removed null default
+            const sessionName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email;
+            const sessionAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
 
             if (sessionAvatar) {
                 setGoogleAvatar(sessionAvatar);
@@ -154,7 +142,19 @@ export function useSettings(session = null) {
         }
     }, [session]);
 
-    const handleAutoSaveProfile = async (updates) => {
+    useEffect(() => {
+        fetchSettings();
+    }, [fetchSettings]);
+
+    useEffect(() => {
+        let interval;
+        if (pollingActive) {
+            interval = setInterval(checkConnectionStatus, 5000);
+        }
+        return () => clearInterval(interval);
+    }, [pollingActive, checkConnectionStatus]);
+
+    const handleAutoSaveProfile = useCallback(async (updates) => {
         try {
             if (!session?.user?.id) return;
             const { error } = await supabase
@@ -168,13 +168,13 @@ export function useSettings(session = null) {
         } catch (err) {
             console.error('AutoSave error:', err);
         }
-    };
+    }, [session?.user?.id]);
 
-    const handleProfileChange = (field, value) => {
+    const handleProfileChange = useCallback((field, value) => {
         setProfile(prev => ({ ...prev, [field]: value }));
-    };
+    }, []);
 
-    const handleAvatarChange = async (e) => {
+    const handleAvatarChange = useCallback(async (e) => {
         const file = e.target.files[0];
         if (!file || !session?.user?.id) return;
 
@@ -206,9 +206,9 @@ export function useSettings(session = null) {
         } finally {
             setSaving(false);
         }
-    };
+    }, [session?.user?.id]);
 
-    const handleConnectWhatsApp = async () => {
+    const handleConnectWhatsApp = useCallback(async () => {
         try {
             setSaving(true);
             const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
@@ -228,9 +228,9 @@ export function useSettings(session = null) {
         } finally {
             setSaving(false);
         }
-    };
+    }, [profile.user_id]);
 
-    const handleDisconnectWhatsApp = async () => {
+    const handleDisconnectWhatsApp = useCallback(async () => {
         try {
             setSaving(true);
             await supabase.functions.invoke('whatsapp-manager', {
@@ -247,7 +247,7 @@ export function useSettings(session = null) {
         } finally {
             setSaving(false);
         }
-    };
+    }, [profile.user_id]);
 
     return {
         // State

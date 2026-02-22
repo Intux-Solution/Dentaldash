@@ -27,7 +27,6 @@ export class AppointmentService {
                 .lte('end_time', to);
 
             if (error) throw error;
-
             return data.map(app => ({
                 id: app.id,
                 title: app.title,
@@ -40,11 +39,9 @@ export class AppointmentService {
                 patientDni: app.patient?.dni,
                 patientPhone: app.patient?.telefono,
                 tipoTurnoNombre: app.appointment_type,
-                // Helper fields for frontend - we won't map to hardcoded IDs here
                 tipoTurno: app.appointment_type,
             }));
         } catch (error) {
-            console.error('Error fetching appointments:', error);
             throw error;
         }
     }
@@ -424,7 +421,7 @@ ${data.notas || 'Sin notas adicionales'}
             for (const appt of pending) {
                 try {
                     const googleEvent = await GoogleCalendarService.createEvent({
-                        title: `${appt.title} - ${appt.patient_name}`,
+                        title: `${appt.title} - ${appt.patient?.nombre || 'Paciente'}`,
                         start_time: appt.start_time,
                         end_time: appt.end_time,
                         notes: appt.notes
@@ -460,26 +457,15 @@ ${data.notas || 'Sin notas adicionales'}
                 .eq('id', id)
                 .single();
 
-            console.log('Attempting to delete appointment:', id, 'Google ID:', appointment?.google_event_id);
-
-            // 2. Soft delete in Supabase
-            const { error } = await supabase
-                .from('appointments')
-                .update({ status: 'cancelled' })
-                .eq('id', id);
-
             if (error) throw error;
 
             // 3. Delete from Google Calendar
             if (appointment?.google_event_id) {
                 try {
                     await GoogleCalendarService.deleteEvent(appointment.google_event_id);
-                    console.log('Google Event deleted successfully:', appointment.google_event_id);
                 } catch (syncError) {
                     console.error('Google Sync Error (Delete):', syncError);
                 }
-            } else {
-                console.warn('Skipping Google Delete: No google_event_id found in DB.');
             }
 
             return true;

@@ -13,7 +13,6 @@ import { useTurnos } from '../hooks/useTurnos';
 import { ModalsProvider } from '../hooks/useModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
 
-// import { checkTokenExpiry } from '../utils/auth'; // Removed: causing confusion
 import { PatientService } from '../services/PatientService';
 import { AppointmentService } from '../services/AppointmentService';
 
@@ -36,13 +35,6 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
       if (onConsumedLogin) onConsumedLogin();
     }
   }, [justLoggedIn, navigate, onConsumedLogin]);
-
-  // Debug: Mostrar info del token en desarrollo
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      // Debug deshabilitado: evitar logs en consola
-    }
-  }, []);
 
   // Sync pendientes con Google Calendar al iniciar y periódicamente
   useEffect(() => {

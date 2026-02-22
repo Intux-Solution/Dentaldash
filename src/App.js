@@ -15,20 +15,13 @@ export default function App() {
   const lastSessionId = React.useRef(null);
 
   React.useEffect(() => {
-    // Track re-mounts within the same page session
-    window._appMountCount = (window._appMountCount || 0) + 1;
-    console.log(`[DEBUG] App.js mount #${window._appMountCount}`);
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       const newId = newSession?.user?.id || null;
-      console.log(`[AUTH] Event: ${event} | SessionID: ${newId} | PreviousID: ${lastSessionId.current}`);
 
       // Evitar actualizaciones de estado si el ID de usuario no ha cambiado (evita bucles)
       if (newId === lastSessionId.current && event !== 'SIGNED_OUT') {
-        // Si el evento es un refresh pero el usuario es el mismo, solo actualizamos el objeto si es necesario
-        // pero evitamos disparar todo el árbol de renders si ya tenemos sesión.
         setLoading(false);
         return;
       }
@@ -41,13 +34,11 @@ export default function App() {
         return;
       }
 
-      // Si hay una sesión nueva o cambiada
       setSession(newSession);
       setLoading(false);
 
       // Sincronización del token de Google (solo en eventos clave)
       if (newSession.provider_refresh_token && newSession.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        console.log("App: Syncing Google provider token to profile...");
         supabase.from('profiles')
           .upsert({ id: newSession.user.id, google_refresh_token: newSession.provider_refresh_token })
           .then(({ error }) => {
@@ -57,7 +48,6 @@ export default function App() {
     });
 
     return () => {
-      console.log(`App.js unmount #${window._appMountCount}`);
       subscription.unsubscribe();
     };
   }, []);

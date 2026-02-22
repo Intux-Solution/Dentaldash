@@ -39,8 +39,6 @@ export function ModalsProvider({ children, patients = [], turnos = [], addPatien
   const closeEditPatient = useCallback(() => setShowEditModal(false), []);
   const closeRecordModal = useCallback(() => {
     setShowRecordModal(false);
-    // Don't clear selectedPatient immediately if we might be viewing it in profile
-    // setSelectedPatient(null);
   }, []);
 
   const onOpenRecord = useCallback((p) => {

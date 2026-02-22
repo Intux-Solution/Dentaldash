@@ -26,32 +26,21 @@ export class GoogleCalendarService {
     static async refreshGoogleToken(session) {
         try {
             const refreshToken = this.getRefreshToken(session);
-            if (!refreshToken) {
-                console.warn("No refresh token available in session. User might need to re-login with offline access.");
-                return null;
-            }
+            if (!refreshToken) return null;
 
-            console.log("Refreshing Google Token via Edge Function...");
             const { data, error } = await supabase.functions.invoke('google-token-refresh', {
                 body: { refresh_token: refreshToken }
             });
 
-            if (error) {
-                console.error("Edge Function Error:", error);
-                return null;
-            }
+            if (error) return null;
 
             if (data?.access_token) {
                 cachedToken = data.access_token;
-                console.log("Google Token refreshed successfully.");
                 return data.access_token;
             }
 
-            console.error("Failed to refresh token:", data);
             return null;
-
         } catch (e) {
-            console.error("refreshGoogleToken Exception:", e);
             return null;
         }
     }

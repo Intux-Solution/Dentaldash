@@ -45,8 +45,6 @@ export class PatientService {
    */
   static async fetchAllPatients(): Promise<any[]> {
     try {
-      // Eliminamos el getSession() innecesario que estaba causando un Deadlock en Supabase JS client.
-
       const { data, error } = await supabase
         .from('patients')
         .select('*')
@@ -65,7 +63,6 @@ export class PatientService {
         estado: p.estado || 'Activo',
       }));
     } catch (error) {
-      console.error('Error fetching patients:', error);
       throw error;
     }
   }
@@ -94,7 +91,6 @@ export class PatientService {
         estado: p.estado || 'Activo',
       }));
     } catch (error) {
-      console.error('Error searching patients:', error);
       throw error;
     }
   }
@@ -143,7 +139,6 @@ export class PatientService {
         estado: data.estado || 'Activo',
       };
     } catch (error) {
-      console.error('Error getting patient by ID:', error);
       throw error;
     }
   }
@@ -175,7 +170,6 @@ export class PatientService {
         estado: data.estado || 'Activo',
       };
     } catch (error) {
-      console.error('Error getting patient by DNI:', error);
       throw error;
     }
   }
@@ -203,7 +197,6 @@ export class PatientService {
 
       return data.publicUrl;
     } catch (error) {
-      console.error('Error in uploadClinicalRecord:', error);
       throw error;
     }
   }
@@ -251,14 +244,9 @@ export class PatientService {
       };
 
     } catch (error) {
-      console.error('Error creating patient:', error);
       // Rollback: Si subimos un archivo a Storage pero la DB falló, purgamos la imagen subida.
       if (historiaClinicaPath) {
-        console.warn('Rolling back newly uploaded file due to DB failure...');
         try {
-          // The deleteFile method in StorageService expects a path, not a public URL.
-          // If uploadClinicalRecord now returns a public URL, this rollback logic might need adjustment.
-          // For now, assuming StorageService.deleteFile can handle the public URL or the path can be extracted.
           await StorageService.deleteFile(historiaClinicaPath, 'clinical-records');
         } catch (cleanupError) {
           console.error('CRITICAL: Failed to rollback file in storage', cleanupError);
@@ -377,7 +365,6 @@ export class PatientService {
       if (error) throw error;
       return true;
     } catch (error) {
-      console.error('Error deleting patient:', error);
       throw error;
     }
   }
