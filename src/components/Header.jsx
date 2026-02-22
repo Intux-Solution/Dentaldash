@@ -20,9 +20,19 @@ export default function Header({ title, setSidebarOpen, onLogout, session }) {
 
     const profileSubscription = supabase
       .channel('header_profile_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        fetchUserData();
-      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${session.user.id}`
+        },
+        () => {
+          console.log("Header: Profile changed, refreshing...");
+          fetchUserData();
+        }
+      )
       .subscribe();
 
     return () => {

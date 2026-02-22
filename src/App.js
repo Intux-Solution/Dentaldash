@@ -14,49 +14,48 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log("App.js mount: Checking session...");
+    // Track re-mounts within the same page session
+    window._appMountCount = (window._appMountCount || 0) + 1;
+    console.log(`[DEBUG] App.js mount #${window._appMountCount} - Navigation Type: ${performance.navigation.type}`);
 
-    // 1. Check active session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error("Error getting session on mount:", error);
-      }
-      console.log("Initial session check:", session ? "Found" : "Not found", session?.user?.email);
-      setSession(session);
-      setLoading(false);
-
-      // Guardar el token de refresh si existe
-      if (session?.provider_refresh_token && session.user) {
-        supabase.from('profiles').upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token }).then();
-      }
-    });
-
-    // 2. Listen for changes
+    // Solo usamos onAuthStateChange para capturar la sesión inicial y cambios.
+    // getSession() es redundante y causa deadlocks al ejecutarse en paralelo con el listener interno de Supabase.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("AuthStateChange event:", event, "Session exists?", !!session);
 
       if (event === 'SIGNED_OUT') {
-        console.log("Event SIGNED_OUT: Clearing session state.");
         setSession(null);
         setLoading(false);
         return;
       }
 
-      setSession(session);
-      setLoading(false);
+      // Si hay una sesión, la guardamos.
+      if (session) {
+        setSession(session);
+        setLoading(false);
 
-      if (session?.provider_refresh_token && session.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        try {
-          await supabase.from('profiles').upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token });
-        } catch (e) {
-          console.error("Failed to sync refresh token:", e);
+        // Registro de actividad/refresh token (opcional, solo en eventos relevantes)
+        if (session.provider_refresh_token && session.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+          console.log("Syncing provider token...");
+          supabase.from('profiles')
+            .upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token })
+            .then(({ error }) => {
+              if (error) console.error("Error syncing refresh token:", error);
+            });
         }
+      } else {
+        // No hay sesión
+        setSession(null);
+        setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      console.log(`App.js unmount #${window._appMountCount}`);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleLogout = async () => {
