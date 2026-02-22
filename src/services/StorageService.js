@@ -21,6 +21,16 @@ export const StorageService = {
                 finalPath = fileName;
             }
 
+            // SAFETY NET: Supabase RLS policies usually require the file to be within 
+            // a folder matching the user's ID to permit the INSERT operation.
+            // If finalPath does not contain a '/', it means it's trying to upload to root.
+            if (bucket === 'clinical-records' && finalPath && !finalPath.includes('/')) {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user?.id) {
+                    finalPath = `${session.user.id}/${finalPath}`;
+                }
+            }
+
             const { data, error } = await supabase.storage
                 .from(bucket)
                 .upload(finalPath, file, {
