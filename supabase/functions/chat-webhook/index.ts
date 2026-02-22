@@ -74,14 +74,32 @@ serve(async (req) => {
         if (!bodyText) return new Response('Empty body', { status: 200 });
         payload = JSON.parse(bodyText);
 
-        // --- DEBUG LOGGING ---
+        // --- DEBUG LOGGING (Sanitized for Privacy) ---
         try {
+            const sanitizedPayload = JSON.parse(JSON.stringify(payload)); // Deep clone
+
+            // Redact Evolution API typical paths
+            if (sanitizedPayload?.data?.messages?.[0]?.message?.conversation) {
+                sanitizedPayload.data.messages[0].message.conversation = "[REDACTED PHI]";
+            }
+            if (sanitizedPayload?.data?.messages?.[0]?.key?.remoteJid) {
+                sanitizedPayload.data.messages[0].key.remoteJid = "[REDACTED PHONE]";
+            }
+            // Add similar redaction for v2.3 single message
+            if (sanitizedPayload?.data?.key?.remoteJid && sanitizedPayload?.data?.message) {
+                sanitizedPayload.data.key.remoteJid = "[REDACTED PHONE]";
+                if (sanitizedPayload.data.message.conversation) {
+                    sanitizedPayload.data.message.conversation = "[REDACTED PHI]";
+                }
+            }
+
+            // Always insert the sanitized version instead of the raw payload
             await supabase.from('debug_payloads').insert({
                 function_name: 'chat-webhook-incoming',
-                payload: payload
+                payload: sanitizedPayload
             });
         } catch (e) { console.error("Debug Log Fail", e); }
-        // ---------------------
+        // ---------------------------------------------
 
         const instanceName = payload.data?.instance || payload.instance;
         // console.log("Webhook Payload:", JSON.stringify(payload, null, 2));
@@ -132,281 +150,283 @@ serve(async (req) => {
         const { data: tenant } = await supabase.from('tenants').select('*, notification_phone').eq('whatsapp_instance', instanceName).single();
         if (!tenant) throw new Error(`Tenant not found for instance: ${instanceName}`);
 
-        // ---------------------------------------------------------
-        // MESSAGE BATCHING / DEBOUNCE LOGIC
-        // ---------------------------------------------------------
-
-        // 1. Insert incoming message as 'pending'
-        const { data: insertedMsg, error: insertError } = await supabase.from('chat_history').insert({
-            tenant_id: tenant.id,
-            whatsapp_instance: instanceName,
-            jid: remoteJid,
-            role: 'user',
-            content: messageText,
-            status: 'pending' // New column
-        }).select().single();
-
-        if (insertError) throw new Error("Failed to insert message: " + insertError.message);
-
-        console.log(`Msg ${insertedMsg.id} inserted. Waiting for debounce...`);
-
-        // 2. Wait 5-7 seconds
-        await new Promise(resolve => setTimeout(resolve, 5000));
-
-        // 3. Check for newer pending messages from same User
-        const { data: newerMessages } = await supabase
-            .from('chat_history')
-            .select('id')
-            .eq('jid', remoteJid)
-            .eq('role', 'user')
-            .eq('status', 'pending')
-            .gt('created_at', insertedMsg.created_at) // Newer than current
-            .limit(1);
-
-        if (newerMessages && newerMessages.length > 0) {
-            console.log(`Msg ${insertedMsg.id}: Newer messages detected. Exiting trace.`);
-            return new Response('Debounce: Newer message handles response', { status: 200 });
-        }
-
-        // 4. If no newer messages, we are the designated handler.
-        // Fetch ALL pending messages to combine
-        const { data: pendingBatch } = await supabase
-            .from('chat_history')
-            .select('*')
-            .eq('jid', remoteJid)
-            .eq('role', 'user')
-            .eq('status', 'pending')
-            .order('created_at', { ascending: true });
-
-        if (!pendingBatch || pendingBatch.length === 0) {
-            console.log(`Msg ${insertedMsg.id}: No pending batch found (maybe processed by another thread?). Exiting.`);
-            return new Response('Debounce: Batch already processed', { status: 200 });
-        }
-
-        // Combine text
-        const finalMessageText = pendingBatch.map((m: any) => m.content).join(' ');
-        console.log(`Processing batch of ${pendingBatch.length} messages: "${finalMessageText}"`);
-
-        // Mark all as processed immediately to prevent double-processing
-        const batchIds = pendingBatch.map((m: any) => m.id);
-        await supabase
-            .from('chat_history')
-            .update({ status: 'processed' })
-            .in('id', batchIds);
-
-        // ---------------------------------------------------------
-        // Core Logic (Patient ID, Context, AI)
-        // ---------------------------------------------------------
-
-        // Identify Patient
-        const cleanPhone = sanitizePhone(remoteJid);
-        const { data: patientData } = await supabase
-            .from('patients')
-            .select('*')
-            .eq('telefono', cleanPhone)
-            .eq('organization_id', tenant.user_id)
-            .maybeSingle(); // Changed from single() to avoid error on not found
-
-        // Fetch Rest of Context
-        const [profileRes, schedulesRes, historyRes] = await Promise.all([
-            supabase.from('profiles').select('*').eq('id', tenant.user_id).single(),
-            supabase.from('schedules').select('*').eq('is_active', true).order('day_of_week', { ascending: true }),
-            supabase.from('chat_history')
-                .select('role, content')
-                .eq('jid', remoteJid)
-                .eq('whatsapp_instance', instanceName)
-                .eq('status', 'processed') // Only historical processed messages
-                .neq('id', insertedMsg.id) // Exclude current ones (we just processed them, but better to use clean history)
-                // Actually, historyRes should NOT include the current batch we just processed if we want proper flow?
-                // Or proper flow includes them? 
-                // Standard: User says "Hi". History: [Hi]. AI: "Hello".
-                // Here: User says "Hi", "Help". Batch: "Hi Help". History should effectively reflect "Hi Help".
-                // We'll append the combined text to the Prompt History manually.
-                .order('created_at', { ascending: false })
-                .limit(10)
-        ]);
-
-        const profile = profileRes.data;
-        // Filter out the ids we just processed from history fetch just in case they slipped in
-        const history = (historyRes.data || [])
-            .filter((m: any) => !batchIds.includes(m.id))
-            .reverse();
-
-        // Tool Implementations
-        const getAvailableSlots = async (dateStr: string) => {
+        const processWebhookBackground = async () => {
             try {
-                const date = new Date(dateStr);
-                const dayOfWeek = date.getDay(); // 0 = Sun, 1 = Mon, ...
+                // ---------------------------------------------------------
+                // MESSAGE BATCHING / DEBOUNCE LOGIC
+                // ---------------------------------------------------------
 
-                // 1. Check if open this day
-                const daySchedules = schedulesRes.data?.filter((s: any) => s.day_of_week === dayOfWeek);
-                if (!daySchedules || daySchedules.length === 0) return "La clínica está cerrada este día.";
+                // 1. Insert incoming message as 'pending'
+                const { data: insertedMsg, error: insertError } = await supabase.from('chat_history').insert({
+                    tenant_id: tenant.id,
+                    whatsapp_instance: instanceName,
+                    jid: remoteJid,
+                    role: 'user',
+                    content: messageText,
+                    status: 'pending' // New column
+                }).select().single();
 
-                // 2. Fetch existing appointments
-                const startOfDay = new Date(`${dateStr}T00:00:00`).toISOString();
-                const endOfDay = new Date(`${dateStr}T23:59:59`).toISOString();
+                if (insertError) throw new Error("Failed to insert message: " + insertError.message);
 
-                const { data: appointments } = await supabase
-                    .from('appointments')
-                    .select('start_time, end_time')
-                    .eq('organization_id', tenant.user_id)
-                    .gte('start_time', startOfDay)
-                    .lte('start_time', endOfDay)
-                    .neq('status', 'cancelled');
+                console.log(`Msg ${insertedMsg.id} inserted. Waiting for debounce...`);
 
-                // 3. Time buffer: filter out slots that are in the past or < 30 min from now
-                const nowTime = new Date();
-                // Ajustar al timezone correspondiente si fuera estrictamente necesario,
-                // asumiendolo corre localmente / server está en UTC y la clínica en un TZ.
-                // Como Vercel/Supabase corren en UTC, usaremos new Date(), pero lo compararemos
-                // con slotStart que también es UTC. Sin embargo, slotStart aquí se arma con `${dateStr}T${schedule.start_time}`,
-                // lo que en JS toma el TZ local de la Edge Function (UTC).
-                // Para simplificar, comparamos el timestamp actual + 30m.
-                const minTimeForAppt = new Date(nowTime.getTime() + 30 * 60000);
+                // 2. Wait 3 seconds (Reducido para background deployment seguro)
+                await new Promise(resolve => setTimeout(resolve, 3000));
 
-                // 4. Generate slots
-                const slotsArray: string[] = [];
-                const slotDuration = 30; // minutes
+                // 3. Check for newer pending messages from same User
+                const { data: newerMessages } = await supabase
+                    .from('chat_history')
+                    .select('id')
+                    .eq('jid', remoteJid)
+                    .eq('role', 'user')
+                    .eq('status', 'pending')
+                    .gt('created_at', insertedMsg.created_at) // Newer than current
+                    .limit(1);
 
-                for (const schedule of daySchedules) {
-                    let currentTime = new Date(`${dateStr}T${schedule.start_time}`);
-                    const endTime = new Date(`${dateStr}T${schedule.end_time}`);
-
-                    while (currentTime < endTime) {
-                        const slotStart = currentTime;
-                        const slotEnd = new Date(currentTime.getTime() + slotDuration * 60000);
-
-                        if (slotEnd > endTime) break;
-
-                        // Excluir si el slot es antes del tiempo mínimo permitido
-                        if (slotStart < minTimeForAppt) {
-                            currentTime = slotEnd;
-                            continue;
-                        }
-
-                        const isOccupied = appointments?.some((appt: any) => {
-                            const apptStart = new Date(appt.start_time);
-                            const apptEnd = new Date(appt.end_time);
-                            return (slotStart < apptEnd && slotEnd > apptStart);
-                        });
-
-                        if (!isOccupied) {
-                            slotsArray.push(slotStart.toTimeString().substring(0, 5));
-                        }
-                        currentTime = slotEnd;
-                    }
+                if (newerMessages && newerMessages.length > 0) {
+                    console.log(`Msg ${insertedMsg.id}: Newer messages detected. Exiting trace.`);
+                    return; // background exit
                 }
 
-                // Remove duplicates and sort, just in case schedules overlap
-                const slots = Array.from(new Set(slotsArray)).sort();
+                // 4. If no newer messages, we are the designated handler.
+                // Fetch ALL pending messages to combine
+                const { data: pendingBatch } = await supabase
+                    .from('chat_history')
+                    .select('*')
+                    .eq('jid', remoteJid)
+                    .eq('role', 'user')
+                    .eq('status', 'pending')
+                    .order('created_at', { ascending: true });
 
-                if (slots.length === 0) return "No hay turnos disponibles para esta fecha.";
-                return `Horarios disponibles para ${dateStr}: ${slots.join(', ')}`;
+                if (!pendingBatch || pendingBatch.length === 0) {
+                    console.log(`Msg ${insertedMsg.id}: No pending batch found (maybe processed by another thread?). Exiting.`);
+                    return; // background exit
+                }
 
-            } catch (e: any) {
-                console.error("Error getting slots:", e);
-                return `Error al consultar disponibilidad: ${e.message}`;
-            }
-        };
+                // Combine text
+                const finalMessageText = pendingBatch.map((m: any) => m.content).join(' ');
+                console.log(`Processing batch of ${pendingBatch.length} messages: "${finalMessageText}"`);
 
-        const createAppointment = async (date: string, time: string, patientName: string, dni: string, obraSocial: string, email: string | undefined, notes: string, telefono: string | undefined) => {
-            try {
-                // Should prioritize the provided phone if available, otherwise use sanitizePhone(remoteJid)
-                // But sanitizePhone(remoteJid) is the one we use for lookup.
-                // If user provides a DIFFERENT phone, we should probably update it or use it for creation.
-                // For simplicity, let's use the JID as the primary identifier for lookup, 
-                // but if creating a NEW patient, we can use the provided phone if valid.
+                // Mark all as processed immediately to prevent double-processing
+                const batchIds = pendingBatch.map((m: any) => m.id);
+                await supabase
+                    .from('chat_history')
+                    .update({ status: 'processed' })
+                    .in('id', batchIds);
 
-                const jidPhone = sanitizePhone(remoteJid);
-                // If the user explicitly provided a phone number, use that for the record. 
-                // Otherwise use the WhatsApp one.
-                const finalPhone = telefono ? telefono.trim() : jidPhone;
+                // ---------------------------------------------------------
+                // Core Logic (Patient ID, Context, AI)
+                // ---------------------------------------------------------
 
-                // Lookup by JID phone first (since they are messaging from there)
-                // OR by the provided phone? 
-                // Let's stick to JID for lookup to maintain thread continuity.
-                // If they provide a different phone for contact, we store it.
-
-                let { data: patient } = await supabase
+                // Identify Patient
+                const cleanPhone = sanitizePhone(remoteJid);
+                const { data: patientData } = await supabase
                     .from('patients')
-                    .select('id')
-                    .eq('telefono', jidPhone) // Still lookup by WA number? Or by finalPhone?
-                    // If I change numbers, I might break history. Let's lookup by JID phone.
-                    // If not found, create with JID phone (or provided phone).
+                    .select('*')
+                    .eq('telefono', cleanPhone)
                     .eq('organization_id', tenant.user_id)
-                    .maybeSingle();
+                    .maybeSingle(); // Changed from single() to avoid error on not found
 
-                if (!patient) {
-                    // Check if patient exists with the PROVIDED phone (if different)
-                    if (telefono && telefono !== jidPhone) {
-                        const { data: existingByProvided } = await supabase
+                // Fetch Rest of Context
+                const [profileRes, schedulesRes, historyRes] = await Promise.all([
+                    supabase.from('profiles').select('*').eq('id', tenant.user_id).single(),
+                    supabase.from('schedules').select('*').eq('is_active', true).order('day_of_week', { ascending: true }),
+                    supabase.from('chat_history')
+                        .select('role, content')
+                        .eq('jid', remoteJid)
+                        .eq('whatsapp_instance', instanceName)
+                        .eq('status', 'processed') // Only historical processed messages
+                        .neq('id', insertedMsg.id) // Exclude current ones (we just processed them, but better to use clean history)
+                        // Actually, historyRes should NOT include the current batch we just processed if we want proper flow?
+                        // Or proper flow includes them? 
+                        // Standard: User says "Hi". History: [Hi]. AI: "Hello".
+                        // Here: User says "Hi", "Help". Batch: "Hi Help". History should effectively reflect "Hi Help".
+                        // We'll append the combined text to the Prompt History manually.
+                        .order('created_at', { ascending: false })
+                        .limit(10)
+                ]);
+
+                const profile = profileRes.data;
+                // Filter out the ids we just processed from history fetch just in case they slipped in
+                const history = (historyRes.data || [])
+                    .filter((m: any) => !batchIds.includes(m.id))
+                    .reverse();
+
+                // Tool Implementations
+                const getAvailableSlots = async (dateStr: string) => {
+                    try {
+                        const date = new Date(dateStr);
+                        const dayOfWeek = date.getDay(); // 0 = Sun, 1 = Mon, ...
+
+                        // 1. Check if open this day
+                        const daySchedules = schedulesRes.data?.filter((s: any) => s.day_of_week === dayOfWeek);
+                        if (!daySchedules || daySchedules.length === 0) return "La clínica está cerrada este día.";
+
+                        // 2. Fetch existing appointments
+                        const startOfDay = new Date(`${dateStr}T00:00:00`).toISOString();
+                        const endOfDay = new Date(`${dateStr}T23:59:59`).toISOString();
+
+                        const { data: appointments } = await supabase
+                            .from('appointments')
+                            .select('start_time, end_time')
+                            .eq('organization_id', tenant.user_id)
+                            .gte('start_time', startOfDay)
+                            .lte('start_time', endOfDay)
+                            .neq('status', 'cancelled');
+
+                        // 3. Time buffer: filter out slots that are in the past or < 30 min from now
+                        const nowTime = new Date();
+                        // Ajustar al timezone correspondiente si fuera estrictamente necesario,
+                        // asumiendolo corre localmente / server está en UTC y la clínica en un TZ.
+                        // Como Vercel/Supabase corren en UTC, usaremos new Date(), pero lo compararemos
+                        // con slotStart que también es UTC. Sin embargo, slotStart aquí se arma con `${dateStr}T${schedule.start_time}`,
+                        // lo que en JS toma el TZ local de la Edge Function (UTC).
+                        // Para simplificar, comparamos el timestamp actual + 30m.
+                        const minTimeForAppt = new Date(nowTime.getTime() + 30 * 60000);
+
+                        // 4. Generate slots
+                        const slotsArray: string[] = [];
+                        const slotDuration = 30; // minutes
+
+                        for (const schedule of daySchedules) {
+                            let currentTime = new Date(`${dateStr}T${schedule.start_time}`);
+                            const endTime = new Date(`${dateStr}T${schedule.end_time}`);
+
+                            while (currentTime < endTime) {
+                                const slotStart = currentTime;
+                                const slotEnd = new Date(currentTime.getTime() + slotDuration * 60000);
+
+                                if (slotEnd > endTime) break;
+
+                                // Excluir si el slot es antes del tiempo mínimo permitido
+                                if (slotStart < minTimeForAppt) {
+                                    currentTime = slotEnd;
+                                    continue;
+                                }
+
+                                const isOccupied = appointments?.some((appt: any) => {
+                                    const apptStart = new Date(appt.start_time);
+                                    const apptEnd = new Date(appt.end_time);
+                                    return (slotStart < apptEnd && slotEnd > apptStart);
+                                });
+
+                                if (!isOccupied) {
+                                    slotsArray.push(slotStart.toTimeString().substring(0, 5));
+                                }
+                                currentTime = slotEnd;
+                            }
+                        }
+
+                        // Remove duplicates and sort, just in case schedules overlap
+                        const slots = Array.from(new Set(slotsArray)).sort();
+
+                        if (slots.length === 0) return "No hay turnos disponibles para esta fecha.";
+                        return `Horarios disponibles para ${dateStr}: ${slots.join(', ')}`;
+
+                    } catch (e: any) {
+                        console.error("Error getting slots:", e);
+                        return `Error al consultar disponibilidad: ${e.message}`;
+                    }
+                };
+
+                const createAppointment = async (date: string, time: string, patientName: string, dni: string, obraSocial: string, email: string | undefined, notes: string, telefono: string | undefined) => {
+                    try {
+                        // Should prioritize the provided phone if available, otherwise use sanitizePhone(remoteJid)
+                        // But sanitizePhone(remoteJid) is the one we use for lookup.
+                        // If user provides a DIFFERENT phone, we should probably update it or use it for creation.
+                        // For simplicity, let's use the JID as the primary identifier for lookup, 
+                        // but if creating a NEW patient, we can use the provided phone if valid.
+
+                        const jidPhone = sanitizePhone(remoteJid);
+                        // If the user explicitly provided a phone number, use that for the record. 
+                        // Otherwise use the WhatsApp one.
+                        const finalPhone = telefono ? telefono.trim() : jidPhone;
+
+                        // Lookup by JID phone first (since they are messaging from there)
+                        // OR by the provided phone? 
+                        // Let's stick to JID for lookup to maintain thread continuity.
+                        // If they provide a different phone for contact, we store it.
+
+                        let { data: patient } = await supabase
                             .from('patients')
                             .select('id')
-                            .eq('telefono', finalPhone)
+                            .eq('telefono', jidPhone) // Still lookup by WA number? Or by finalPhone?
+                            // If I change numbers, I might break history. Let's lookup by JID phone.
+                            // If not found, create with JID phone (or provided phone).
                             .eq('organization_id', tenant.user_id)
                             .maybeSingle();
 
-                        if (existingByProvided) patient = existingByProvided;
-                    }
-                }
+                        if (!patient) {
+                            // Check if patient exists with the PROVIDED phone (if different)
+                            if (telefono && telefono !== jidPhone) {
+                                const { data: existingByProvided } = await supabase
+                                    .from('patients')
+                                    .select('id')
+                                    .eq('telefono', finalPhone)
+                                    .eq('organization_id', tenant.user_id)
+                                    .maybeSingle();
 
-                if (!patient) {
-                    const { data: newPatient, error: createError } = await supabase
-                        .from('patients')
-                        .insert({
-                            nombre: patientName,
-                            telefono: finalPhone, // Use the preferred phone
-                            dni: dni,
-                            obra_social: obraSocial,
-                            email: email || null,
-                            organization_id: tenant.user_id,
-                            estado: 'Activo'
-                        })
-                        .select()
-                        .single();
+                                if (existingByProvided) patient = existingByProvided;
+                            }
+                        }
 
-                    if (createError) throw new Error("Error creating patient: " + createError.message);
-                    patient = newPatient;
-                }
+                        if (!patient) {
+                            const { data: newPatient, error: createError } = await supabase
+                                .from('patients')
+                                .insert({
+                                    nombre: patientName,
+                                    telefono: finalPhone, // Use the preferred phone
+                                    dni: dni,
+                                    obra_social: obraSocial,
+                                    email: email || null,
+                                    organization_id: tenant.user_id,
+                                    estado: 'Activo'
+                                })
+                                .select()
+                                .single();
 
-                // FIX: Force Argentina Timezone (-03:00) so that 14:00 matches 14:00 AR, not 14:00 UTC (11:00 AR)
-                const startDateTime = new Date(`${date}T${time}:00-03:00`);
-                const endDateTime = new Date(startDateTime.getTime() + 30 * 60000);
+                            if (createError) throw new Error("Error creating patient: " + createError.message);
+                            patient = newPatient;
+                        }
 
-                const { data: appointment, error: apptError } = await supabase
-                    .from('appointments')
-                    .insert({
-                        title: `Consulta General - ${patientName}`,
-                        patient_id: patient.id,
-                        organization_id: tenant.user_id,
-                        start_time: startDateTime.toISOString(),
-                        end_time: endDateTime.toISOString(),
-                        duration: 30,
-                        status: 'confirmed',
-                        notes: notes || "Agendado vía WhatsApp",
-                        appointment_type: 'Consulta General'
-                    })
-                    .select()
-                    .single();
+                        // FIX: Force Argentina Timezone (-03:00) so that 14:00 matches 14:00 AR, not 14:00 UTC (11:00 AR)
+                        const startDateTime = new Date(`${date}T${time}:00-03:00`);
+                        const endDateTime = new Date(startDateTime.getTime() + 30 * 60000);
+
+                        const { data: appointment, error: apptError } = await supabase
+                            .from('appointments')
+                            .insert({
+                                title: `Consulta General - ${patientName}`,
+                                patient_id: patient.id,
+                                organization_id: tenant.user_id,
+                                start_time: startDateTime.toISOString(),
+                                end_time: endDateTime.toISOString(),
+                                duration: 30,
+                                status: 'confirmed',
+                                notes: notes || "Agendado vía WhatsApp",
+                                appointment_type: 'Consulta General'
+                            })
+                            .select()
+                            .single();
 
 
-                if (apptError) throw new Error("Error creating appointment: " + apptError.message);
+                        if (apptError) throw new Error("Error creating appointment: " + apptError.message);
 
-                // --- Notify Dentist (New Feature) ---
-                if (tenant.notification_phone) {
-                    const notifyMsg = `🔔 *Nuevo Turno Agendado*\n\n👤 Paciente: ${patientName}\n📅 Fecha: ${date}\n⏰ Hora: ${time}\n🆔 DNI: ${dni}\n🏥 Obra Social: ${obraSocial}\n📝 Notas: ${notes || '-'}\n\n_Agendado vía WhatsApp Bot_`;
+                        // --- Notify Dentist (New Feature) ---
+                        if (tenant.notification_phone) {
+                            const notifyMsg = `🔔 *Nuevo Turno Agendado*\n\n👤 Paciente: ${patientName}\n📅 Fecha: ${date}\n⏰ Hora: ${time}\n🆔 DNI: ${dni}\n🏥 Obra Social: ${obraSocial}\n📝 Notas: ${notes || '-'}\n\n_Agendado vía WhatsApp Bot_`;
 
-                    // Send asynchronously (don't block response to user)
-                    fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
-                        body: JSON.stringify({ number: tenant.notification_phone, text: notifyMsg })
-                    }).catch(err => console.error("Error notifying dentist:", err));
-                }
-                // ------------------------------------
+                            // Send asynchronously (don't block response to user)
+                            fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+                                body: JSON.stringify({ number: tenant.notification_phone, text: notifyMsg })
+                            }).catch(err => console.error("Error notifying dentist:", err));
+                        }
+                        // ------------------------------------
 
-                // Detailed confirmation prompt for the AI
-                return `Turno RESERVADO con éxito. ID: ${appointment.id}. 
+                        // Detailed confirmation prompt for the AI
+                        return `Turno RESERVADO con éxito. ID: ${appointment.id}. 
 INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes añadir emojis):
 ✅ *Turno Confirmado*
 📅 Fecha: ${date}
@@ -416,65 +436,65 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 
 ¡Te esperamos! Si necesitas reagendar, avísanos.`;
 
-            } catch (e: any) {
+                    } catch (e: any) {
 
-                console.error("Error creating appointment:", e);
-                return `Error al agendar: ${e.message}`;
-            }
-        };
+                        console.error("Error creating appointment:", e);
+                        return `Error al agendar: ${e.message}`;
+                    }
+                };
 
-        const dentistName = profile?.full_name || tenant.business_name || 'el Profesional';
-        const contactPhone = profile?.contact_phone || null;
+                const dentistName = profile?.full_name || tenant.business_name || 'el Profesional';
+                const contactPhone = profile?.contact_phone || null;
 
-        // Base prompt with dynamic injection
-        let basePrompt = (AGENT_PROMPT || `Eres la asistente del Od. {{nombre_odontologo}}. Atiende dudas de forma amable.`)
-            .replace(/{{nombre_odontologo}}/gi, dentistName);
+                // Base prompt with dynamic injection
+                let basePrompt = (AGENT_PROMPT || `Eres la asistente del Od. {{nombre_odontologo}}. Atiende dudas de forma amable.`)
+                    .replace(/{{nombre_odontologo}}/gi, dentistName);
 
-        let contextInfo = `--- DATOS ESTRUCTURADOS ---\nProf: Od. ${dentistName}\n`;
-        if (profile?.services) contextInfo += `Servicios: ${JSON.stringify(profile.services)}\n`;
-        if (profile?.accepted_insurances) contextInfo += `Obras Sociales: ${JSON.stringify(profile.accepted_insurances)}\n`;
-        if (profile?.faqs) contextInfo += `FAQs: ${JSON.stringify(profile.faqs)}\n`;
-        if (contactPhone) contextInfo += `Contacto Humano (dáselo si no sabes responder o lo piden): ${contactPhone}\n`;
+                let contextInfo = `--- DATOS ESTRUCTURADOS ---\nProf: Od. ${dentistName}\n`;
+                if (profile?.services) contextInfo += `Servicios: ${JSON.stringify(profile.services)}\n`;
+                if (profile?.accepted_insurances) contextInfo += `Obras Sociales: ${JSON.stringify(profile.accepted_insurances)}\n`;
+                if (profile?.faqs) contextInfo += `FAQs: ${JSON.stringify(profile.faqs)}\n`;
+                if (contactPhone) contextInfo += `Contacto Humano (dáselo si no sabes responder o lo piden): ${contactPhone}\n`;
 
-        if (schedulesRes.data && schedulesRes.data.length > 0) {
-            const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+                if (schedulesRes.data && schedulesRes.data.length > 0) {
+                    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
-            // Group schedules by day
-            const groupedSchedules: Record<string, string[]> = {};
-            schedulesRes.data.forEach((s: any) => {
-                const dayName = days[s.day_of_week];
-                if (!groupedSchedules[dayName]) groupedSchedules[dayName] = [];
-                groupedSchedules[dayName].push(`${s.start_time.substring(0, 5)}-${s.end_time.substring(0, 5)}`);
-            });
+                    // Group schedules by day
+                    const groupedSchedules: Record<string, string[]> = {};
+                    schedulesRes.data.forEach((s: any) => {
+                        const dayName = days[s.day_of_week];
+                        if (!groupedSchedules[dayName]) groupedSchedules[dayName] = [];
+                        groupedSchedules[dayName].push(`${s.start_time.substring(0, 5)}-${s.end_time.substring(0, 5)}`);
+                    });
 
-            contextInfo += `Horarios: ${JSON.stringify(groupedSchedules)}\n`;
-        }
+                    contextInfo += `Horarios: ${JSON.stringify(groupedSchedules)}\n`;
+                }
 
-        contextInfo += `\n--- ENTORNO ---\n`;
-        if (patientData) {
-            contextInfo += `Paciente DB: ${JSON.stringify({ nombre: patientData.nombre })}\n(Llámalo por su nombre)\n`;
-        } else {
-            contextInfo += `Paciente DB: null\n`;
-        }
+                contextInfo += `\n--- ENTORNO ---\n`;
+                if (patientData) {
+                    contextInfo += `Paciente DB: ${JSON.stringify({ nombre: patientData.nombre })}\n(Llámalo por su nombre)\n`;
+                } else {
+                    contextInfo += `Paciente DB: null\n`;
+                }
 
-        const now = new Date();
-        const arTimeParams = { timeZone: 'America/Argentina/Buenos_Aires' };
+                const now = new Date();
+                const arTimeParams = { timeZone: 'America/Argentina/Buenos_Aires' };
 
-        // Compact Calendar Injection as JSON to save tokens
-        const calContext = [];
-        for (let i = 0; i < 14; i++) {
-            const d = new Date(now);
-            d.setDate(d.getDate() + i);
-            calContext.push({
-                f: d.toISOString().split('T')[0],
-                d: d.toLocaleDateString('es-AR', { ...arTimeParams, weekday: 'short' })
-            });
-        }
+                // Compact Calendar Injection as JSON to save tokens
+                const calContext = [];
+                for (let i = 0; i < 14; i++) {
+                    const d = new Date(now);
+                    d.setDate(d.getDate() + i);
+                    calContext.push({
+                        f: d.toISOString().split('T')[0],
+                        d: d.toLocaleDateString('es-AR', { ...arTimeParams, weekday: 'short' })
+                    });
+                }
 
-        const options: Intl.DateTimeFormatOptions = { ...arTimeParams, weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
-        const currentDateTimeString = now.toLocaleDateString('es-AR', options);
+                const options: Intl.DateTimeFormatOptions = { ...arTimeParams, weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+                const currentDateTimeString = now.toLocaleDateString('es-AR', options);
 
-        const systemPrompt = `${basePrompt}
+                const systemPrompt = `${basePrompt}
 
 --- REGLAS DEL SISTEMA ---
 - IDENTIDAD: Eres estrictamente la asistente del Od. ${dentistName}. NO eres una clínica.
@@ -488,100 +508,119 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 
 ${contextInfo}`;
 
-        let aiResponse = "";
+                let aiResponse = "";
 
-        if (OPENAI_KEY) {
-            try {
-                const openai = new OpenAI({ apiKey: OPENAI_KEY });
+                if (OPENAI_KEY) {
+                    try {
+                        const openai = new OpenAI({ apiKey: OPENAI_KEY });
 
-                const messages: any[] = [
-                    { role: "system", content: systemPrompt },
-                    ...history.map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
-                    { role: "user", content: finalMessageText } // Use the BATCHED message
-                ];
+                        const messages: any[] = [
+                            { role: "system", content: systemPrompt },
+                            ...history.map((m: any) => ({ role: m.role as "user" | "assistant", content: m.content })),
+                            { role: "user", content: finalMessageText } // Use the BATCHED message
+                        ];
 
-                const runner = await openai.chat.completions.create({
-                    model: "gpt-4o-mini",
-                    messages: messages,
-                    tools: toolsDefinition.map(t => ({ type: "function", function: t })),
-                    tool_choice: "auto"
+                        const runner = await openai.chat.completions.create({
+                            model: "gpt-4o-mini",
+                            messages: messages,
+                            tools: toolsDefinition.map(t => ({ type: "function", function: t })),
+                            tool_choice: "auto"
+                        });
+
+                        const responseMessage = runner.choices[0].message;
+
+                        if (responseMessage.tool_calls) {
+                            messages.push(responseMessage);
+                            for (const toolCall of responseMessage.tool_calls) {
+                                const fnName = toolCall.function.name;
+                                const fnArgs = JSON.parse(toolCall.function.arguments);
+                                let fnResult = "";
+
+                                console.log(`Executing tool ${fnName} with args:`, fnArgs);
+
+                                if (fnName === "get_available_slots") {
+                                    fnResult = await getAvailableSlots(fnArgs.date);
+                                } else if (fnName === "create_appointment") {
+                                    fnResult = await createAppointment(fnArgs.date, fnArgs.time, fnArgs.patient_name, fnArgs.dni, fnArgs.obra_social, fnArgs.email, fnArgs.notes, fnArgs.telefono);
+                                } else {
+                                    fnResult = "Función no reconocida.";
+                                }
+
+                                messages.push({
+                                    role: "tool",
+                                    tool_call_id: toolCall.id,
+                                    content: fnResult
+                                });
+                            }
+
+                            const secondResponse = await openai.chat.completions.create({
+                                model: "gpt-4o-mini",
+                                messages: messages
+                            });
+                            aiResponse = secondResponse.choices[0].message?.content || "";
+                        } else {
+                            aiResponse = responseMessage.content || "";
+                        }
+                    } catch (err: any) {
+                        console.error("OpenAI Logic Error:", err);
+                    }
+                }
+
+                if (!aiResponse && GEMINI_KEY) {
+                    // Context: Gemini Fallback
+                    try {
+                        const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+                        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                        const historyText = history.map((m: any) => `${m.role === 'user' ? 'Paciente' : 'Asistente'}: ${m.content}`).join('\n');
+                        const result = await model.generateContent(`${systemPrompt}\n\nHistorial:\n${historyText}\n\nPaciente: ${finalMessageText}`);
+                        aiResponse = result.response.text();
+                    } catch (err: any) {
+                        console.error("Gemini failed:", err.message);
+                    }
+                }
+
+                if (!aiResponse) throw new Error("AI Generation failed");
+
+                // Send message
+                const sendUrl = `${EVOLUTION_API_URL}/message/sendText/${instanceName}`;
+                const sendRes = await fetch(sendUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+                    body: JSON.stringify({ number: remoteJid, text: aiResponse, delay: 1200 })
                 });
 
-                const responseMessage = runner.choices[0].message;
+                if (!sendRes.ok) throw new Error(`Evolution send failed: ${sendRes.status}`);
 
-                if (responseMessage.tool_calls) {
-                    messages.push(responseMessage);
-                    for (const toolCall of responseMessage.tool_calls) {
-                        const fnName = toolCall.function.name;
-                        const fnArgs = JSON.parse(toolCall.function.arguments);
-                        let fnResult = "";
+                // Persist AI Response with processed status
+                await supabase.from('chat_history').insert({
+                    tenant_id: tenant.id,
+                    whatsapp_instance: instanceName,
+                    jid: remoteJid,
+                    role: 'assistant',
+                    content: aiResponse,
+                    status: 'processed'
+                });
 
-                        console.log(`Executing tool ${fnName} with args:`, fnArgs);
-
-                        if (fnName === "get_available_slots") {
-                            fnResult = await getAvailableSlots(fnArgs.date);
-                        } else if (fnName === "create_appointment") {
-                            fnResult = await createAppointment(fnArgs.date, fnArgs.time, fnArgs.patient_name, fnArgs.dni, fnArgs.obra_social, fnArgs.email, fnArgs.notes, fnArgs.telefono);
-                        } else {
-                            fnResult = "Función no reconocida.";
-                        }
-
-                        messages.push({
-                            role: "tool",
-                            tool_call_id: toolCall.id,
-                            content: fnResult
-                        });
-                    }
-
-                    const secondResponse = await openai.chat.completions.create({
-                        model: "gpt-4o-mini",
-                        messages: messages
-                    });
-                    aiResponse = secondResponse.choices[0].message?.content || "";
-                } else {
-                    aiResponse = responseMessage.content || "";
-                }
-            } catch (err: any) {
-                console.error("OpenAI Logic Error:", err);
+            } catch (bgError: any) {
+                console.error("Background Webhook Error:", bgError);
             }
+        };
+
+        // Execute as Fire-and-Forget using waitUntil if EdgeRuntime is present (Supabase edge env)
+        if (typeof (globalThis as any).EdgeRuntime !== 'undefined') {
+            const EdgeRuntime = (globalThis as any).EdgeRuntime;
+            if (EdgeRuntime.waitUntil) {
+                EdgeRuntime.waitUntil(processWebhookBackground());
+            } else {
+                processWebhookBackground().catch(console.error);
+            }
+        } else {
+            // Local Deno or fallback
+            processWebhookBackground().catch(console.error);
         }
 
-        if (!aiResponse && GEMINI_KEY) {
-            // Context: Gemini Fallback
-            try {
-                const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const historyText = history.map((m: any) => `${m.role === 'user' ? 'Paciente' : 'Asistente'}: ${m.content}`).join('\n');
-                const result = await model.generateContent(`${systemPrompt}\n\nHistorial:\n${historyText}\n\nPaciente: ${finalMessageText}`);
-                aiResponse = result.response.text();
-            } catch (err: any) {
-                console.error("Gemini failed:", err.message);
-            }
-        }
-
-        if (!aiResponse) throw new Error("AI Generation failed");
-
-        // Send message
-        const sendUrl = `${EVOLUTION_API_URL}/message/sendText/${instanceName}`;
-        const sendRes = await fetch(sendUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
-            body: JSON.stringify({ number: remoteJid, text: aiResponse, delay: 1200 })
-        });
-
-        if (!sendRes.ok) throw new Error(`Evolution send failed: ${sendRes.status}`);
-
-        // Persist AI Response with processed status
-        await supabase.from('chat_history').insert({
-            tenant_id: tenant.id,
-            whatsapp_instance: instanceName,
-            jid: remoteJid,
-            role: 'assistant',
-            content: aiResponse,
-            status: 'processed'
-        });
-
-        return new Response('Success', { status: 200 });
+        // --- Fast Return to Evolution API ---
+        return new Response('Webhook received and queued', { status: 200 });
 
     } catch (error: any) {
         console.error('Webhook Error:', error.message);

@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { norm } from '../utils/helpers';
 import SearchInput from './SearchInput';
 import PatientTable from './PatientTable';
+import { PatientService } from '../services/PatientService';
 
 export default function PacientesView({
   searchTerm,
@@ -17,11 +18,35 @@ export default function PacientesView({
 }) {
   const collator = useMemo(() => new Intl.Collator('es', { sensitivity: 'base' }), []);
 
+  const [localPatients, setLocalPatients] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    if (!searchTerm) {
+      setLocalPatients(patients);
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const results = await PatientService.searchPatients(searchTerm);
+        setLocalPatients(results);
+      } catch (err) {
+        console.error("Error searching patients:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, patients]);
+
   const filteredPacientes = useMemo(() => {
     const term = norm(searchTerm || '');
-    return patients
+    return localPatients
       .filter((p) => {
-        const matchesSearch = norm(p?.nombre || '').includes(term);
+        const matchesSearch = term ? (norm(p?.nombre || '').includes(term) || norm(String(p?.dni || '')).includes(term)) : true;
         const matchesStatus = statusFilter === 'Todos'
           ? (p?.estado !== 'Inactivo')
           : (p?.estado === statusFilter);
@@ -29,7 +54,7 @@ export default function PacientesView({
       })
       .slice()
       .sort((a, b) => collator.compare(a?.nombre || '', b?.nombre || ''));
-  }, [searchTerm, statusFilter, patients, collator]);
+  }, [searchTerm, statusFilter, localPatients, collator]);
 
   return (
     <div className="p-4 lg:p-8 bg-gray-50 min-h-screen">
@@ -65,7 +90,7 @@ export default function PacientesView({
           </div>
         </div>
 
-        {loading ? (
+        {(loading || isSearching) ? (
           <div className="p-8 text-center">
             <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
             <p className="mt-2 text-gray-500">Cargando pacientes...</p>

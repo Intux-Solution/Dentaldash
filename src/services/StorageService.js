@@ -17,7 +17,7 @@ export const StorageService = {
             let finalPath = path;
             if (!path) {
                 const fileExt = file.name.split('.').pop();
-                const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+                const fileName = `${crypto.randomUUID()}.${fileExt}`;
                 finalPath = fileName;
             }
 

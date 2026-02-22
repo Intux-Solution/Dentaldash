@@ -34,6 +34,30 @@ serve(async (req) => {
         const { action, tenant_id } = body;
         if (!action || !tenant_id) throw new Error('Missing action or tenant_id');
 
+        // Extract and validate Auth Token from Authorization header
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+            return new Response(JSON.stringify({ error: "Missing Authorization header" }), { status: 401, headers: corsHeaders });
+        }
+
+        const token = authHeader.replace(/^Bearer\s+/, "");
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return new Response(JSON.stringify({ error: "Unauthorized / Invalid Token" }), { status: 401, headers: corsHeaders });
+        }
+
+        // Validate that the request maker actually owns the target tenant
+        const { data: tenant, error: tenantError } = await supabase
+            .from('tenants')
+            .select('user_id')
+            .eq('id', tenant_id)
+            .single();
+
+        if (tenantError || !tenant || tenant.user_id !== user.id) {
+            return new Response(JSON.stringify({ error: "Forbidden: You don't own this tenant." }), { status: 403, headers: corsHeaders });
+        }
+
         const instanceName = `instance_${tenant_id.split('-')[0]}`
         const baseUrl = sanitizeUrl(EVOLUTION_URL_RAW || "");
         const webhookUrl = `${SUPABASE_URL}/functions/v1/chat-webhook`;
