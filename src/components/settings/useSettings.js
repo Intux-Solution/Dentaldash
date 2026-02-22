@@ -48,8 +48,7 @@ export function useSettings() {
             if (!session) return;
 
             const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
-                body: { action: 'get_qr', tenant_id: targetTenant.id },
-                headers: { Authorization: `Bearer ${session.access_token}` }
+                body: { action: 'get_qr', tenant_id: targetTenant.id }
             });
 
             if (error) {
@@ -230,8 +229,7 @@ export function useSettings() {
             }
 
             const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
-                body: { action: 'create', tenant_id: tenant.id },
-                headers: { Authorization: `Bearer ${session.access_token}` }
+                body: { action: 'create', tenant_id: tenant.id }
             });
             if (error) throw error;
 
@@ -254,8 +252,7 @@ export function useSettings() {
             setSaving(true);
             const { data: { session } } = await supabase.auth.getSession();
             await supabase.functions.invoke('whatsapp-manager', {
-                body: { action: 'logout', tenant_id: tenant.id },
-                headers: { Authorization: `Bearer ${session.access_token}` }
+                body: { action: 'logout', tenant_id: tenant.id }
             });
 
             setInstanceStatus('disconnected');
