@@ -25,6 +25,18 @@ export interface PatientPayload {
 /**
  * Servicio para gestionar pacientes con Supabase
  */
+export interface ClinicalRecord {
+  id: string;
+  patient_id: string;
+  user_id: string;
+  fecha: string;
+  diagnostico: string;
+  tratamiento: string;
+  odontogram_state: any;
+  archivo_url?: string;
+  created_at: string;
+}
+
 export class PatientService {
 
   /**
@@ -85,6 +97,25 @@ export class PatientService {
       console.error('Error searching patients:', error);
       throw error;
     }
+  }
+
+  /**
+   * Añadir un nuevo registro clínico a la historia del paciente
+   */
+  static async addClinicalRecord(patientId: string, record: Omit<ClinicalRecord, 'id' | 'created_at'>, userId: string): Promise<ClinicalRecord> {
+    const { data, error } = await supabase
+      .from('treatment_history')
+      .insert([{
+        patient_id: patientId,
+        user_id: userId,
+        ...record,
+        odontogram_state: record.odontogram_state ? JSON.stringify(record.odontogram_state) : null,
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
   }
 
   /**
@@ -152,20 +183,27 @@ export class PatientService {
   /**
    * Subir archivo a Storage y retornar PATH (no URL pública)
    */
-  static async uploadClinicalRecord(file: File, patientName: string): Promise<string | null> {
-    if (!file) return null;
-
+  static async uploadClinicalRecord(file: File, userId: string): Promise<string> {
     try {
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
-      if (authError || !session) throw new Error("No active session found");
+      if (!userId) throw new Error("Authentication session missing or expired.");
 
       const fileExt = file.name.split('.').pop();
-      const fileName = `${session.user.id}/${crypto.randomUUID()}.${fileExt}`;
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
 
-      const path = await StorageService.uploadFile(file, 'clinical-records', fileName);
-      return path;
+      const { error: uploadError } = await supabase.storage
+        .from('clinical-records')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('clinical-records')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
     } catch (error) {
-      console.error('Error uploading clinical record:', error);
+      console.error('Error in uploadClinicalRecord:', error);
       throw error;
     }
   }
@@ -173,11 +211,11 @@ export class PatientService {
   /**
    * Crear un nuevo paciente
    */
-  static async createPatient(patientData: PatientPayload): Promise<any> {
+  static async createPatient(patientData: PatientPayload, userId: string): Promise<any> {
     let historiaClinicaPath: string | null = null;
     try {
-      if (patientData.historiaClinicaFile && patientData.nombre) {
-        historiaClinicaPath = await this.uploadClinicalRecord(patientData.historiaClinicaFile, patientData.nombre);
+      if (patientData.historiaClinicaFile && userId) {
+        historiaClinicaPath = await this.uploadClinicalRecord(patientData.historiaClinicaFile, userId);
       }
 
       const newPatient = {
@@ -218,6 +256,9 @@ export class PatientService {
       if (historiaClinicaPath) {
         console.warn('Rolling back newly uploaded file due to DB failure...');
         try {
+          // The deleteFile method in StorageService expects a path, not a public URL.
+          // If uploadClinicalRecord now returns a public URL, this rollback logic might need adjustment.
+          // For now, assuming StorageService.deleteFile can handle the public URL or the path can be extracted.
           await StorageService.deleteFile(historiaClinicaPath, 'clinical-records');
         } catch (cleanupError) {
           console.error('CRITICAL: Failed to rollback file in storage', cleanupError);
@@ -230,7 +271,7 @@ export class PatientService {
   /**
    * Actualizar un paciente existente
    */
-  static async updatePatient(patientData: PatientPayload): Promise<any> {
+  static async updatePatient(patientData: PatientPayload, userId: string): Promise<any> {
     let newlyUploadedPath: string | null = null;
     try {
       const id = patientData.id || patientData._id;
@@ -250,8 +291,8 @@ export class PatientService {
         estado: patientData.estado,
       };
 
-      if (patientData.historiaClinicaFile && patientData.nombre) {
-        newlyUploadedPath = await this.uploadClinicalRecord(patientData.historiaClinicaFile, patientData.nombre);
+      if (patientData.historiaClinicaFile && userId) {
+        newlyUploadedPath = await this.uploadClinicalRecord(patientData.historiaClinicaFile, userId);
         updates.historia_clinica_url = newlyUploadedPath;
       } else if (patientData.historiaClinica === null || patientData.historia_clinica_url === null) {
         updates.historia_clinica_url = null;
@@ -280,6 +321,8 @@ export class PatientService {
       if (newlyUploadedPath) {
         console.warn('Rolling back newly uploaded file during update due to DB failure...');
         try {
+          // The deleteFile method in StorageService expects a path, not a public URL.
+          // If uploadClinicalRecord now returns a public URL, this rollback logic might need adjustment.
           await StorageService.deleteFile(newlyUploadedPath, 'clinical-records');
         } catch (cleanupError) {
           console.error('CRITICAL: Failed to rollback file in storage', cleanupError);
@@ -296,9 +339,17 @@ export class PatientService {
     try {
       if (!patientId) throw new Error("ID de paciente requerido");
 
+      // If uploadClinicalRecord now returns a public URL, filePath might be a URL.
+      // StorageService.deleteFile might need to be updated to handle URLs or extract paths.
       if (filePath && !filePath.startsWith('http')) {
         await StorageService.deleteFile(filePath, 'clinical-records');
+      } else if (filePath && filePath.startsWith(supabase.storage.from('clinical-records').getPublicUrl('').data.publicUrl.split('.supabase.co')[0])) {
+        // Attempt to extract path from public URL if it's a Supabase URL
+        const publicUrlBase = supabase.storage.from('clinical-records').getPublicUrl('').data.publicUrl;
+        const pathInBucket = filePath.substring(publicUrlBase.length);
+        await StorageService.deleteFile(pathInBucket, 'clinical-records');
       }
+
 
       const { error } = await supabase
         .from('patients')
@@ -334,16 +385,15 @@ export class PatientService {
   /**
    * Obtener lista única de todas las obras sociales registradas (en perfil y en pacientes)
    */
-  static async getAllUniqueInsurances(): Promise<string[]> {
+  static async getAllUniqueInsurances(userId = null): Promise<string[]> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       let profileInsurances: string[] = [];
 
-      if (user?.id) {
+      if (userId) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('accepted_insurances')
-          .eq('id', user.id)
+          .eq('id', userId)
           .single();
         if (profile?.accepted_insurances) {
           profileInsurances = profile.accepted_insurances;

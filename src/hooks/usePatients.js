@@ -42,10 +42,11 @@ const normalizePatient = (p) => {
  * Hook personalizado para gestionar el estado de los pacientes
  * @returns {Object} Estado y funciones para manejar pacientes
  */
-export function usePatients() {
+export function usePatients(session = null) {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const userId = session?.user?.id;
 
   /**
    * Cargar todos los pacientes desde n8n
@@ -76,11 +77,11 @@ export function usePatients() {
     setError(null);
 
     try {
-      const newPatientRaw = await PatientService.createPatient(patientData);
-      // Algunas implementaciones devuelven { patient }, otras devuelven el objeto directo
+      // Inyectamos userId si está disponible en la sesión
+      const dataToSave = userId ? { ...patientData, user_id: userId } : patientData;
+      const newPatientRaw = await PatientService.createPatient(dataToSave, userId);
       const newPatient = (Array.isArray(newPatientRaw) ? newPatientRaw[0]?.patient : newPatientRaw?.patient) || newPatientRaw || {};
 
-      // createdTime desde POST (Formatear POST) o fallback a ahora
       const createdTime =
         newPatient?.data?.createdTime ||
         newPatient?.createdTime ||
@@ -88,8 +89,6 @@ export function usePatients() {
         new Date().toISOString();
 
       const normalized = normalizePatient({ ...newPatient, createdTime });
-
-      // Agregar el nuevo paciente al estado local (al final; las vistas deciden el orden)
       setPatients((prevPatients) => [...prevPatients, normalized]);
 
       return normalized;
@@ -99,7 +98,7 @@ export function usePatients() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   /**
    * Actualizar un paciente existente
@@ -110,7 +109,7 @@ export function usePatients() {
     setError(null);
 
     try {
-      const updatedRaw = await PatientService.updatePatient(patientData);
+      const updatedRaw = await PatientService.updatePatient(patientData, userId);
       const updatedPatient = (Array.isArray(updatedRaw) ? updatedRaw[0]?.patient : updatedRaw?.patient) || updatedRaw || {};
 
       setPatients((prevPatients) => {

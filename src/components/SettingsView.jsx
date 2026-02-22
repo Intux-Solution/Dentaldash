@@ -8,7 +8,7 @@ import ScheduleTab from './settings/ScheduleTab';
 import WhatsAppTab from './settings/WhatsAppTab';
 import FaqsTab from './settings/FaqsTab';
 
-export default function SettingsView() {
+export default function SettingsView({ session }) {
     const [activeTab, setActiveTab] = useState('profile');
 
     const {
@@ -17,7 +17,7 @@ export default function SettingsView() {
         setProfile, setTenant, setSchedules, setFaqs,
         handleProfileChange, handleAutoSaveProfile, handleAvatarChange,
         handleConnectWhatsApp, handleDisconnectWhatsApp
-    } = useSettings();
+    } = useSettings(session);
 
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
@@ -84,6 +84,7 @@ export default function SettingsView() {
                         saving={saving}
                         handleConnectWhatsApp={handleConnectWhatsApp}
                         handleDisconnectWhatsApp={handleDisconnectWhatsApp}
+                        session={session}
                     />
                 )}
 

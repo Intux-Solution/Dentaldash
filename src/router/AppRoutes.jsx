@@ -10,7 +10,7 @@ import OdontogramView from '../components/OdontogramView';
 import { useModals } from '../hooks/useModals';
 import { PatientService } from '../services/PatientService';
 
-export default function AppRoutes({ normalizedPatients = [], loading = false, refreshPatients }) {
+export default function AppRoutes({ normalizedPatients = [], loading = false, refreshPatients, session }) {
   const navigate = useNavigate();
   const {
     openAddPatient,
@@ -108,7 +108,7 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
         )}
       />
 
-      <Route path="/configuracion" element={<SettingsView />} />
+      <Route path="/configuracion" element={<SettingsView session={session} />} />
 
       {/* Route for compatibility, actual logic in App.js */}
       <Route path="/update-password" element={<Navigate to="/" />} />

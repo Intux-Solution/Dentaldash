@@ -8,26 +8,24 @@ export class GoogleCalendarService {
     /**
      * Get the provider token from the current session or cache.
      */
-    static async getProviderToken() {
+    static getProviderToken(session) {
         if (cachedToken) return cachedToken;
-        const { data: { session } } = await supabase.auth.getSession();
         return session?.provider_token;
     }
 
     /**
      * Get the refresh token from the session.
      */
-    static async getRefreshToken() {
-        const { data: { session } } = await supabase.auth.getSession();
+    static getRefreshToken(session) {
         return session?.provider_refresh_token;
     }
 
     /**
      * Refresh the Google Access Token using our Edge Function
      */
-    static async refreshGoogleToken() {
+    static async refreshGoogleToken(session) {
         try {
-            const refreshToken = await this.getRefreshToken();
+            const refreshToken = this.getRefreshToken(session);
             if (!refreshToken) {
                 console.warn("No refresh token available in session. User might need to re-login with offline access.");
                 return null;
@@ -61,14 +59,14 @@ export class GoogleCalendarService {
     /**
      * Middleware fetching function that handles auth and 401 retries
      */
-    static async fetchWithAuth(url, options = {}) {
-        let token = await this.getProviderToken();
-        if (!token) return { ok: false, status: 401, statusText: 'No token available' }; // Mock response-like object if no token
+    static async fetchWithAuth(url, options = {}, session) {
+        let token = this.getProviderToken(session);
+        if (!token) return { ok: false, status: 401, statusText: 'No token available' };
 
         // Prepare headers
         const headers = {
             'Content-Type': 'application/json',
-            ...options.headers,
+            ...(options.headers || {}),
             'Authorization': `Bearer ${token}`
         };
 
@@ -76,18 +74,13 @@ export class GoogleCalendarService {
             let response = await fetch(url, { ...options, headers });
 
             // If 401 Unauthorized, try to refresh and retry
-            if (response.status === 401) {
+            if (response.status === 401 && session) {
                 console.warn("Google API 401. Attempting token refresh...");
-                const newToken = await this.refreshGoogleToken();
+                const newToken = await this.refreshGoogleToken(session);
 
                 if (newToken) {
-                    // Update header with new token
                     headers['Authorization'] = `Bearer ${newToken}`;
-                    // Retry request
                     response = await fetch(url, { ...options, headers });
-                } else {
-                    console.error("Token refresh failed. Aborting request.");
-                    // Optionally notify global error handler here
                 }
             }
 
@@ -101,7 +94,7 @@ export class GoogleCalendarService {
     /**
      * List events from the primary calendar.
      */
-    static async listEvents(timeMin, timeMax) {
+    static async listEvents(timeMin, timeMax, session) {
         try {
             const params = new URLSearchParams({
                 timeMin: timeMin.toISOString(),
@@ -110,7 +103,7 @@ export class GoogleCalendarService {
                 orderBy: 'startTime',
             });
 
-            const response = await this.fetchWithAuth(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`);
+            const response = await this.fetchWithAuth(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`, {}, session);
 
             if (!response.ok) {
                 const err = response.json ? await response.json().catch(() => ({})) : {};
@@ -129,12 +122,12 @@ export class GoogleCalendarService {
     /**
      * Create an event in the primary calendar.
      */
-    static async createEvent(appointment) {
+    static async createEvent(appointment, session) {
         const event = {
             summary: appointment.title,
             description: appointment.notes || '',
             start: {
-                dateTime: appointment.start_time, // ISO string
+                dateTime: appointment.start_time,
                 timeZone: 'America/Argentina/Buenos_Aires',
             },
             end: {
@@ -148,7 +141,7 @@ export class GoogleCalendarService {
             const response = await this.fetchWithAuth('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
                 method: 'POST',
                 body: JSON.stringify(event),
-            });
+            }, session);
 
             if (!response.ok) {
                 const errorData = response.json ? await response.json().catch(() => ({})) : {};
@@ -157,7 +150,7 @@ export class GoogleCalendarService {
             }
 
             const data = await response.json();
-            return data; // Contains .id
+            return data;
         } catch (error) {
             console.error('Error creating Google Calendar event:', error);
             return null;
@@ -167,7 +160,7 @@ export class GoogleCalendarService {
     /**
      * Update an existing event.
      */
-    static async updateEvent(googleEventId, appointment) {
+    static async updateEvent(googleEventId, appointment, session) {
         if (!googleEventId) return null;
 
         const event = {
@@ -182,7 +175,7 @@ export class GoogleCalendarService {
             const response = await this.fetchWithAuth(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId}`, {
                 method: 'PUT',
                 body: JSON.stringify(event),
-            });
+            }, session);
 
             if (!response.ok) throw new Error('Failed to update Google Event');
             return await response.json();
@@ -195,13 +188,13 @@ export class GoogleCalendarService {
     /**
      * Delete an event.
      */
-    static async deleteEvent(googleEventId) {
+    static async deleteEvent(googleEventId, session) {
         if (!googleEventId) return;
 
         try {
             await this.fetchWithAuth(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId}`, {
                 method: 'DELETE',
-            });
+            }, session);
         } catch (error) {
             console.error('Error deleting Google Calendar event:', error);
         }

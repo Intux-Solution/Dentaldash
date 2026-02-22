@@ -4,7 +4,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { AppointmentService } from '../services/AppointmentService';
 
-export function useTurnos(fromDate = null, toDate = null) {
+export function useTurnos(fromDate = null, toDate = null, session = null) {
   const [turnos, setTurnos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -45,7 +45,7 @@ export function useTurnos(fromDate = null, toDate = null) {
         toISO = nextWeek.toISOString();
       }
 
-      const events = await AppointmentService.getAppointments(fromISO, toISO);
+      const events = await AppointmentService.getAppointments(fromISO, toISO, session);
       const normalized = Array.isArray(events) ? events : [];
       const visible = normalized.filter(ev => (ev?.status || '').toLowerCase() !== 'cancelled' && (ev?.status || '').toLowerCase() !== 'canceled');
       setTurnos(visible);

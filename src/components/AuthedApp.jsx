@@ -13,7 +13,7 @@ import { useTurnos } from '../hooks/useTurnos';
 import { ModalsProvider } from '../hooks/useModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
 
-import { checkTokenExpiry } from '../utils/auth';
+// import { checkTokenExpiry } from '../utils/auth'; // Removed: causing confusion
 import { PatientService } from '../services/PatientService';
 import { AppointmentService } from '../services/AppointmentService';
 
@@ -48,7 +48,7 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
   useEffect(() => {
     const runSync = async () => {
       try {
-        await AppointmentService.syncPendingAppointments();
+        await AppointmentService.syncPendingAppointments(session);
       } catch (e) {
         console.error("Auto-Sync failed:", e);
       }
@@ -66,8 +66,8 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
     };
   }, []);
 
-  const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients();
-  const { turnos, refreshTurnos } = useTurnos();
+  const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
+  const { turnos, refreshTurnos } = useTurnos(null, null, session);
 
   const { normalizedPatients } = useNormalizedPatients(patients);
 
@@ -128,7 +128,7 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
           )}
 
           <main className="flex-1 overflow-auto">
-            <AppRoutes normalizedPatients={normalizedPatients} loading={loading} refreshPatients={refreshPatients} />
+            <AppRoutes normalizedPatients={normalizedPatients} loading={loading} refreshPatients={refreshPatients} session={session} />
           </main>
         </div>
 

@@ -8,7 +8,7 @@ export class AppointmentService {
     /**
      * Obtener turnos en un rango de fechas
      */
-    static async getAppointments(from, to) {
+    static async getAppointments(from, to, session = null) {
         try {
             // Removemos getSession concurrente que causaba deadlock en F5
 
@@ -186,15 +186,15 @@ export class AppointmentService {
     /**
      * Obtener los servicios configurados en el perfil del usuario
      */
-    static async getServices() {
+    static async getServices(session = null) {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return [];
+            const userId = session?.user?.id;
+            if (!userId) return [];
 
             const { data, error } = await supabase
                 .from('profiles')
                 .select('services')
-                .eq('id', user.id)
+                .eq('id', userId)
                 .single();
 
             if (error) throw error;
@@ -394,7 +394,7 @@ ${data.notas || 'Sin notas adicionales'}
      * Sincronizar turnos pendientes con Google Calendar (Client-Side)
      * Se llama al iniciar la app para asegurar que turnos creados por Bot/Backend se suban a Google.
      */
-    static async syncPendingAppointments() {
+    static async syncPendingAppointments(session = null) {
         try {
             const today = new Date().toISOString();
 
@@ -419,45 +419,32 @@ ${data.notas || 'Sin notas adicionales'}
             if (error) throw error;
             if (!pending || pending.length === 0) return;
 
-            console.log(`[Sync] Found ${pending.length} appointments to sync with Google Calendar.`);
+            console.log(`Sincronizando ${pending.length} turnos pendientes...`);
 
-            // 2. Iterar y crear evento en Google
             for (const appt of pending) {
-                // Preparar datos para el formateo
-                const eventData = {
-                    ...appt,
-                    tipoTurnoNombre: appt.appointment_type, // Mapping type
-                    nombre: appt.patient?.nombre,
-                    dni: appt.patient?.dni,
-                    telefono: appt.patient?.telefono,
-                    email: appt.patient?.email,
-                    obraSocial: appt.patient?.obra_social,
-                    numeroAfiliado: appt.patient?.numero_afiliado,
-                    notas: appt.notes
-                };
+                try {
+                    const googleEvent = await GoogleCalendarService.createEvent({
+                        title: `${appt.title} - ${appt.patient_name}`,
+                        start_time: appt.start_time,
+                        end_time: appt.end_time,
+                        notes: appt.notes
+                    }, session);
 
-                const description = this.formatEventDescription(eventData);
-
-                const googleEvent = await GoogleCalendarService.createEvent({
-                    title: appt.title,
-                    start_time: appt.start_time,
-                    end_time: appt.end_time,
-                    patientEmail: appt.patient?.email,
-                    notes: description
-                });
-
-                // 3. Update DB
-                if (googleEvent && googleEvent.id) {
-                    await supabase
-                        .from('appointments')
-                        .update({ google_event_id: googleEvent.id })
-                        .eq('id', appt.id);
-                    console.log(`[Sync] Synced appointment ${appt.id} -> GoogleID: ${googleEvent.id}`);
+                    if (googleEvent && googleEvent.id) {
+                        await supabase
+                            .from('appointments')
+                            .update({
+                                google_event_id: googleEvent.id,
+                                google_sync_status: 'synced'
+                            })
+                            .eq('id', appt.id);
+                    }
+                } catch (e) {
+                    console.error(`Error sincronizando turno ${appt.id}:`, e);
                 }
             }
         } catch (error) {
-            console.error('[Sync] Error syncing pending appointments:', error);
-            alert('[Sync Error] ' + error.message); // Visual feedback for the manual trigger
+            console.error('Error in syncPendingAppointments:', error);
         }
     }
 

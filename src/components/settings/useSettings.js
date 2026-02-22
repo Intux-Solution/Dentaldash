@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import { message } from 'antd';
 
-export function useSettings() {
+export function useSettings(session = null) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -32,8 +32,8 @@ export function useSettings() {
     const [pollingActive, setPollingActive] = useState(false);
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        fetchSettings();
+    }, [fetchSettings]);
 
     useEffect(() => {
         let interval;
@@ -74,13 +74,15 @@ export function useSettings() {
         }
     };
 
-    const fetchData = async () => {
+    const fetchSettings = useCallback(async () => { // Renamed fetchData to fetchSettings and wrapped in useCallback
         try {
             setLoading(true);
-            const { data: { user }, error: userError } = await supabase.auth.getUser();
-            if (userError) throw userError;
+
+            // Usar la sesión pasada por props si existe
+            const user = session?.user; // Replaced supabase.auth.getUser() with session prop
+
             if (!user) {
-                console.warn('No active user found in useSettings');
+                console.warn("useSettings: No active user found in session"); // Updated console message
                 setLoading(false);
                 return;
             }
@@ -88,8 +90,8 @@ export function useSettings() {
             const userId = user.id;
 
             // Extract Google Session fallbacks
-            const sessionName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
-            const sessionAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
+            const sessionName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email; // Added user?.email fallback
+            const sessionAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture; // Removed null default
 
             if (sessionAvatar) {
                 setGoogleAvatar(sessionAvatar);
@@ -150,11 +152,11 @@ export function useSettings() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [session]);
 
     const handleAutoSaveProfile = async (updates) => {
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user?.id) return;
             const { error } = await supabase
                 .from('profiles')
                 .update({ ...updates, updated_at: new Date() })
@@ -174,11 +176,10 @@ export function useSettings() {
 
     const handleAvatarChange = async (e) => {
         const file = e.target.files[0];
-        if (!file) return;
+        if (!file || !session?.user?.id) return;
 
         try {
             setSaving(true);
-            const { data: { session } } = await supabase.auth.getSession();
             const fileName = `${session.user.id}-${Math.random()}.${file.name.split('.').pop()}`;
 
             const { error: uploadError } = await supabase.storage

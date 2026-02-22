@@ -8,7 +8,7 @@ export const StorageService = {
      * @param {string} path - The path/filename
      * @returns {Promise<string|null>} The full path of the uploaded file
      */
-    async uploadFile(file, bucket = 'clinical-records', path) {
+    async uploadFile(file, bucket = 'clinical-records', path, userId = null) {
         try {
             if (!file) return null;
 
@@ -23,12 +23,8 @@ export const StorageService = {
 
             // SAFETY NET: Supabase RLS policies usually require the file to be within 
             // a folder matching the user's ID to permit the INSERT operation.
-            // If finalPath does not contain a '/', it means it's trying to upload to root.
-            if (bucket === 'clinical-records' && finalPath && !finalPath.includes('/')) {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user?.id) {
-                    finalPath = `${session.user.id}/${finalPath}`;
-                }
+            if (bucket === 'clinical-records' && finalPath && !finalPath.includes('/') && userId) {
+                finalPath = `${userId}/${finalPath}`;
             }
 
             const { data, error } = await supabase.storage

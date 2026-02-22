@@ -6,25 +6,12 @@ import { supabase } from '../../config/supabaseClient';
 export default function WhatsAppTab({
     tenant, setTenant, profile,
     instanceStatus, pollingActive, qrCodeData, saving,
-    handleConnectWhatsApp, handleDisconnectWhatsApp
+    handleConnectWhatsApp, handleDisconnectWhatsApp, session
 }) {
-    if (!tenant) {
+    if (!profile) {
         return (
             <div className="p-8 text-center py-12">
-                <p className="text-gray-500 mb-4">Primero completa tu perfil para habilitar WhatsApp.</p>
-                <button
-                    onClick={async () => {
-                        const { data: { session } } = await supabase.auth.getSession();
-                        const { data, error } = await supabase.from('tenants').insert({
-                            user_id: session.user.id,
-                            business_name: profile.full_name || 'Mi Clínica',
-                        }).select().single();
-                        if (!error) setTenant(data);
-                    }}
-                    className="px-6 py-2 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700"
-                >
-                    Habilitar WhatsApp
-                </button>
+                <p className="text-gray-500 mb-4">Cargando perfil...</p>
             </div>
         );
     }
