@@ -5,50 +5,54 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 
 import { supabase } from './config/supabaseClient';
 import LoginView from './components/LoginView';
-import AuthedApp from './components/AuthedApp.jsx';
+import AuthedApp from './components/AuthedApp';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const lastSessionId = React.useRef(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     // Track re-mounts within the same page session
     window._appMountCount = (window._appMountCount || 0) + 1;
-    console.log(`[DEBUG] App.js mount #${window._appMountCount} - Navigation Type: ${performance.navigation.type}`);
+    console.log(`[DEBUG] App.js mount #${window._appMountCount}`);
 
-    // Solo usamos onAuthStateChange para capturar la sesión inicial y cambios.
-    // getSession() es redundante y causa deadlocks al ejecutarse en paralelo con el listener interno de Supabase.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("AuthStateChange event:", event, "Session exists?", !!session);
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      const newId = newSession?.user?.id || null;
+      console.log(`[AUTH] Event: ${event} | SessionID: ${newId} | PreviousID: ${lastSessionId.current}`);
 
-      if (event === 'SIGNED_OUT') {
+      // Evitar actualizaciones de estado si el ID de usuario no ha cambiado (evita bucles)
+      if (newId === lastSessionId.current && event !== 'SIGNED_OUT') {
+        // Si el evento es un refresh pero el usuario es el mismo, solo actualizamos el objeto si es necesario
+        // pero evitamos disparar todo el árbol de renders si ya tenemos sesión.
+        setLoading(false);
+        return;
+      }
+
+      lastSessionId.current = newId;
+
+      if (event === 'SIGNED_OUT' || !newSession) {
         setSession(null);
         setLoading(false);
         return;
       }
 
-      // Si hay una sesión, la guardamos.
-      if (session) {
-        setSession(session);
-        setLoading(false);
+      // Si hay una sesión nueva o cambiada
+      setSession(newSession);
+      setLoading(false);
 
-        // Registro de actividad/refresh token (opcional, solo en eventos relevantes)
-        if (session.provider_refresh_token && session.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-          console.log("Syncing provider token...");
-          supabase.from('profiles')
-            .upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token })
-            .then(({ error }) => {
-              if (error) console.error("Error syncing refresh token:", error);
-            });
-        }
-      } else {
-        // No hay sesión
-        setSession(null);
-        setLoading(false);
+      // Sincronización del token de Google (solo en eventos clave)
+      if (newSession.provider_refresh_token && newSession.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        console.log("App: Syncing Google provider token to profile...");
+        supabase.from('profiles')
+          .upsert({ id: newSession.user.id, google_refresh_token: newSession.provider_refresh_token })
+          .then(({ error }) => {
+            if (error) console.error("App: Error syncing refresh token:", error);
+          });
       }
     });
 
