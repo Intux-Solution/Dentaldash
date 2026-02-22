@@ -78,73 +78,87 @@ export function useSettings() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return;
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw sessionError;
+            if (!session) {
+                console.warn('No active session found in useSettings');
+                setLoading(false);
+                return;
+            }
+
+            const userId = session.user.id;
 
             if (session.user?.user_metadata?.avatar_url) {
                 setGoogleAvatar(session.user.user_metadata.avatar_url);
             }
 
             // Fetch Profile
-            const { data: profileData } = await supabase
+            const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
-                .eq('id', session.user.id)
-                .single();
+                .eq('id', userId)
+                .maybeSingle();
+
+            if (profileError) console.error('Error fetching profile:', profileError);
 
             if (profileData) {
                 setProfile({
                     full_name: profileData.full_name || '',
                     avatar_url: profileData.avatar_url,
-                    user_id: session.user.id,
+                    user_id: userId,
                     accepted_insurances: profileData.accepted_insurances || [],
                     services: profileData.services || [],
                     contact_phone: profileData.contact_phone || '',
                 });
                 if (profileData.avatar_url) {
-                    const { data: { publicUrl } } = supabase
-                        .storage
-                        .from('avatars')
-                        .getPublicUrl(profileData.avatar_url);
-                    setAvatarPreview(publicUrl);
+                    const { data } = supabase.storage.from('avatars').getPublicUrl(profileData.avatar_url);
+                    if (data?.publicUrl) setAvatarPreview(data.publicUrl);
                 }
             } else {
-                setProfile(prev => ({ ...prev, user_id: session.user.id }));
+                setProfile(prev => ({ ...prev, user_id: userId }));
             }
 
             // Fetch Schedules
-            const { data: scheduleData } = await supabase
+            const { data: scheduleData, error: scheduleError } = await supabase
                 .from('schedules')
                 .select('*')
+                .eq('organization_id', userId)
                 .order('day_of_week')
                 .order('start_time');
+
+            if (scheduleError) console.error('Error fetching schedules:', scheduleError);
             setSchedules(scheduleData || []);
 
-            // Fetch Tenant & FAQs
-            const { data: tenantData } = await supabase
+            // Fetch Tenant
+            const { data: tenantData, error: tenantError } = await supabase
                 .from('tenants')
                 .select('*')
-                .eq('user_id', session.user.id)
-                .single();
+                .eq('user_id', userId)
+                .maybeSingle();
+
+            if (tenantError) console.error('Error fetching tenant:', tenantError);
 
             if (tenantData) {
                 setTenant(tenantData);
-                setInstanceStatus(tenantData.whatsapp_status);
+                setInstanceStatus(tenantData.whatsapp_status || 'disconnected');
                 if (tenantData.whatsapp_status === 'connecting') {
                     setPollingActive(true);
                 } else if (tenantData.whatsapp_status === 'connected') {
                     checkConnectionStatus(tenantData);
                 }
 
-                const { data: faqData } = await supabase
+                const { data: faqData, error: faqError } = await supabase
                     .from('tenant_faqs')
                     .select('*')
                     .eq('tenant_id', tenantData.id)
                     .order('created_at', { ascending: true });
+
+                if (faqError) console.error('Error fetching FAQs:', faqError);
                 setFaqs(faqData || []);
             }
         } catch (err) {
             console.error('Error fetching settings:', err);
+            message.error('Error al cargar la configuración');
         } finally {
             setLoading(false);
         }
