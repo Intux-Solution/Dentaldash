@@ -1,7 +1,7 @@
 // src/components/Sidebar.jsx - UPDATED 2026-02-16 - FINAL VERSION
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { X, Home, Calendar, Users, Settings } from 'lucide-react';
+import { X, Home, Calendar, Users, Settings, LogOut } from 'lucide-react';
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen, onLogout }) {
   const closeSidebar = () => setSidebarOpen(false);
@@ -102,6 +102,16 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, onLogout }) {
                   <Settings size={20} />
                   <span>Configuración</span>
                 </NavLink>
+              </li>
+
+              <li className="pt-4 border-t border-gray-50">
+                <button
+                  onClick={onLogout}
+                  className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left text-red-500 hover:bg-red-50 transition-all font-medium"
+                >
+                  <LogOut size={20} />
+                  <span>Cerrar Sesión</span>
+                </button>
               </li>
             </ul>
           </nav>
