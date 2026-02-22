@@ -69,13 +69,7 @@ const FaqItem = ({ faq, onUpdate, onDelete }) => {
 };
 
 export default function FaqsTab({ tenant, faqs, setFaqs }) {
-    if (!tenant) {
-        return (
-            <div className="p-8 text-center py-12">
-                <p className="text-gray-500 mb-4">Primero completa tu perfil para configurar las preguntas.</p>
-            </div>
-        );
-    }
+    const tenantId = tenant?.user_id || tenant?.id;
 
     const handleAddFAQ = async () => {
         const qEl = document.getElementById('faq-question');
@@ -88,7 +82,7 @@ export default function FaqsTab({ tenant, faqs, setFaqs }) {
                 .insert({
                     question: qEl.value.trim(),
                     answer: aEl.value.trim(),
-                    tenant_id: tenant.id
+                    tenant_id: tenantId
                 })
                 .select()
                 .single();

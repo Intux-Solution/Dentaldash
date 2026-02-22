@@ -8,10 +8,10 @@ export default function WhatsAppTab({
     instanceStatus, pollingActive, qrCodeData, saving,
     handleConnectWhatsApp, handleDisconnectWhatsApp, session
 }) {
-    if (!profile) {
+    if (!profile?.user_id) {
         return (
             <div className="p-8 text-center py-12">
-                <p className="text-gray-500 mb-4">Cargando perfil...</p>
+                <p className="text-gray-500 mb-4">Iniciando configuración...</p>
             </div>
         );
     }

@@ -23,6 +23,7 @@ export function useSettings(session = null) {
         notification_phone: '',
     });
     const [schedules, setSchedules] = useState([]);
+    const [faqs, setFaqs] = useState([]);
 
     // UI/Connection States
     const [googleAvatar, setGoogleAvatar] = useState(null);
@@ -128,11 +129,22 @@ export function useSettings(session = null) {
             const { data: scheduleData, error: scheduleError } = await supabase
                 .from('schedules')
                 .select('*')
+                .eq('user_id', userId)
                 .order('day_of_week')
                 .order('start_time');
 
             if (scheduleError) console.error('Error fetching schedules:', scheduleError);
             setSchedules(scheduleData || []);
+
+            // Fetch FAQs
+            const { data: faqData, error: faqError } = await supabase
+                .from('tenant_faqs')
+                .select('*')
+                .eq('tenant_id', userId)
+                .order('created_at');
+
+            if (faqError) console.error('Error fetching FAQs:', faqError);
+            setFaqs(faqData || []);
 
         } catch (err) {
             console.error('Error fetching settings:', err);
@@ -251,11 +263,11 @@ export function useSettings(session = null) {
 
     return {
         // State
-        profile, schedules, loading, saving, error,
+        profile, tenant: profile, schedules, faqs, loading, saving, error,
         googleAvatar, avatarPreview, qrCodeData, instanceStatus, pollingActive,
 
         // Actions
-        setProfile, setSchedules,
+        setProfile, setSchedules, setFaqs,
         handleProfileChange, handleAutoSaveProfile, handleAvatarChange,
         handleConnectWhatsApp, handleDisconnectWhatsApp,
         setInstanceStatus, setPollingActive, setQrCodeData
