@@ -35,17 +35,24 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("AuthStateChange event:", event, session ? "Session present" : "Session null");
+      console.log("AuthStateChange event:", event, "Session exists?", !!session);
+
+      if (event === 'SIGNED_OUT') {
+        console.log("Event SIGNED_OUT: Clearing session state.");
+        setSession(null);
+        setLoading(false);
+        return;
+      }
+
       setSession(session);
       setLoading(false);
 
-      if (event === 'SIGNED_OUT') {
-        // Clear anything stuck in local state if needed
-        setSession(null);
-      }
-
       if (session?.provider_refresh_token && session.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        await supabase.from('profiles').upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token });
+        try {
+          await supabase.from('profiles').upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token });
+        } catch (e) {
+          console.error("Failed to sync refresh token:", e);
+        }
       }
     });
 
@@ -53,16 +60,18 @@ export default function App() {
   }, []);
 
   const handleLogout = async () => {
-    console.log("Logging out...");
+    console.log("Manual logout triggered");
     try {
+      // Intentamos cerrar la sesión controlada en el servidor
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      setSession(null); // Force clear state
-      console.log("Logout successful");
+      if (error) console.error("Supabase signOut threw an error, forcing local clear:", error);
     } catch (err) {
-      console.error("Logout error:", err);
-      // Fallback: Clear local storage and state manually if signOut fails
+      console.error("Logout caught error:", err);
+    } finally {
+      // Limpieza forzada de seguridad: SIEMPRE borrar localStorage y estado sin importar si falló en Supabase.
+      console.log("Forcing local storage and session clear...");
       localStorage.clear();
+      sessionStorage.clear();
       setSession(null);
       window.location.href = '/';
     }
