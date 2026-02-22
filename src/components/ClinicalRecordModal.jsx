@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { X, Calendar, Download, Trash2, FileText, ExternalLink, RefreshCw, Upload, AlertTriangle } from 'lucide-react';
-import ModalShell from "./ModalShell";
+import { X, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { StorageService } from "../services/StorageService";
 
 function isPdf(url = "") {
@@ -13,44 +12,56 @@ function isPdf(url = "") {
 export default function ClinicalRecordModal({ open, patient, onClose }) {
   const [signedUrl, setSignedUrl] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [localRawUrl, setLocalRawUrl] = useState(null);
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose && onClose();
-    if (open) window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    if (open) {
+      window.addEventListener("keydown", onKey);
+      // Evitar scroll del body al abrir el modal
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = '';
+    };
   }, [open, onClose]);
 
-  // Soportar varias keys
-  const rawUrl = patient ? (
-    patient.historiaUrl ||
-    patient.odontogramaUrl ||
-    patient.odontograma ||
-    patient.historiaClinica ||
-    patient.historiaClinicaUrl ||
-    ""
-  ) : "";
+  // Sincronizar prop patient con estado local al abrir o cambiar de paciente
+  useEffect(() => {
+    if (patient) {
+      setLocalRawUrl(
+        patient.historiaUrl ||
+        patient.odontogramaUrl ||
+        patient.odontograma ||
+        patient.historiaClinica ||
+        patient.historiaClinicaUrl ||
+        ""
+      );
+    }
+  }, [patient, open]);
 
-  // Fetch signed URL if it's a path, or use it directly if it's a public URL (legacy/Google)
+  // Fetch signed URL if it's a path, or use it directly if it's a public URL
   useEffect(() => {
     let active = true;
 
     async function fetchUrl() {
-      if (!rawUrl) {
+      if (!localRawUrl) {
         if (active) setSignedUrl(null);
         return;
       }
 
       // If it looks like a full URL (http/https), use it directly
-      if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
-        if (active) setSignedUrl(rawUrl);
+      if (localRawUrl.startsWith("http://") || localRawUrl.startsWith("https://")) {
+        if (active) setSignedUrl(localRawUrl);
         return;
       }
 
       // Prevenir intentos de firmar placeholders o strings inválidos
-      const isLikelyPath = typeof rawUrl === 'string' &&
-        rawUrl.length > 5 &&
-        !rawUrl.includes(' ') &&
-        !['Sin archivo', 'Sin historia clínica', 'Sin historia clinica', '-'].includes(rawUrl);
+      const isLikelyPath = typeof localRawUrl === 'string' &&
+        localRawUrl.length > 5 &&
+        !localRawUrl.includes(' ') &&
+        !['Sin archivo', 'Sin historia clínica', 'Sin historia clinica', '-'].includes(localRawUrl);
 
       if (!isLikelyPath) {
         if (active) setSignedUrl(null);
@@ -60,7 +71,7 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
       // Otherwise, assume it's a Storage path and get a signed URL
       try {
         if (active) setLoading(true);
-        const url = await StorageService.getSignedUrl(rawUrl); // Default bucket is 'clinical-records'
+        const url = await StorageService.getSignedUrl(localRawUrl); // Default bucket is 'clinical-records'
         if (active) setSignedUrl(url);
       } catch (err) {
         console.error("Error fetching signed URL:", err);
@@ -69,47 +80,17 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
       }
     }
 
-    if (open && patient) {
-      setSignedUrl(null); // Limpiar URL previa al cambiar paciente o abrir
+    if (open) {
+      setSignedUrl(null); // Limpiar URL previa
       fetchUrl();
     } else {
       setSignedUrl(null);
     }
 
     return () => { active = false; };
-  }, [rawUrl, open, patient]);
+  }, [localRawUrl, open]);
 
   if (!open || !patient) return null;
-
-  const ultimaVisita = patient.ultimaVisita || "—";
-  const ultimoMotivo =
-    patient.ultimoMotivo ||
-    patient.motivoUltimoTurno ||
-    patient.ultimoTurnoMotivo ||
-    "No especificado";
-
-  const displayUrl = signedUrl;
-
-  const handleDelete = async () => {
-    if (!window.confirm("¿Estás seguro de que deseas eliminar este archivo? Esta acción borrará el archivo de la base de datos definitivamente.")) return;
-
-    try {
-      setLoading(true);
-      await StorageService.deleteFile(rawUrl, 'clinical-records');
-
-      // Update DB
-      const { supabase } = await import('../config/supabaseClient');
-      await supabase.from('patients').update({ historia_clinica_url: null }).eq('id', patient.id);
-
-      onClose();
-      // Notify parent to refresh
-      window.dispatchEvent(new CustomEvent('patients:refresh'));
-    } catch (err) {
-      alert("Error al eliminar el archivo: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
@@ -123,135 +104,102 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
       const newPath = await PatientService.uploadClinicalRecord(file, patient.nombre);
 
       // 2. Delete old file if exists and it is a path
-      if (rawUrl && !rawUrl.startsWith('http')) {
-        await StorageService.deleteFile(rawUrl, 'clinical-records');
+      if (localRawUrl && !localRawUrl.startsWith('http')) {
+        await StorageService.deleteFile(localRawUrl, 'clinical-records');
       }
 
       // 3. Update DB
       const { supabase } = await import('../config/supabaseClient');
       await supabase.from('patients').update({ historia_clinica_url: newPath }).eq('id', patient.id);
 
-      onClose();
-      // Notify parent to refresh
+      // 4. Update local state to show new file WITHOUT closing modal
+      setLocalRawUrl(newPath);
+
+      // Notify parent to refresh list in background
       window.dispatchEvent(new CustomEvent('patients:refresh'));
+
+      // Reset input para permitir volver a subir el mismo archivo si es necesario
+      e.target.value = null;
     } catch (err) {
       alert("Error al cambiar el archivo: " + err.message);
     } finally {
+      // El effect de localRawUrl manejará el resto del loading de la URL firmada,
+      // pero por si falla y no carga nada nuevo, quitamos el loading.
       setLoading(false);
     }
   };
 
+  const displayUrl = signedUrl;
+
   return (
-    <ModalShell title="Historia Clínica" onClose={onClose}>
-      <div className="mb-4 flex justify-between items-start">
-        <div>
-          <div className="text-lg font-semibold text-gray-900">
-            {patient.nombre}
-          </div>
-          <div className="mt-1 text-sm text-gray-600">
-            <span className="font-medium text-gray-700">Último turno: </span>
-            {ultimaVisita}
-            <span className="mx-2">•</span>
-            <span className="font-medium text-gray-700">Motivo: </span>
-            {ultimoMotivo}
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <label className="cursor-pointer px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors">
-            Cambiar Archivo
-            <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
-          </label>
-          {rawUrl && (
-            <button
-              onClick={handleDelete}
-              className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
-            >
-              Eliminar
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/40 backdrop-blur-sm transition-opacity">
+      {/* Click outside to close */}
+      <div className="absolute inset-0" onClick={onClose} />
 
-      <div className="mt-4">
-        {loading ? (
-          <div className="flex justify-center items-center h-[60vh] border rounded-lg bg-gray-50">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
-          </div>
-        ) : !rawUrl ? (
-          /* Caso 1: No hay archivo asignado en BD */
-          <div className="flex flex-col items-center justify-center p-12 rounded-xl border-2 border-dashed bg-gray-50 text-gray-500">
-            <div className="text-sm font-medium mb-4">No hay historia clínica asociada.</div>
-            <label className="cursor-pointer px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all shadow-sm">
-              Subir Historia Clínica
-              <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
-            </label>
-          </div>
-        ) : !displayUrl ? (
-          /* Caso 2: Hay path en BD pero no se pudo obtener URL (Archivo borrado/invalido) */
-          <div className="flex flex-col items-center justify-center h-[60vh] rounded-xl border-2 border-dashed border-red-200 bg-red-50 p-8 text-center">
-            <AlertTriangle size={48} className="text-red-400 mb-4" />
-            <h3 className="text-lg font-bold text-red-700 mb-2">Archivo No Encontrado</h3>
-            <p className="text-sm text-red-600 mb-6 max-w-sm">
-              El archivo figura en la base de datos pero no se encuentra en el servidor de almacenamiento. Es posible que haya sido eliminado externamente.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors shadow-sm"
-              >
-                Limpiar Registro Roto
-              </button>
-              <label className="cursor-pointer px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors shadow-sm">
-                Subir Nuevo
-                <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
-              </label>
+      {/* Modal Card - Minimalist UI */}
+      <div className="relative z-10 w-full max-w-md bg-white p-8 md:p-10 shadow-2xl flex flex-col justify-between overflow-y-auto max-h-[95vh] animate-in fade-in zoom-in-95 duration-200">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8 md:mb-10">
+          <h2 className="text-[22px] font-black uppercase tracking-tight text-black m-0 leading-none">
+            Historia Clínica
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-black hover:text-gray-600 transition-colors"
+            aria-label="Cerrar"
+          >
+            <X size={28} strokeWidth={3} />
+          </button>
+        </div>
+
+        {/* Gray Preview Box */}
+        <div className="w-full aspect-square sm:aspect-[4/3] bg-[#F5F5F5] mb-8 md:mb-10 flex items-center justify-center relative group overflow-hidden">
+          {loading ? (
+            <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-t-transparent border-black"></div>
+          ) : !localRawUrl ? (
+            <ImageIcon size={96} strokeWidth={1.5} className="text-black" />
+          ) : !displayUrl ? (
+            <div className="flex flex-col items-center justify-center text-red-500">
+              <AlertTriangle size={64} className="mb-4" />
+              <span className="text-sm font-bold uppercase tracking-wider text-center px-4">Error cargando archivo</span>
             </div>
-            <p className="text-xs text-gray-400 mt-4 font-mono">{rawUrl}</p>
-          </div>
-        ) : (isPdf(displayUrl) || (typeof rawUrl === 'string' && rawUrl.includes("drive.google.com"))) ? (
-          <div className="h-[60vh] rounded-lg border overflow-hidden">
-            <iframe title="Historia Clínica" src={displayUrl} className="w-full h-full" />
-          </div>
-        ) : (
-          <div className="rounded-lg border overflow-hidden">
-            <img
-              src={displayUrl}
-              alt="Historia Clínica"
-              className="w-full h-auto object-contain bg-white"
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6 flex justify-end gap-3">
-        {displayUrl && (
-          <>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(displayUrl);
-                alert('Link copiado al portapapeles');
-              }}
-              className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50 mr-auto"
-            >
-              Copiar Link
-            </button>
+          ) : isPdf(displayUrl) || (typeof localRawUrl === 'string' && localRawUrl.includes("drive.google.com")) ? (
+            <div className="w-full h-full relative">
+              <iframe title="Historia Clínica" src={displayUrl} className="w-full h-full border-none" />
+            </div>
+          ) : (
             <a
               href={displayUrl}
               target="_blank"
               rel="noreferrer"
-              className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50"
+              className="w-full h-full flex items-center justify-center bg-[#F5F5F5] cursor-zoom-in"
+              title="Abrir imagen en pestaña nueva"
             >
-              Abrir en pestaña nueva
+              <img src={displayUrl} alt="Historia Clínica" className="w-full h-full object-contain mix-blend-multiply" />
             </a>
-          </>
-        )}
-        <button
-          onClick={onClose}
-          className="px-6 py-2 rounded-lg bg-gray-900 text-white font-bold hover:bg-black transition-all"
-        >
-          Cerrar
-        </button>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-4 mt-auto">
+          {/* ABRIR - Upload file */}
+          <label className="w-full min-h-[56px] flex items-center justify-center bg-white text-black border-2 border-black font-extrabold text-sm tracking-[0.2em] uppercase cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors m-0">
+            Abrir
+            <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
+          </label>
+
+          {/* CERRAR */}
+          <button
+            onClick={onClose}
+            className="w-full min-h-[56px] flex items-center justify-center bg-black text-white font-extrabold text-sm tracking-[0.2em] uppercase hover:bg-gray-900 active:bg-gray-800 transition-colors m-0"
+          >
+            Cerrar
+          </button>
+        </div>
+
       </div>
-    </ModalShell>
+    </div>
   );
 }
+
