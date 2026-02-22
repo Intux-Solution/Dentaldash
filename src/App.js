@@ -97,7 +97,7 @@ export default function App() {
             !session ? (
               <LoginView onSuccess={() => { }} />
             ) : (
-              <AuthedApp onLogout={handleLogout} justLoggedIn={false} />
+              <AuthedApp onLogout={handleLogout} justLoggedIn={false} session={session} />
             )
           }
         />

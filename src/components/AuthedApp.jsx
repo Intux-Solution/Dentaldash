@@ -24,7 +24,7 @@ const titleByPath = (pathname) => {
   return 'Dashboard';
 };
 
-export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }) {
+export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, session }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -114,7 +114,7 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }) {
         <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} onLogout={onLogout} />
 
         <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
-          <Header title={headerTitle} setSidebarOpen={setSidebarOpen} onLogout={onLogout} />
+          <Header title={headerTitle} setSidebarOpen={setSidebarOpen} onLogout={onLogout} session={session} />
 
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 mx-4 mt-4 rounded">

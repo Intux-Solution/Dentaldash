@@ -4,7 +4,7 @@ import { Settings, LogOut, User, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 
-export default function Header({ title, setSidebarOpen, onLogout }) {
+export default function Header({ title, setSidebarOpen, onLogout, session }) {
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [userData, setUserData] = useState({
@@ -34,15 +34,8 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
   const fetchUserData = async () => {
     try {
       console.log("Header: fetching user data...");
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError) {
-        console.error("Header: Session error:", sessionError);
-        return;
-      }
-
       if (!session) {
-        console.warn("Header: No session found");
+        console.warn("Header: No session handed down from props");
         return;
       }
 

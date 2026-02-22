@@ -33,9 +33,7 @@ export class PatientService {
    */
   static async fetchAllPatients(): Promise<any[]> {
     try {
-      // Garantizar que la sesión esté seteada en el cliente antes de la llamada REST (fix de race condition en F5)
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
-      if (authError || !session) throw new Error("Authentication session missing or expired.");
+      // Eliminamos el getSession() innecesario que estaba causando un Deadlock en Supabase JS client.
 
       const { data, error } = await supabase
         .from('patients')

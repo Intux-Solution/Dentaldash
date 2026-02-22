@@ -77,19 +77,19 @@ export function useSettings() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) throw sessionError;
-            if (!session) {
-                console.warn('No active session found in useSettings');
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            if (userError) throw userError;
+            if (!user) {
+                console.warn('No active user found in useSettings');
                 setLoading(false);
                 return;
             }
 
-            const userId = session.user.id;
+            const userId = user.id;
 
             // Extract Google Session fallbacks
-            const sessionName = session.user?.user_metadata?.full_name || session.user?.user_metadata?.name || '';
-            const sessionAvatar = session.user?.user_metadata?.avatar_url || session.user?.user_metadata?.picture || null;
+            const sessionName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+            const sessionAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
 
             if (sessionAvatar) {
                 setGoogleAvatar(sessionAvatar);

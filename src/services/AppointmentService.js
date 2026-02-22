@@ -10,8 +10,7 @@ export class AppointmentService {
      */
     static async getAppointments(from, to) {
         try {
-            const { data: { session }, error: authError } = await supabase.auth.getSession();
-            if (authError || !session) throw new Error("Authentication session missing or expired.");
+            // Removemos getSession concurrente que causaba deadlock en F5
 
             const { data, error } = await supabase
                 .from('appointments')
