@@ -47,14 +47,15 @@ serve(async (req) => {
             return new Response(JSON.stringify({ error: "Unauthorized / Invalid Token" }), { status: 401, headers: corsHeaders });
         }
 
-        // Validate that the request maker actually owns the target tenant
-        const { data: tenant, error: tenantError } = await supabase
-            .from('tenants')
-            .select('user_id')
-            .eq('id', tenant_id)
+        // Validate that the request maker actually has access to the target tenant
+        const { data: tenantUser, error: tenantUserError } = await supabase
+            .from('tenant_users')
+            .select('role')
+            .eq('tenant_id', tenant_id)
+            .eq('user_id', user.id)
             .single();
 
-        if (tenantError || !tenant || tenant.user_id !== user.id) {
+        if (tenantUserError || !tenantUser) {
             return new Response(JSON.stringify({ error: "Forbidden: You don't own this tenant." }), { status: 403, headers: corsHeaders });
         }
 

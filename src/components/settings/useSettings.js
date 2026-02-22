@@ -121,7 +121,6 @@ export function useSettings() {
             const { data: scheduleData, error: scheduleError } = await supabase
                 .from('schedules')
                 .select('*')
-                .eq('organization_id', userId)
                 .order('day_of_week')
                 .order('start_time');
 
@@ -132,7 +131,7 @@ export function useSettings() {
             const { data: tenantData, error: tenantError } = await supabase
                 .from('tenants')
                 .select('*')
-                .eq('user_id', userId)
+                .limit(1)
                 .maybeSingle();
 
             if (tenantError) console.error('Error fetching tenant:', tenantError);

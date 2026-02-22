@@ -224,7 +224,7 @@ serve(async (req) => {
                     .from('patients')
                     .select('*')
                     .eq('telefono', cleanPhone)
-                    .eq('organization_id', tenant.user_id)
+                    .eq('organization_id', tenant.id)
                     .maybeSingle(); // Changed from single() to avoid error on not found
 
                 // Fetch Rest of Context
@@ -296,7 +296,7 @@ serve(async (req) => {
                         const { data: appointments } = await supabase
                             .from('appointments')
                             .select('start_time, end_time')
-                            .eq('organization_id', tenant.user_id)
+                            .eq('organization_id', tenant.id)
                             .gte('start_time', startOfDay)
                             .lte('start_time', endOfDay)
                             .neq('status', 'cancelled');
@@ -423,7 +423,7 @@ serve(async (req) => {
                             .eq('telefono', jidPhone) // Still lookup by WA number? Or by finalPhone?
                             // If I change numbers, I might break history. Let's lookup by JID phone.
                             // If not found, create with JID phone (or provided phone).
-                            .eq('organization_id', tenant.user_id)
+                            .eq('organization_id', tenant.id)
                             .maybeSingle();
 
                         if (!patient) {
@@ -433,7 +433,7 @@ serve(async (req) => {
                                     .from('patients')
                                     .select('id')
                                     .eq('telefono', finalPhone)
-                                    .eq('organization_id', tenant.user_id)
+                                    .eq('organization_id', tenant.id)
                                     .maybeSingle();
 
                                 if (existingByProvided) patient = existingByProvided;
@@ -449,7 +449,7 @@ serve(async (req) => {
                                     dni: dni,
                                     obra_social: obraSocial,
                                     email: email || null,
-                                    organization_id: tenant.user_id,
+                                    organization_id: tenant.id,
                                     estado: 'Activo'
                                 })
                                 .select()
@@ -468,7 +468,7 @@ serve(async (req) => {
                             .insert({
                                 title: `Consulta General - ${patientName}`,
                                 patient_id: patient.id,
-                                organization_id: tenant.user_id,
+                                organization_id: tenant.id,
                                 start_time: startDateTime.toISOString(),
                                 end_time: endDateTime.toISOString(),
                                 duration: 30,
