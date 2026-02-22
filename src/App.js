@@ -62,13 +62,15 @@ export default function App() {
   const handleLogout = async () => {
     console.log("Manual logout triggered");
     try {
-      // Intentamos cerrar la sesión controlada en el servidor
-      const { error } = await supabase.auth.signOut();
+      // Intentamos cerrar la sesión de forma controlada con un timeout máximo de 3 segundos
+      const signOutPromise = supabase.auth.signOut();
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('SignOut Timeout')), 3000));
+      const { error } = await Promise.race([signOutPromise, timeoutPromise]);
+
       if (error) console.error("Supabase signOut threw an error, forcing local clear:", error);
     } catch (err) {
-      console.error("Logout caught error:", err);
+      console.error("Logout caught error or timeout:", err);
     } finally {
-      // Limpieza forzada de seguridad: SIEMPRE borrar localStorage y estado sin importar si falló en Supabase.
       console.log("Forcing local storage and session clear...");
       localStorage.clear();
       sessionStorage.clear();
@@ -78,7 +80,7 @@ export default function App() {
   };
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center bg-gray-50 text-teal-600 font-medium font-sans">Cargando...</div>;
+    return <div className="flex h-screen items-center justify-center bg-gray-50 text-teal-600 font-medium font-sans">Cargando sesión...</div>;
   }
 
   return (

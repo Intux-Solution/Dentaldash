@@ -10,6 +10,9 @@ export class AppointmentService {
      */
     static async getAppointments(from, to) {
         try {
+            const { data: { session }, error: authError } = await supabase.auth.getSession();
+            if (authError || !session) throw new Error("Authentication session missing or expired.");
+
             const { data, error } = await supabase
                 .from('appointments')
                 .select(`
