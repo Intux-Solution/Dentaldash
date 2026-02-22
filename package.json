@@ -5,6 +5,7 @@
   },
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
     "antd": "^6.3.0",
