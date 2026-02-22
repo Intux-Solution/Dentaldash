@@ -228,7 +228,7 @@ serve(async (req) => {
                     .maybeSingle(); // Changed from single() to avoid error on not found
 
                 // Fetch Rest of Context
-                const [profileRes, schedulesRes, historyRes] = await Promise.all([
+                const [profileRes, schedulesRes, historyRes, profileCalendarRes] = await Promise.all([
                     supabase.from('profiles').select('*').eq('id', tenant.user_id).single(),
                     supabase.from('schedules').select('*').eq('is_active', true).order('day_of_week', { ascending: true }),
                     supabase.from('chat_history')
@@ -236,17 +236,44 @@ serve(async (req) => {
                         .eq('jid', remoteJid)
                         .eq('whatsapp_instance', instanceName)
                         .eq('status', 'processed') // Only historical processed messages
-                        .neq('id', insertedMsg.id) // Exclude current ones (we just processed them, but better to use clean history)
-                        // Actually, historyRes should NOT include the current batch we just processed if we want proper flow?
-                        // Or proper flow includes them? 
-                        // Standard: User says "Hi". History: [Hi]. AI: "Hello".
-                        // Here: User says "Hi", "Help". Batch: "Hi Help". History should effectively reflect "Hi Help".
-                        // We'll append the combined text to the Prompt History manually.
+                        .neq('id', insertedMsg.id) // Exclude current ones
                         .order('created_at', { ascending: false })
-                        .limit(10)
+                        .limit(10),
+                    supabase.from('profiles').select('google_refresh_token').eq('id', tenant.user_id).single()
                 ]);
 
                 const profile = profileRes.data;
+                const googleRefreshToken = profileCalendarRes.data?.google_refresh_token;
+
+                // Attempt to refresh Google Calendar Token if available
+                let googleAccessToken: string | null = null;
+                const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
+                const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET');
+
+                if (googleRefreshToken && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+                    try {
+                        const tokenUrl = 'https://oauth2.googleapis.com/token';
+                        const body = new URLSearchParams({
+                            client_id: GOOGLE_CLIENT_ID,
+                            client_secret: GOOGLE_CLIENT_SECRET,
+                            refresh_token: googleRefreshToken,
+                            grant_type: 'refresh_token',
+                        });
+                        const tokenRes = await fetch(tokenUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: body.toString()
+                        });
+                        if (tokenRes.ok) {
+                            const tData = await tokenRes.json();
+                            googleAccessToken = tData.access_token;
+                        } else {
+                            console.error("Failed to refresh Google Token:", await tokenRes.text());
+                        }
+                    } catch (e: any) {
+                        console.error("Error fetching Google Token:", e.message);
+                    }
+                }
                 // Filter out the ids we just processed from history fetch just in case they slipped in
                 const history = (historyRes.data || [])
                     .filter((m: any) => !batchIds.includes(m.id))
@@ -273,6 +300,28 @@ serve(async (req) => {
                             .gte('start_time', startOfDay)
                             .lte('start_time', endOfDay)
                             .neq('status', 'cancelled');
+
+                        // Fetch Google Google Calendar Events
+                        let googleEvents: any[] = [];
+                        if (googleAccessToken) {
+                            try {
+                                const params = new URLSearchParams({
+                                    timeMin: startOfDay,
+                                    timeMax: endOfDay,
+                                    singleEvents: 'true',
+                                    orderBy: 'startTime',
+                                });
+                                const eventRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`, {
+                                    headers: { 'Authorization': `Bearer ${googleAccessToken}` }
+                                });
+                                if (eventRes.ok) {
+                                    const eventData = await eventRes.json();
+                                    googleEvents = eventData.items || [];
+                                }
+                            } catch (e: any) {
+                                console.error("Error fetching Google Events:", e.message);
+                            }
+                        }
 
                         // 3. Time buffer: filter out slots that are in the past or < 30 min from now
                         const nowTime = new Date();
@@ -310,7 +359,28 @@ serve(async (req) => {
                                     return (slotStart < apptEnd && slotEnd > apptStart);
                                 });
 
-                                if (!isOccupied) {
+                                const isOccupiedGoogle = googleEvents.some((event: any) => {
+                                    if (event.transparency === 'transparent') return false; // Available block
+
+                                    let eStart = event.start?.dateTime;
+                                    let eEnd = event.end?.dateTime;
+
+                                    // Handle all-day events
+                                    if (!eStart && event.start?.date) {
+                                        // Use Argentina timezone offset manually for all-day boundaries?
+                                        // Standard ISO assumption should cover the bounds.
+                                        eStart = `${event.start.date}T00:00:00-03:00`;
+                                        eEnd = `${event.start.date}T23:59:59-03:00`;
+                                    }
+
+                                    if (!eStart || !eEnd) return false;
+
+                                    const gStart = new Date(eStart);
+                                    const gEnd = new Date(eEnd);
+                                    return (slotStart < gEnd && slotEnd > gStart);
+                                });
+
+                                if (!isOccupied && !isOccupiedGoogle) {
                                     slotsArray.push(slotStart.toTimeString().substring(0, 5));
                                 }
                                 currentTime = slotEnd;
@@ -496,17 +566,25 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 
                 const systemPrompt = `${basePrompt}
 
---- REGLAS DEL SISTEMA ---
-- IDENTIDAD: Eres estrictamente la asistente del Od. ${dentistName}. NO eres una clínica.
-- TONO: Profesional, amable y de CONCISIÓN EXTREMA. Usa bullet points si aplica. Cero introducciones largas.
-- FECHA ACTUAL: ${currentDateTimeString}
-- CALENDARIO (14 días): ${JSON.stringify(calContext)}
-
---- FLUJO DE TURNOS ---
-1. DISPONIBILIDAD: OBLIGATORIO usar 'get_available_slots' ANTES de proponer cualquier horario. NO pidas permiso para revisar.
-2. AGENDAR: Usa 'create_appointment' SOLO cuando tengas: Nombre, DNI, Teléfono (pídeselo aunque te escriba por WhatsApp para confirmar) y Obra Social. Si faltan, pídelos directamente y con amabilidad.
+--- REGLAS ESTRICTAS DEL SISTEMA ---
+1. IDENTIDAD: Eres estrictamente la asistente del Od. ${dentistName}. NO eres una clínica.
+2. DISPONIBILIDAD (¡CRÍTICO!): 
+   - NUNCA inventes, asumas, ni adivines un turno disponible.
+   - NUNCA ofrezcas un día u horario sin haber OBLIGATORIAMENTE llamado a la función 'get_available_slots' para ese día exacto.
+   - Si el usuario pide "el lunes", averigua qué fecha es, usa 'get_available_slots' y SOLO ofrece las horas que esa función te devuelva. Si la función dice que no hay turnos, asúmelo como verdad irrefutable y dile al paciente que no hay lugar.
+3. AGENDAMIENTO (¡CRÍTICO!): 
+   - NUNCA agendes un turno (usando 'create_appointment') sin recibir antes un "SÍ" EXPLÍCITO del paciente para la fecha y hora exacta propuesta.
+   - Flujo correcto: 
+     a) Tu dices: "Tengo libre el Jueves a las 15:00. ¿Deseas que te anote en ese horario?"
+     b) Esperas a que el paciente diga "Sí, dale" o "Confirmado".
+     c) Recién entonces pides los datos faltantes que necesites y usas 'create_appointment'.
+4. DATOS NECESARIOS: Para agendar necesitas Nombre, DNI, Teléfono y Obra Social. Pídelos con amabilidad.
+5. TONO: Profesional, amable y de CONCISIÓN EXTREMA. Usa bullet points si aplica.
+6. FECHA ACTUAL: ${currentDateTimeString}
+7. CALENDARIO (14 días): ${JSON.stringify(calContext)}
 
 ${contextInfo}`;
+
 
                 let aiResponse = "";
 

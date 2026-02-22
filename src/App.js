@@ -18,14 +18,21 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
+      // Guardar el token de refresh si existe
+      if (session?.provider_refresh_token && session.user) {
+        supabase.from('profiles').update({ google_refresh_token: session.provider_refresh_token }).eq('id', session.user.id).then();
+      }
     });
 
     // 2. Listen for changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setLoading(false);
+      if (session?.provider_refresh_token && session.user) {
+        await supabase.from('profiles').update({ google_refresh_token: session.provider_refresh_token }).eq('id', session.user.id);
+      }
     });
 
     return () => subscription.unsubscribe();
