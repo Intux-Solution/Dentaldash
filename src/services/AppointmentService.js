@@ -188,13 +188,13 @@ export class AppointmentService {
      */
     static async getServices() {
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return [];
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return [];
 
             const { data, error } = await supabase
                 .from('profiles')
                 .select('services')
-                .eq('id', session.user.id)
+                .eq('id', user.id)
                 .single();
 
             if (error) throw error;

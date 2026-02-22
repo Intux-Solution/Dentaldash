@@ -42,32 +42,35 @@ export default function Header({ title, setSidebarOpen, onLogout, session }) {
       const user = session.user;
       console.log("Header: Full User Metadata:", user.user_metadata);
 
-      let name = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
-      let avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture;
-
-      console.log("Header: Initial avatar from metadata:", avatar);
-
-      const { data: profile, error: profileError } = await supabase
+      // Query the flat profiles table
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, avatar_url')
+        .select('full_name, avatar_url, business_name')
         .eq('id', user.id)
-        .maybeSingle();
+        .maybeSingle(); // Use maybeSingle to handle cases where no profile exists
 
       if (profileError) {
-        console.error("Header: Profile fetch error:", profileError);
+        console.error('Header: Error fetching profile:', profileError);
+        // Continue with default or metadata values if profile fetch fails
       }
 
-      if (profile) {
-        console.log("Header: Found profile in DB:", profile);
-        if (profile.full_name) name = profile.full_name;
-        if (profile.avatar_url) {
-          console.log("Header: Using profile avatar_url from storage:", profile.avatar_url);
-          const { data } = supabase.storage.from('avatars').getPublicUrl(profile.avatar_url);
-          if (data?.publicUrl) avatar = data.publicUrl;
+      let name = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
+      let avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+      let businessName = 'Mi Consultorio'; // Default business name
+
+      if (profileData) {
+        console.log("Header: Found profile in DB:", profileData);
+        if (profileData.full_name) name = profileData.full_name;
+        if (profileData.business_name) businessName = profileData.business_name;
+
+        if (profileData.avatar_url) {
+          console.log("Header: Using profile avatar_url from storage:", profileData.avatar_url);
+          const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(profileData.avatar_url);
+          if (publicUrlData?.publicUrl) avatar = publicUrlData.publicUrl;
         }
       }
 
-      console.log("Header: Final name:", name, "Final avatar:", avatar);
+      console.log("Header: Final name:", name, "Final avatar:", avatar, "Final businessName:", businessName);
 
       setUserData({
         name: name || 'Usuario',

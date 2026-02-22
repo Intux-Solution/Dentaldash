@@ -336,14 +336,14 @@ export class PatientService {
    */
   static async getAllUniqueInsurances(): Promise<string[]> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { user } } = await supabase.auth.getUser();
       let profileInsurances: string[] = [];
 
-      if (session?.user?.id) {
+      if (user?.id) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('accepted_insurances')
-          .eq('id', session.user.id)
+          .eq('id', user.id)
           .single();
         if (profile?.accepted_insurances) {
           profileInsurances = profile.accepted_insurances;
