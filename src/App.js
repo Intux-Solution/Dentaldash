@@ -14,11 +14,18 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log("App.js mount: Checking session...");
+
     // 1. Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error("Error getting session on mount:", error);
+      }
+      console.log("Initial session check:", session ? "Found" : "Not found", session?.user?.email);
       setSession(session);
       setLoading(false);
-      // Guardar el token de refresh si existe (Usar UPSERT para asegurar que el perfil exista)
+
+      // Guardar el token de refresh si existe
       if (session?.provider_refresh_token && session.user) {
         supabase.from('profiles').upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token }).then();
       }
@@ -28,10 +35,16 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("AuthStateChange event:", event, session ? "Session present" : "Session null");
       setSession(session);
       setLoading(false);
-      // Solo actuar en SIGNED_IN o INITIAL_SESSION para evitar loops innecesarios en refresh
-      if (session?.provider_refresh_token && session.user) {
+
+      if (event === 'SIGNED_OUT') {
+        // Clear anything stuck in local state if needed
+        setSession(null);
+      }
+
+      if (session?.provider_refresh_token && session.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
         await supabase.from('profiles').upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token });
       }
     });
@@ -40,7 +53,19 @@ export default function App() {
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    console.log("Logging out...");
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setSession(null); // Force clear state
+      console.log("Logout successful");
+    } catch (err) {
+      console.error("Logout error:", err);
+      // Fallback: Clear local storage and state manually if signOut fails
+      localStorage.clear();
+      setSession(null);
+      window.location.href = '/';
+    }
   };
 
   if (loading) {

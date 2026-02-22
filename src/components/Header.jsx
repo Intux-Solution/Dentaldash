@@ -33,32 +33,46 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
 
   const fetchUserData = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      console.log("Header: fetching user data...");
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error("Header: Session error:", sessionError);
+        return;
+      }
+
+      if (!session) {
+        console.warn("Header: No session found");
+        return;
+      }
 
       const user = session.user;
-      let name = user.user_metadata?.full_name || user.email;
+      let name = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
       let avatar = user.user_metadata?.avatar_url;
 
-      const { data: profile } = await supabase
+      console.log("Header: Authenticated user:", user.email, "metadata name:", name);
+
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('full_name, avatar_url')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("Header: Profile fetch error:", profileError);
+      }
 
       if (profile) {
+        console.log("Header: Found profile:", profile);
         if (profile.full_name) name = profile.full_name;
         if (profile.avatar_url) {
-          const { data: { publicUrl } } = supabase
-            .storage
-            .from('avatars')
-            .getPublicUrl(profile.avatar_url);
-          avatar = publicUrl;
+          const { data } = supabase.storage.from('avatars').getPublicUrl(profile.avatar_url);
+          if (data?.publicUrl) avatar = data.publicUrl;
         }
       }
 
       setUserData({
-        name: name,
+        name: name || 'Usuario',
         avatar: avatar,
         email: user.email,
         role: 'Odontólogo'
