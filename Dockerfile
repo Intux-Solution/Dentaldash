@@ -10,15 +10,18 @@ RUN npm ci
 # Copy Source
 COPY . .
 
-# Build Arguments (Must be passed during build for CRA to bake them in)
+# Build Arguments (Require these when building so Vite can bake them in)
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
 ARG REACT_APP_SUPABASE_URL
 ARG REACT_APP_SUPABASE_ANON_KEY
 
-# Set ENV from ARGs
+# Map the VITE_ args or fallback directly to the REACT args temporarily 
+# incase the Github Actions CI wasn't fully updated yet.
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-$REACT_APP_SUPABASE_URL}
+ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:-$REACT_APP_SUPABASE_ANON_KEY}
 ENV REACT_APP_SUPABASE_URL=$REACT_APP_SUPABASE_URL
 ENV REACT_APP_SUPABASE_ANON_KEY=$REACT_APP_SUPABASE_ANON_KEY
-# If you have other vars (like N8N was removed, but API_KEY might be needed?)
-# ENV REACT_APP_API_KEY=$REACT_APP_API_KEY
 
 # Build the app
 RUN npm run build
