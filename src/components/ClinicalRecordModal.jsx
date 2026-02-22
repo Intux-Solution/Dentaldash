@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { X, AlertTriangle, Image as ImageIcon } from 'lucide-react';
+import { FolderOpen, Upload, X, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { StorageService } from "../services/StorageService";
+import ModalShell from "./ModalShell";
 
 function isPdf(url = "") {
   if (typeof url !== "string") return false;
   const lowerUrl = url.toLowerCase();
-  // Check if it has .pdf extension OR if it's a signed URL from Supabase that might have query params but still be a PDF
   return lowerUrl.includes(".pdf");
 }
 
@@ -13,19 +13,6 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
   const [signedUrl, setSignedUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [localRawUrl, setLocalRawUrl] = useState(null);
-
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose && onClose();
-    if (open) {
-      window.addEventListener("keydown", onKey);
-      // Evitar scroll del body al abrir el modal
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = '';
-    };
-  }, [open, onClose]);
 
   // Sincronizar prop patient con estado local al abrir o cambiar de paciente
   useEffect(() => {
@@ -36,6 +23,7 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
         patient.odontograma ||
         patient.historiaClinica ||
         patient.historiaClinicaUrl ||
+        patient.historia_clinica_url ||
         ""
       );
     }
@@ -51,13 +39,12 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
         return;
       }
 
-      // If it looks like a full URL (http/https), use it directly
-      if (localRawUrl.startsWith("http://") || localRawUrl.startsWith("https://")) {
+      const isPublicUrl = localRawUrl.startsWith("http://") || localRawUrl.startsWith("https://");
+      if (isPublicUrl) {
         if (active) setSignedUrl(localRawUrl);
         return;
       }
 
-      // Prevenir intentos de firmar placeholders o strings inválidos
       const isLikelyPath = typeof localRawUrl === 'string' &&
         localRawUrl.length > 5 &&
         !localRawUrl.includes(' ') &&
@@ -68,10 +55,9 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
         return;
       }
 
-      // Otherwise, assume it's a Storage path and get a signed URL
       try {
         if (active) setLoading(true);
-        const url = await StorageService.getSignedUrl(localRawUrl); // Default bucket is 'clinical-records'
+        const url = await StorageService.getSignedUrl(localRawUrl);
         if (active) setSignedUrl(url);
       } catch (err) {
         console.error("Error fetching signed URL:", err);
@@ -81,7 +67,7 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
     }
 
     if (open) {
-      setSignedUrl(null); // Limpiar URL previa
+      setSignedUrl(null);
       fetchUrl();
     } else {
       setSignedUrl(null);
@@ -99,32 +85,22 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
     try {
       setLoading(true);
 
-      // 1. Upload new file
       const { PatientService } = await import('../services/PatientService');
       const newPath = await PatientService.uploadClinicalRecord(file, patient.nombre);
 
-      // 2. Delete old file if exists and it is a path
       if (localRawUrl && !localRawUrl.startsWith('http')) {
         await StorageService.deleteFile(localRawUrl, 'clinical-records');
       }
 
-      // 3. Update DB
       const { supabase } = await import('../config/supabaseClient');
       await supabase.from('patients').update({ historia_clinica_url: newPath }).eq('id', patient.id);
 
-      // 4. Update local state to show new file WITHOUT closing modal
       setLocalRawUrl(newPath);
-
-      // Notify parent to refresh list in background
       window.dispatchEvent(new CustomEvent('patients:refresh'));
-
-      // Reset input para permitir volver a subir el mismo archivo si es necesario
       e.target.value = null;
     } catch (err) {
       alert("Error al cambiar el archivo: " + err.message);
     } finally {
-      // El effect de localRawUrl manejará el resto del loading de la URL firmada,
-      // pero por si falla y no carga nada nuevo, quitamos el loading.
       setLoading(false);
     }
   };
@@ -132,40 +108,57 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
   const displayUrl = signedUrl;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/40 backdrop-blur-sm transition-opacity">
-      {/* Click outside to close */}
-      <div className="absolute inset-0" onClick={onClose} />
+    <ModalShell
+      title="Historia Clínica"
+      onClose={onClose}
+      maxWidth="max-w-2xl"
+      footer={
+        <div className="flex flex-col sm:flex-row gap-3 w-full">
+          <button
+            onClick={() => displayUrl && window.open(displayUrl, '_blank')}
+            disabled={!displayUrl || loading}
+            className="flex-1 h-12 flex items-center justify-center gap-2 px-4 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 font-semibold hover:bg-teal-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            <FolderOpen size={18} />
+            <span>Abrir</span>
+          </button>
 
-      {/* Modal Card - Minimalist UI */}
-      <div className="relative z-10 w-full max-w-md bg-white p-8 md:p-10 shadow-2xl flex flex-col justify-between overflow-y-auto max-h-[95vh] animate-in fade-in zoom-in-95 duration-200">
+          <label className="flex-1 h-12 flex items-center justify-center gap-2 px-4 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 cursor-pointer transition-all">
+            <Upload size={18} />
+            <span>Adjuntar Nuevo</span>
+            <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
+          </label>
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 md:mb-10">
-          <h2 className="text-[22px] font-black uppercase tracking-tight text-black m-0 leading-none">
-            Historia Clínica
-          </h2>
           <button
             onClick={onClose}
-            className="text-black hover:text-gray-600 transition-colors"
-            aria-label="Cerrar"
+            className="flex-1 h-12 flex items-center justify-center gap-2 px-4 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-all"
           >
-            <X size={28} strokeWidth={3} />
+            <X size={18} />
+            <span>Cerrar</span>
           </button>
         </div>
-
-        {/* Gray Preview Box */}
-        <div className="w-full aspect-square sm:aspect-[4/3] bg-[#F5F5F5] mb-8 md:mb-10 flex items-center justify-center relative group overflow-hidden">
+      }
+    >
+      <div className="flex flex-col gap-6">
+        {/* Preview Area */}
+        <div className="w-full aspect-[4/3] bg-gray-50 rounded-2xl border border-dashed border-gray-300 overflow-hidden flex items-center justify-center relative group">
           {loading ? (
-            <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-t-transparent border-black"></div>
+            <div className="flex flex-col items-center gap-3">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600"></div>
+              <span className="text-sm text-gray-500 font-medium">Cargando documento...</span>
+            </div>
           ) : !localRawUrl ? (
-            <ImageIcon size={96} strokeWidth={1.5} className="text-black" />
+            <div className="flex flex-col items-center gap-4 text-gray-400">
+              <ImageIcon size={64} strokeWidth={1} />
+              <span className="text-sm font-medium">No hay archivo seleccionado</span>
+            </div>
           ) : !displayUrl ? (
-            <div className="flex flex-col items-center justify-center text-red-500">
-              <AlertTriangle size={64} className="mb-4" />
+            <div className="flex flex-col items-center gap-3 text-amber-500">
+              <AlertTriangle size={48} />
               <span className="text-sm font-bold uppercase tracking-wider text-center px-4">Error cargando archivo</span>
             </div>
           ) : isPdf(displayUrl) || (typeof localRawUrl === 'string' && localRawUrl.includes("drive.google.com")) ? (
-            <div className="w-full h-full relative">
+            <div className="w-full h-full">
               <iframe title="Historia Clínica" src={displayUrl} className="w-full h-full border-none" />
             </div>
           ) : (
@@ -173,33 +166,22 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
               href={displayUrl}
               target="_blank"
               rel="noreferrer"
-              className="w-full h-full flex items-center justify-center bg-[#F5F5F5] cursor-zoom-in"
+              className="w-full h-full flex items-center justify-center cursor-zoom-in"
               title="Abrir imagen en pestaña nueva"
             >
-              <img src={displayUrl} alt="Historia Clínica" className="w-full h-full object-contain mix-blend-multiply" />
+              <img src={displayUrl} alt="Historia Clínica" className="w-full h-full object-contain" />
             </a>
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-col gap-4 mt-auto">
-          {/* ABRIR - Upload file */}
-          <label className="w-full min-h-[56px] flex items-center justify-center bg-white text-black border-2 border-black font-extrabold text-sm tracking-[0.2em] uppercase cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors m-0">
-            Abrir
-            <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
-          </label>
-
-          {/* CERRAR */}
-          <button
-            onClick={onClose}
-            className="w-full min-h-[56px] flex items-center justify-center bg-black text-white font-extrabold text-sm tracking-[0.2em] uppercase hover:bg-gray-900 active:bg-gray-800 transition-colors m-0"
-          >
-            Cerrar
-          </button>
-        </div>
-
+        {/* Info or helper text if needed */}
+        {!localRawUrl && (
+          <p className="text-center text-sm text-gray-500 italic">
+            Sube un archivo (Imagen o PDF) para verlo aquí.
+          </p>
+        )}
       </div>
-    </div>
+    </ModalShell>
   );
 }
 

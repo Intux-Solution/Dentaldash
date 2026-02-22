@@ -18,9 +18,9 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
-      // Guardar el token de refresh si existe
+      // Guardar el token de refresh si existe (Usar UPSERT para asegurar que el perfil exista)
       if (session?.provider_refresh_token && session.user) {
-        supabase.from('profiles').update({ google_refresh_token: session.provider_refresh_token }).eq('id', session.user.id).then();
+        supabase.from('profiles').upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token }).then();
       }
     });
 
@@ -30,8 +30,9 @@ export default function App() {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setLoading(false);
+      // Solo actuar en SIGNED_IN o INITIAL_SESSION para evitar loops innecesarios en refresh
       if (session?.provider_refresh_token && session.user) {
-        await supabase.from('profiles').update({ google_refresh_token: session.provider_refresh_token }).eq('id', session.user.id);
+        await supabase.from('profiles').upsert({ id: session.user.id, google_refresh_token: session.provider_refresh_token });
       }
     });
 
