@@ -87,8 +87,12 @@ export function useSettings() {
 
             const userId = session.user.id;
 
-            if (session.user?.user_metadata?.avatar_url) {
-                setGoogleAvatar(session.user.user_metadata.avatar_url);
+            // Extract Google Session fallbacks
+            const sessionName = session.user?.user_metadata?.full_name || session.user?.user_metadata?.name || '';
+            const sessionAvatar = session.user?.user_metadata?.avatar_url || session.user?.user_metadata?.picture || null;
+
+            if (sessionAvatar) {
+                setGoogleAvatar(sessionAvatar);
             }
 
             // Fetch Profile
@@ -102,7 +106,7 @@ export function useSettings() {
 
             if (profileData) {
                 setProfile({
-                    full_name: profileData.full_name || '',
+                    full_name: profileData.full_name || sessionName,
                     avatar_url: profileData.avatar_url,
                     user_id: userId,
                     accepted_insurances: profileData.accepted_insurances || [],
@@ -114,7 +118,7 @@ export function useSettings() {
                     if (data?.publicUrl) setAvatarPreview(data.publicUrl);
                 }
             } else {
-                setProfile(prev => ({ ...prev, user_id: userId }));
+                setProfile(prev => ({ ...prev, user_id: userId, full_name: sessionName }));
             }
 
             // Fetch Schedules
