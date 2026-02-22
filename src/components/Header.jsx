@@ -47,10 +47,12 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
       }
 
       const user = session.user;
-      let name = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
-      let avatar = user.user_metadata?.avatar_url;
+      console.log("Header: Full User Metadata:", user.user_metadata);
 
-      console.log("Header: Authenticated user:", user.email, "metadata name:", name);
+      let name = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
+      let avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+
+      console.log("Header: Initial avatar from metadata:", avatar);
 
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -63,13 +65,16 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
       }
 
       if (profile) {
-        console.log("Header: Found profile:", profile);
+        console.log("Header: Found profile in DB:", profile);
         if (profile.full_name) name = profile.full_name;
         if (profile.avatar_url) {
+          console.log("Header: Using profile avatar_url from storage:", profile.avatar_url);
           const { data } = supabase.storage.from('avatars').getPublicUrl(profile.avatar_url);
           if (data?.publicUrl) avatar = data.publicUrl;
         }
       }
+
+      console.log("Header: Final name:", name, "Final avatar:", avatar);
 
       setUserData({
         name: name || 'Usuario',
