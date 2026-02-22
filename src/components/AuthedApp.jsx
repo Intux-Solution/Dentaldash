@@ -123,10 +123,8 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
             <AppRoutes normalizedPatients={normalizedPatients} loading={loading} refreshPatients={refreshPatients} session={session} />
           </main>
         </div>
-
-        <ModalsRoot patientsLoading={loading} onDeletePatient={handleDeletePatient} />
+        <ModalsRoot patientsLoading={loading} onDeletePatient={handleDeletePatient} session={session} />
       </div>
     </ModalsProvider>
   );
 }
-

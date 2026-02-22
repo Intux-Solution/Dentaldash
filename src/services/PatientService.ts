@@ -191,11 +191,7 @@ export class PatientService {
 
       if (uploadError) throw uploadError;
 
-      const { data } = supabase.storage
-        .from('clinical-records')
-        .getPublicUrl(filePath);
-
-      return data.publicUrl;
+      return filePath;
     } catch (error) {
       throw error;
     }

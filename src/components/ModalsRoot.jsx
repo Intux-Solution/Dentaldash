@@ -9,7 +9,7 @@ import BookingModal from './BookingModal';
 import TurnoDetailsModal from './TurnoDetailsModal';
 import EditTurnoModal from './EditTurnoModal';
 
-export default function ModalsRoot({ patientsLoading = false, onDeletePatient }) {
+export default function ModalsRoot({ patientsLoading = false, onDeletePatient, session }) {
   const {
     // Paciente
     selectedPatient,
@@ -81,6 +81,7 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient })
         open={showRecordModal}
         patient={selectedPatient}
         onClose={closeRecordModal}
+        session={session}
       />
 
       <BookingModal

@@ -146,9 +146,9 @@ serve(async (req) => {
         }
         // -----------------------------------------
 
-        // Fetch context (Tenant)
-        const { data: tenant } = await supabase.from('tenants').select('*, notification_phone').eq('whatsapp_instance', instanceName).single();
-        if (!tenant) throw new Error(`Tenant not found for instance: ${instanceName}`);
+        // Fetch context (Profile/Tenant)
+        const { data: tenant } = await supabase.from('profiles').select('*').eq('whatsapp_instance', instanceName).single();
+        if (!tenant) throw new Error(`Profile not found for instance: ${instanceName}`);
 
         const processWebhookBackground = async () => {
             try {
@@ -224,13 +224,13 @@ serve(async (req) => {
                     .from('patients')
                     .select('*')
                     .eq('telefono', cleanPhone)
-                    .eq('organization_id', tenant.id)
+                    .eq('user_id', tenant.id)
                     .maybeSingle(); // Changed from single() to avoid error on not found
 
                 // Fetch Rest of Context
-                const [profileRes, schedulesRes, historyRes, profileCalendarRes] = await Promise.all([
-                    supabase.from('profiles').select('*').eq('id', tenant.user_id).single(),
-                    supabase.from('schedules').select('*').eq('is_active', true).order('day_of_week', { ascending: true }),
+                const [profileRes, schedulesRes, historyRes, profileCalendarRes, faqsRes] = await Promise.all([
+                    supabase.from('profiles').select('*').eq('id', tenant.id).single(),
+                    supabase.from('schedules').select('*').eq('user_id', tenant.id).eq('is_active', true).order('day_of_week', { ascending: true }),
                     supabase.from('chat_history')
                         .select('role, content')
                         .eq('jid', remoteJid)
@@ -239,10 +239,12 @@ serve(async (req) => {
                         .neq('id', insertedMsg.id) // Exclude current ones
                         .order('created_at', { ascending: false })
                         .limit(10),
-                    supabase.from('profiles').select('google_refresh_token').eq('id', tenant.user_id).single()
+                    supabase.from('profiles').select('google_refresh_token').eq('id', tenant.id).single(),
+                    supabase.from('tenant_faqs').select('*').eq('tenant_id', tenant.id)
                 ]);
 
                 const profile = profileRes.data;
+                const faqs = faqsRes.data || [];
                 const googleRefreshToken = profileCalendarRes.data?.google_refresh_token;
 
                 // Attempt to refresh Google Calendar Token if available
@@ -296,7 +298,7 @@ serve(async (req) => {
                         const { data: appointments } = await supabase
                             .from('appointments')
                             .select('start_time, end_time')
-                            .eq('organization_id', tenant.id)
+                            .eq('user_id', tenant.id)
                             .gte('start_time', startOfDay)
                             .lte('start_time', endOfDay)
                             .neq('status', 'cancelled');
@@ -449,7 +451,7 @@ serve(async (req) => {
                                     dni: dni,
                                     obra_social: obraSocial,
                                     email: email || null,
-                                    organization_id: tenant.id,
+                                    user_id: tenant.id,
                                     estado: 'Activo'
                                 })
                                 .select()
@@ -468,7 +470,7 @@ serve(async (req) => {
                             .insert({
                                 title: `Consulta General - ${patientName}`,
                                 patient_id: patient.id,
-                                organization_id: tenant.id,
+                                user_id: tenant.id,
                                 start_time: startDateTime.toISOString(),
                                 end_time: endDateTime.toISOString(),
                                 duration: 30,
@@ -523,7 +525,7 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
                 let contextInfo = `--- DATOS ESTRUCTURADOS ---\nProf: Od. ${dentistName}\n`;
                 if (profile?.services) contextInfo += `Servicios: ${JSON.stringify(profile.services)}\n`;
                 if (profile?.accepted_insurances) contextInfo += `Obras Sociales: ${JSON.stringify(profile.accepted_insurances)}\n`;
-                if (profile?.faqs) contextInfo += `FAQs: ${JSON.stringify(profile.faqs)}\n`;
+                if (faqs.length > 0) contextInfo += `FAQs: ${JSON.stringify(faqs.map(f => ({ q: f.question, a: f.answer })))}\n`;
                 if (contactPhone) contextInfo += `Contacto Humano (dáselo si no sabes responder o lo piden): ${contactPhone}\n`;
 
                 if (schedulesRes.data && schedulesRes.data.length > 0) {

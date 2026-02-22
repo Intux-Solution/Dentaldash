@@ -48,15 +48,9 @@ serve(async (req) => {
         }
 
         // Validate that the request maker actually has access to the target tenant
-        const { data: tenantUser, error: tenantUserError } = await supabase
-            .from('tenant_users')
-            .select('role')
-            .eq('tenant_id', tenant_id)
-            .eq('user_id', user.id)
-            .single();
-
-        if (tenantUserError || !tenantUser) {
-            return new Response(JSON.stringify({ error: "Forbidden: You don't own this tenant." }), { status: 403, headers: corsHeaders });
+        // Since it's a 1:1 user-to-profile setup, we just check if tenant_id matches user.id
+        if (tenant_id !== user.id) {
+            return new Response(JSON.stringify({ error: "Forbidden: You don't own this profile." }), { status: 403, headers: corsHeaders });
         }
 
         const instanceName = `instance_${tenant_id.split('-')[0]}`
@@ -138,12 +132,12 @@ serve(async (req) => {
 
             // IDEMPOTENCIA: Si ya está conectado, verificamos y configuramos webhook una única vez.
             if (stateData?.instance?.state === 'open') {
-                const { data: tenant } = await supabase.from('tenants').select('whatsapp_status').eq('id', tenant_id).single();
+                const { data: tenant } = await supabase.from('profiles').select('whatsapp_status').eq('id', tenant_id).single();
 
                 // Solo disparamos sincronización si no estaba marcado como conectado previamente
                 if (tenant?.whatsapp_status !== 'connected') {
                     await setWebhook(instanceName);
-                    await supabase.from('tenants').update({ whatsapp_status: 'connected' }).eq('id', tenant_id);
+                    await supabase.from('profiles').update({ whatsapp_status: 'connected' }).eq('id', tenant_id);
                 }
 
                 return new Response(JSON.stringify({ ...stateData, status: 'connected' }), {
@@ -177,7 +171,7 @@ serve(async (req) => {
             const data = await response.json();
             if (response.ok) {
                 await setWebhook(instanceName);
-                await supabase.from('tenants').update({
+                await supabase.from('profiles').update({
                     whatsapp_instance: instanceName,
                     whatsapp_status: 'connecting'
                 }).eq('id', tenant_id);
@@ -195,7 +189,7 @@ serve(async (req) => {
                 fetch(`${baseUrl}/instance/delete/${instanceName}`, { method: 'DELETE', headers: { 'apikey': EVOLUTION_KEY } })
             ]);
 
-            await supabase.from('tenants').update({
+            await supabase.from('profiles').update({
                 whatsapp_status: 'disconnected',
                 whatsapp_instance: null
             }).eq('id', tenant_id);

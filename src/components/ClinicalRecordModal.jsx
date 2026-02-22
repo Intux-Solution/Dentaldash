@@ -9,7 +9,7 @@ function isPdf(url = "") {
   return lowerUrl.includes(".pdf");
 }
 
-export default function ClinicalRecordModal({ open, patient, onClose }) {
+export default function ClinicalRecordModal({ open, patient, onClose, session }) {
   const [signedUrl, setSignedUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [localRawUrl, setLocalRawUrl] = useState(null);
@@ -86,7 +86,10 @@ export default function ClinicalRecordModal({ open, patient, onClose }) {
       setLoading(true);
 
       const { PatientService } = await import('../services/PatientService');
-      const newPath = await PatientService.uploadClinicalRecord(file, patient.nombre);
+      const userId = session?.user?.id;
+      if (!userId) throw new Error("No hay sesión activa");
+
+      const newPath = await PatientService.uploadClinicalRecord(file, userId);
 
       if (localRawUrl && !localRawUrl.startsWith('http')) {
         await StorageService.deleteFile(localRawUrl, 'clinical-records');
