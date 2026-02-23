@@ -185,7 +185,11 @@ export class AppointmentService {
      */
     static async getServices(session = null) {
         try {
-            const userId = session?.user?.id;
+            let userId = session?.user?.id;
+            if (!userId) {
+                const { data } = await supabase.auth.getSession();
+                userId = data?.session?.user?.id;
+            }
             if (!userId) return [];
 
             const { data, error } = await supabase

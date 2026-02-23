@@ -92,7 +92,11 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
       const newPath = await PatientService.uploadClinicalRecord(file, userId);
 
       if (localRawUrl && !localRawUrl.startsWith('http')) {
-        await StorageService.deleteFile(localRawUrl, 'clinical-records');
+        try {
+          await StorageService.deleteFile(localRawUrl, 'clinical-records');
+        } catch (deleteErr) {
+          console.warn('Could not delete old clinical record file, proceeding anyway:', deleteErr);
+        }
       }
 
       const { supabase } = await import('../config/supabaseClient');
@@ -128,7 +132,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
 
           <label className="flex-1 h-12 flex items-center justify-center gap-2 px-4 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 cursor-pointer transition-all">
             <Upload size={18} />
-            <span>Adjuntar Nuevo</span>
+            <span>{localRawUrl ? 'Modificar' : 'Adjuntar Nuevo'}</span>
             <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
           </label>
 

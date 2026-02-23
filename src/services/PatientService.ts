@@ -368,15 +368,21 @@ export class PatientService {
   /**
    * Obtener lista única de todas las obras sociales registradas (en perfil y en pacientes)
    */
-  static async getAllUniqueInsurances(userId = null): Promise<string[]> {
+  static async getAllUniqueInsurances(userId: string | null = null): Promise<string[]> {
     try {
       let profileInsurances: string[] = [];
+      let uid = userId;
 
-      if (userId) {
+      if (!uid) {
+        const { data: { session } } = await supabase.auth.getSession();
+        uid = session?.user?.id || null;
+      }
+
+      if (uid) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('accepted_insurances')
-          .eq('id', userId)
+          .eq('id', uid)
           .single();
         if (profile?.accepted_insurances) {
           profileInsurances = profile.accepted_insurances;
