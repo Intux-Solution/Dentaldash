@@ -2,6 +2,7 @@
 import { supabase } from '../config/supabaseClient';
 import { WORK_HOURS } from '../config/appointments';
 import { GoogleCalendarService } from './GoogleCalendarService';
+import { CreateAppointmentSchema, UpdateAppointmentSchema } from '../schemas/appointment.schema';
 
 export class AppointmentService {
 
@@ -251,56 +252,77 @@ ${data.notas || 'Sin notas adicionales'}
     /**
      * Crear un turno
      */
-    static async createAppointment(data) {
+    static async createAppointment(data: any): Promise<any> {
         try {
-            // data: { dni, nombre, telefono... tipoTurno, fechaHora, duracion, notes, isNewPatient }
+            // -- 1. Zod Validation (Validamos una versión flexible por compatibilidad con UI actual) --
+            // La UI manda raw: { dni, nombre, telefono... tipoTurno, fechaHora, duracion, notes, isNewPatient }
+            const validatedData = CreateAppointmentSchema.parse({
+                ...data,
+                // Assign a temporary UUID to pass validation if patient doesn't exist yet, 
+                // we'll replace it below. Real strictly typed UI should send patient_id directly.
+                patient_id: data.patient_id || '00000000-0000-0000-0000-000000000000',
+            });
 
-            let patientId;
+            let patientId = data.patient_id;
 
             // 1. Gestionar paciente
-            const cleanDni = data.dni?.trim();
+            const cleanDni = validatedData.dni?.trim();
 
-            const { data: existingPatient } = await supabase
-                .from('patients')
-                .select('id, email')
-                .eq('dni', cleanDni)
-                .maybeSingle();
-
-            if (existingPatient) {
-                patientId = existingPatient.id;
-            } else {
-                const { data: newPatient, error: createError } = await supabase
+            if (!patientId && cleanDni) {
+                const { data: existingPatient } = await supabase
                     .from('patients')
-                    .insert([{
-                        dni: cleanDni,
-                        nombre: data.nombre?.trim(),
-                        telefono: data.telefono?.trim(),
-                        email: data.email?.trim(),
-                        obra_social: data.obraSocial?.trim(),
-                        numero_afiliado: data.numeroAfiliado?.trim(),
-                        alergias: data.alergias,
-                        antecedentes: data.antecedentes
-                    }])
-                    .select()
-                    .single();
+                    .select('id, email')
+                    .eq('dni', cleanDni)
+                    .maybeSingle();
 
-                if (createError) throw createError;
-                patientId = newPatient.id;
+                if (existingPatient) {
+                    patientId = existingPatient.id;
+                } else {
+                    const { data: newPatient, error: createError } = await supabase
+                        .from('patients')
+                        .insert([{
+                            dni: cleanDni,
+                            nombre: validatedData.nombre?.trim(),
+                            telefono: validatedData.telefono?.trim(),
+                            email: validatedData.email?.trim() || null,
+                            obra_social: validatedData.obraSocial?.trim(),
+                            numero_afiliado: validatedData.numeroAfiliado?.trim(),
+                            alergias: validatedData.alergias,
+                            antecedentes: validatedData.antecedentes
+                        }])
+                        .select()
+                        .single();
+
+                    if (createError) throw createError;
+                    patientId = newPatient.id;
+                }
+            }
+
+            if (!patientId) {
+                throw new Error("Patient ID is required or a valid DNI to create/find one.");
             }
 
             // 2. Crear appointment
-            const startTime = new Date(data.fechaHora);
-            const endTime = new Date(startTime.getTime() + (data.duracion || 30) * 60000);
+            const startTime = new Date(validatedData.fechaHora);
+            const endTime = new Date(startTime.getTime() + (validatedData.duracion || 30) * 60000);
+
+            // Translate Status for the DB to avoid type mismatch
+            const statusMap: Record<string, string> = {
+                'Pendiente': 'pending',
+                'Confirmado': 'confirmed',
+                'Completado': 'completed',
+                'Cancelado': 'cancelled'
+            };
 
             const appointment = {
-                title: `${data.tipoTurnoNombre} - ${data.nombre}`,
+                title: `${validatedData.tipoTurnoNombre} - ${validatedData.nombre || 'Paciente'}`,
                 start_time: startTime.toISOString(),
                 end_time: endTime.toISOString(),
-                duration: data.duracion,
-                appointment_type: data.tipoTurnoNombre,
+                duration: validatedData.duracion,
+                appointment_type: validatedData.tipoTurnoNombre,
                 patient_id: patientId,
-                notes: data.notas,
-                status: 'confirmed'
+                notes: validatedData.notas,
+                status: statusMap[validatedData.status] || 'confirmed'
             };
 
             const { data: result, error } = await supabase
@@ -314,9 +336,9 @@ ${data.notas || 'Sin notas adicionales'}
             // Sync with Google Calendar
             try {
                 // Determine patient email (existing or from data)
-                const patientEmail = existingPatient ? existingPatient.email : data.email;
+                const patientEmail = data.email || null; // Simplified for strictly types
 
-                const description = this.formatEventDescription(data);
+                const description = this.formatEventDescription(validatedData);
 
                 const googleEvent = await GoogleCalendarService.createEvent({
                     ...result,
@@ -343,20 +365,37 @@ ${data.notas || 'Sin notas adicionales'}
     /**
      * Actualizar turno
      */
-    static async updateAppointment(id, data) {
+    static async updateAppointment(id: string, data: any): Promise<any> {
         try {
-            // data: similar to create
-            const startTime = new Date(data.fechaHora);
-            const endTime = new Date(startTime.getTime() + (data.duracion || 30) * 60000);
+            // -- 1. Zod Validation --
+            const validatedData = UpdateAppointmentSchema.parse({
+                ...data,
+                id
+            });
 
-            const updates = {
-                title: `${data.tipoTurnoNombre} - ${data.nombre}`,
+            // data: similar to create
+            const startTime = new Date(validatedData.fechaHora);
+            const endTime = new Date(startTime.getTime() + (validatedData.duracion || 30) * 60000);
+
+            const statusMap: Record<string, string> = {
+                'Pendiente': 'pending',
+                'Confirmado': 'confirmed',
+                'Completado': 'completed',
+                'Cancelado': 'cancelled'
+            };
+
+            const updates: Record<string, any> = {
+                title: `${validatedData.tipoTurnoNombre} - ${validatedData.nombre || 'Paciente'}`,
                 start_time: startTime.toISOString(),
                 end_time: endTime.toISOString(),
-                duration: data.duracion,
-                appointment_type: data.tipoTurnoNombre,
-                notes: data.notas,
+                duration: validatedData.duracion,
+                appointment_type: validatedData.tipoTurnoNombre,
+                notes: validatedData.notas,
             };
+
+            if (validatedData.status) {
+                updates.status = statusMap[validatedData.status] || validatedData.status;
+            }
 
             const { data: result, error } = await supabase
                 .from('appointments')
@@ -370,11 +409,11 @@ ${data.notas || 'Sin notas adicionales'}
             // Sync with Google Calendar
             try {
                 if (result.google_event_id) {
-                    const description = this.formatEventDescription(data);
+                    const description = this.formatEventDescription(validatedData);
 
                     await GoogleCalendarService.updateEvent(result.google_event_id, {
                         ...updates,
-                        patientEmail: data.email,
+                        patientEmail: validatedData.email,
                         notes: description // Update description with rich text
                     });
                 } else {
@@ -395,7 +434,7 @@ ${data.notas || 'Sin notas adicionales'}
      * Sincronizar turnos pendientes con Google Calendar (Client-Side)
      * Se llama al iniciar la app para asegurar que turnos creados por Bot/Backend se suban a Google.
      */
-    static async syncPendingAppointments(session = null) {
+    static async syncPendingAppointments(session: any = null): Promise<void> {
         try {
             const today = new Date().toISOString();
 
@@ -452,10 +491,10 @@ ${data.notas || 'Sin notas adicionales'}
     /**
      * Eliminar (cancelar) turno
      */
-    static async deleteAppointment(id) {
+    static async deleteAppointment(id: string): Promise<boolean> {
         try {
             // 1. Fetch appointment to get google_event_id
-            const { data: appointment } = await supabase
+            const { data: appointment, error } = await supabase
                 .from('appointments')
                 .select('google_event_id')
                 .eq('id', id)

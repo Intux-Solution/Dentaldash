@@ -1,5 +1,6 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import './loader-spin.css';
 import { AppointmentService } from '../services/AppointmentService';
@@ -7,34 +8,55 @@ import { PatientService } from '../services/PatientService';
 import InsuranceAutocomplete from './InsuranceAutocomplete';
 import { combineDateTimeToISO } from '../utils/helpers';
 import { message } from 'antd';
-
-// ... (LOCAL_APPOINTMENT_TYPES or other constants if any)
+import { CreateAppointmentSchema, CreateAppointmentPayload } from '../schemas/appointment.schema';
 
 export default function BookingForm({ onSuccess, hideHeader = false, hideInternalSubmit = false, setFormSubmit }) {
-  // Form state
-  const [formData, setFormData] = useState({
-    dni: '',
-    nombre: '',
-    telefono: '',
-    email: '',
-    obraSocial: '',
-    numeroAfiliado: '',
-    alergias: '',
-    antecedentes: '',
-    tipoTurno: '',
-    fecha: '',
-    hora: ''
+  // Configured React Hook Form
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    trigger,
+    formState: { errors, isSubmitting, isValid },
+    reset
+  } = useForm<CreateAppointmentPayload>({
+    resolver: zodResolver(CreateAppointmentSchema),
+    defaultValues: {
+      dni: '',
+      nombre: '',
+      telefono: '',
+      email: '',
+      obraSocial: '',
+      numeroAfiliado: '',
+      alergias: '',
+      antecedentes: '',
+      tipoTurnoNombre: '',
+      fechaHora: new Date().toISOString(), // Temporary bypass, overwritten before submit
+      notas: '',
+      status: 'Confirmado',
+      patient_id: '00000000-0000-0000-0000-000000000000'
+    },
+    mode: 'onChange' // Triggers validation on change
   });
 
   // UI state
-  const [loading, setLoading] = useState(false);
   const [checkingPatient, setCheckingPatient] = useState(false);
   const [patientFound, setPatientFound] = useState(false);
+  const [patientId, setPatientId] = useState(null);
   const [availableSlots, setAvailableSlots] = useState([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [patientNotice, setPatientNotice] = useState('');
+
+  // Watch necessary fields for dynamic updates
+  const dniStr = watch('dni');
+
+  // Local state purely for UI selection (since API needs a combined ISO string we construct at submit)
+  const [selectedTipoTurnoId, setSelectedTipoTurnoId] = useState('');
+  const [selectedFecha, setSelectedFecha] = useState('');
+  const [selectedHora, setSelectedHora] = useState('');
 
   // Dynamic Working Days
   const [activeWorkingDays, setActiveWorkingDays] = useState([]);
@@ -72,14 +94,22 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
     }
   }, [setFormSubmit]);
 
-  // Check patient by DNI
-  const checkPatient = async (dni) => {
-    if (dni.length < 7) {
+  // Debounced checkPatient (simplified for React effect)
+  useEffect(() => {
+    if (dniStr && dniStr.length >= 7) {
+      const timer = setTimeout(() => {
+        checkPatient(dniStr);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
       setPatientFound(false);
       setPatientNotice('');
-      return;
+      setPatientId(null);
     }
+  }, [dniStr]);
 
+  // Check patient by DNI
+  const checkPatient = async (dni) => {
     setCheckingPatient(true);
     setError('');
     setPatientNotice('');
@@ -88,32 +118,25 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
       const patient = await PatientService.getPatientByDni(dni);
 
       if (patient) {
-        const p = patient;
         // Autocompletar datos del paciente encontrado
-        setFormData(prev => ({
-          ...prev,
-          nombre: p.nombre || p.name || '',
-          telefono: p.telefono || p.phone || '',
-          email: p.email || '',
-          obraSocial: p.obraSocial || '',
-          numeroAfiliado: p.numeroAfiliado || '',
-          alergias: p.alergias || 'Ninguna',
-          antecedentes: p.antecedentes || 'Ninguno'
-        }));
+        setValue('nombre', patient.nombre || patient.name || '', { shouldValidate: true });
+        setValue('telefono', patient.telefono || patient.phone || '', { shouldValidate: true });
+        setValue('email', patient.email || '', { shouldValidate: true });
+        setValue('obraSocial', patient.obraSocial || '', { shouldValidate: true });
+        setValue('numeroAfiliado', patient.numeroAfiliado || '', { shouldValidate: true });
+        setValue('alergias', patient.alergias || 'Ninguna', { shouldValidate: true });
+        setValue('antecedentes', patient.antecedentes || 'Ninguno', { shouldValidate: true });
+
+        // This makes sure the update gets linked correctly
+        setValue('patient_id', patient.id);
+        setPatientId(patient.id);
+
         setPatientFound(true);
         setPatientNotice('');
       } else {
-        // Limpiar datos si no se encuentra el paciente
-        setFormData(prev => ({
-          ...prev,
-          nombre: '',
-          telefono: '',
-          email: '',
-          obraSocial: '',
-          numeroAfiliado: '',
-          alergias: '',
-          antecedentes: ''
-        }));
+        // Form states remains as user typed for new patient
+        setPatientId(null);
+        setValue('patient_id', '00000000-0000-0000-0000-000000000000');
         setPatientFound(false);
         setPatientNotice('Paciente nuevo: se creará automáticamente al confirmar.');
       }
@@ -125,16 +148,26 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
     }
   };
 
+  // Trigger getAvailableSlots when fecha or tipoTurno changes
+  useEffect(() => {
+    if (selectedFecha && selectedTipoTurnoId) {
+      getAvailableSlots(selectedFecha, selectedTipoTurnoId);
+    }
+  }, [selectedFecha, selectedTipoTurnoId]);
+
   // Get available slots for selected date and appointment type
   const getAvailableSlots = async (fecha, tipoTurno) => {
-    if (!fecha || !tipoTurno) return;
-
     setLoadingAvailability(true);
     try {
       const appointmentType = services.find(t => (t.id === tipoTurno || t.name === tipoTurno));
       const duration = appointmentType?.duration || 30;
       const slots = await AppointmentService.getAvailableSlots(fecha, duration);
       setAvailableSlots(slots);
+
+      // Clear selected hora if it's no longer available
+      if (selectedHora && !slots.includes(selectedHora)) {
+        setSelectedHora('');
+      }
     } catch (err) {
       setAvailableSlots([]);
     } finally {
@@ -177,60 +210,34 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
     return dates;
   }, [activeWorkingDays]); // Recompute when activeWorkingDays changes
 
-  // Handle form input changes
-  const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-
-    if (field === 'dni') {
-      setPatientNotice('');
-      checkPatient(value);
+  // Submit appointment via react-hook-form
+  const onSubmit = async (data) => {
+    if (!selectedFecha || !selectedHora || !selectedTipoTurnoId) {
+      message.error("Debes completar todos los campos del turno.");
+      return;
     }
-
-    if (field === 'fecha' || field === 'tipoTurno') {
-      const newFormData = { ...formData, [field]: value };
-      if (newFormData.fecha && newFormData.tipoTurno) {
-        getAvailableSlots(newFormData.fecha, newFormData.tipoTurno);
-      }
-    }
-  };
-
-  // Submit appointment
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
     setError('');
 
     try {
-      const appointmentType = services.find(t => (t.id === formData.tipoTurno || t.name === formData.tipoTurno));
-      const duration = appointmentType?.duration || 30;
-      const typeName = appointmentType?.name || formData.tipoTurno;
+      const appointmentType = services.find(t => (t.id === selectedTipoTurnoId || t.name === selectedTipoTurnoId));
 
-      // Combinar fecha y hora en formato ISO completo
-      const appointmentISO = combineDateTimeToISO(
-        formData.fecha,
-        formData.hora,
+      // Override schema form data with contextual values
+      data.duracion = appointmentType?.duration ? Number(appointmentType.duration) : 30;
+      data.tipoTurnoNombre = appointmentType?.name || selectedTipoTurnoId;
+      data.fechaHora = combineDateTimeToISO(
+        selectedFecha,
+        selectedHora,
         'America/Argentina/Buenos_Aires'
       );
 
+      if (patientId) {
+        data.patient_id = patientId;
+      }
+
+      // AppointmentService handles the rest (Validation has already passed Zod on UI level)
       await AppointmentService.createAppointment({
-        // Datos del paciente
-        dni: formData.dni,
-        nombre: formData.nombre,
-        telefono: formData.telefono,
-        email: formData.email,
-        obraSocial: formData.obraSocial,
-        numeroAfiliado: formData.numeroAfiliado,
-        alergias: formData.alergias || 'Ninguna',
-        antecedentes: formData.antecedentes || 'Ninguno',
-        // Datos del turno
-        tipoTurno: formData.tipoTurno,
-        tipoTurnoNombre: typeName,
-        duracion: duration,
-        fechaHora: appointmentISO, // Fecha y hora en formato ISO completo
-        timezone: 'America/Argentina/Buenos_Aires',
-        // Metadatos
-        isNewPatient: !patientFound,
-        notas: '' // BookingForm currently doesn't have notes field, but service supports it
+        ...data,
+        tipoTurno: selectedTipoTurnoId, // legacy support for backend
       });
 
       setSuccess(true);
@@ -243,36 +250,20 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
       const msg = err.message || 'Error al crear el turno. Intenta nuevamente.';
       setError(msg);
       message.error(msg);
-    } finally {
-      setLoading(false);
     }
-  };
-
-  // Validation
-  const isFormValid = () => {
-    return formData.dni && formData.nombre && formData.telefono &&
-      formData.tipoTurno && formData.fecha && formData.hora;
   };
 
   // Reset form for new appointment
   const resetForm = () => {
-    setFormData({
-      dni: '',
-      nombre: '',
-      telefono: '',
-      email: '',
-      obraSocial: '',
-      numeroAfiliado: '',
-      alergias: '',
-      antecedentes: '',
-      tipoTurno: '',
-      fecha: '',
-      hora: ''
-    });
+    reset();
+    setSelectedFecha('');
+    setSelectedHora('');
+    setSelectedTipoTurnoId('');
     setSuccess(false);
     setError('');
     setPatientFound(false);
     setAvailableSlots([]);
+    setPatientId(null);
   };
 
   if (success) {
@@ -288,15 +279,15 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
         <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm mb-6">
           <div className="flex justify-between">
             <span className="text-gray-600">Fecha:</span>
-            <span className="font-medium">{availableDates.find(d => d.value === formData.fecha)?.label}</span>
+            <span className="font-medium">{availableDates.find(d => d.value === selectedFecha)?.label}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Hora:</span>
-            <span className="font-medium">{formData.hora} hs</span>
+            <span className="font-medium">{selectedHora} hs</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Tipo:</span>
-            <span className="font-medium">{services.find(t => (t.id === formData.tipoTurno || t.name === formData.tipoTurno))?.name || formData.tipoTurno}</span>
+            <span className="font-medium">{services.find(t => (t.id === selectedTipoTurnoId || t.name === selectedTipoTurnoId))?.name || selectedTipoTurnoId}</span>
           </div>
         </div>
         <button
@@ -320,7 +311,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
       )}
 
       {/* Form */}
-      <form ref={formRef} onSubmit={handleSubmit} className="p-6 space-y-6">
+      <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
         <button ref={hiddenSubmitRef} type="submit" className="hidden" aria-hidden="true" tabIndex={-1} />
         {patientNotice && (
           <div className="bg-gray-50 border border-gray-200 text-gray-800 px-4 py-3 rounded-lg text-sm">
@@ -343,16 +334,15 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
           <div className="relative">
             <input
               type="text"
-              value={formData.dni}
-              onChange={(e) => handleInputChange('dni', e.target.value)}
+              {...register('dni')}
               placeholder="12.345.678"
-              className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
-              required
+              className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.dni ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
             />
             {checkingPatient && (
               <Loader className="absolute right-3 top-2 w-5 h-5 text-gray-400 spin-in-place" />
             )}
           </div>
+          {errors.dni && <p className="text-red-500 text-xs mt-1">{errors.dni.message}</p>}
           {patientFound && (
             <p className="text-teal-600 text-sm mt-1 flex items-center gap-1">
               <CheckCircle size={16} />
@@ -370,12 +360,11 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             </label>
             <input
               type="text"
-              value={formData.nombre}
-              onChange={(e) => handleInputChange('nombre', e.target.value)}
+              {...register('nombre')}
               placeholder="Juan Pérez"
-              className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
-              required
+              className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.nombre ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
             />
+            {errors.nombre && <p className="text-red-500 text-xs mt-1">{errors.nombre.message}</p>}
           </div>
 
           <div>
@@ -385,12 +374,11 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             </label>
             <input
               type="tel"
-              value={formData.telefono}
-              onChange={(e) => handleInputChange('telefono', e.target.value)}
+              {...register('telefono')}
               placeholder="+54 381 123 4567"
-              className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
-              required
+              className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.telefono ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
             />
+            {errors.telefono && <p className="text-red-500 text-xs mt-1">{errors.telefono.message}</p>}
           </div>
         </div>
 
@@ -401,20 +389,21 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
           </label>
           <input
             type="email"
-            value={formData.email}
-            onChange={(e) => handleInputChange('email', e.target.value)}
+            {...register('email')}
             placeholder="paciente@correo.com"
-            className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
+            className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.email ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
           />
+          {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
         </div>
 
         {/* Insurance Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Obra Social (Searchable Autocomplete) */}
           <InsuranceAutocomplete
-            value={formData.obraSocial}
-            onChange={(e) => handleInputChange('obraSocial', e.target.value)}
-            disabled={loading}
+            value={watch('obraSocial') || ''}
+            onChange={(e) => setValue('obraSocial', e.target.value, { shouldValidate: true })}
+            disabled={isSubmitting}
+            placeholder="OSDE, Swiss Medical, etc."
           />
 
           <div>
@@ -423,10 +412,9 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             </label>
             <input
               type="text"
-              value={formData.numeroAfiliado}
-              onChange={(e) => handleInputChange('numeroAfiliado', e.target.value)}
+              {...register('numeroAfiliado')}
               placeholder="123456789"
-              className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
+              className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.numeroAfiliado ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
             />
           </div>
         </div>
@@ -439,8 +427,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             </label>
             <input
               type="text"
-              value={formData.alergias}
-              onChange={(e) => handleInputChange('alergias', e.target.value)}
+              {...register('alergias')}
               placeholder="Ninguna, Penicilina, etc."
               className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
             />
@@ -452,8 +439,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             </label>
             <input
               type="text"
-              value={formData.antecedentes}
-              onChange={(e) => handleInputChange('antecedentes', e.target.value)}
+              {...register('antecedentes')}
               placeholder="Diabetes, Hipertensión, etc."
               className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent"
             />
@@ -467,8 +453,10 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             Tipo de Turno
           </label>
           <select
-            value={formData.tipoTurno}
-            onChange={(e) => handleInputChange('tipoTurno', e.target.value)}
+            value={selectedTipoTurnoId}
+            onChange={(e) => {
+              setSelectedTipoTurnoId(e.target.value);
+            }}
             className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] focus:outline-none focus:ring-0 focus:border-transparent text-sm"
             required
           >
@@ -488,8 +476,10 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             Fecha
           </label>
           <select
-            value={formData.fecha}
-            onChange={(e) => handleInputChange('fecha', e.target.value)}
+            value={selectedFecha}
+            onChange={(e) => {
+              setSelectedFecha(e.target.value);
+            }}
             className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] focus:outline-none focus:ring-0 focus:border-transparent text-sm"
             required
           >
@@ -503,7 +493,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
         </div>
 
         {/* Time Selection */}
-        {formData.fecha && formData.tipoTurno && (
+        {selectedFecha && selectedTipoTurnoId && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <Clock className="inline w-4 h-4 mr-1" />
@@ -520,8 +510,10 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
                   <button
                     key={slot}
                     type="button"
-                    onClick={() => handleInputChange('hora', slot)}
-                    className={`p-3 text-sm rounded-lg border transition-colors focus:outline-none ${formData.hora === slot
+                    onClick={() => {
+                      setSelectedHora(slot);
+                    }}
+                    className={`p-3 text-sm rounded-lg border transition-colors focus:outline-none ${selectedHora === slot
                       ? 'bg-teal-600 text-white border-teal-600'
                       : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
                       }`}
@@ -544,10 +536,10 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             <div className="mt-2 -mx-6 px-6 py-4 border-t bg-white/80 backdrop-blur">
               <button
                 type="submit"
-                disabled={!isFormValid() || loading}
+                disabled={!isValid || isSubmitting}
                 className="w-full bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
-                {loading ? (
+                {isSubmitting ? (
                   <>
                     <Loader className="w-5 h-5 animate-spin" />
                     Creando Turno...

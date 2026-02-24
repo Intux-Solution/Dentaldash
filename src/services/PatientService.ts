@@ -362,8 +362,30 @@ export class PatientService {
 
   /**
    * Eliminar un paciente.
+   * IMPORTANTE: También limpia archivos huérfanos de la historia clínica en Supabase Storage
+   * para prevenir fugas de memoria o costos adicionales de almacenamiento.
    */
   static async deletePatient(id: string): Promise<boolean> {
+    try {
+      // 1. Obtener la URL de la historia clínica antes de borrar el registro
+      const { data: patient } = await supabase
+        .from('patients')
+        .select('historia_clinica_url')
+        .eq('id', id)
+        .single();
+
+      if (patient?.historia_clinica_url) {
+        try {
+          await StorageService.deleteFile(patient.historia_clinica_url, 'clinical-records');
+        } catch (storageErr) {
+          console.warn('PatientService: No se pudo eliminar la historia clínica vinculada. Error:', storageErr);
+        }
+      }
+    } catch (err) {
+      console.warn('PatientService: Falló la búsqueda de la historia clínica antes de borrar.', err);
+    }
+
+    // 2. Borrar de la base de datos (PostgreSQL)
     const { error } = await supabase
       .from('patients')
       .delete()

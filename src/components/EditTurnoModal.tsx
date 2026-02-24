@@ -1,32 +1,42 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loader, X, ArrowLeft } from 'lucide-react';
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import './loader-spin.css';
-import './loader-spin.css';
 import { combineDateTimeToISO } from '../utils/helpers';
 import { message } from 'antd';
-
-// ...existing code...
+import { UpdateAppointmentSchema, UpdateAppointmentPayload } from '../schemas/appointment.schema';
 
 export default function EditTurnoModal({ open, turno, onClose, onSaved, onDeleted, onBack }) {
-  const [formData, setFormData] = useState({
-    id: '',
-    dni: '',
-    nombre: '',
-    telefono: '',
-    email: '',
-    obraSocial: '',
-    numeroAfiliado: '',
-    alergias: '',
-    antecedentes: '',
-    tipoTurno: '',
-    fecha: '',
-    hora: '',
-    notas: ''
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors, isValid, isSubmitting }
+  } = useForm<UpdateAppointmentPayload>({
+    resolver: zodResolver(UpdateAppointmentSchema),
+    defaultValues: {
+      id: '',
+      dni: '',
+      nombre: '',
+      telefono: '',
+      email: '',
+      obraSocial: '',
+      numeroAfiliado: '',
+      alergias: '',
+      antecedentes: '',
+      tipoTurnoNombre: '',
+      fechaHora: new Date().toISOString(),
+      notas: '',
+      status: 'Confirmado'
+    },
+    mode: 'onChange'
   });
 
-  const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [checkingPatient, setCheckingPatient] = useState(false);
   const [patientFound, setPatientFound] = useState(false);
@@ -38,6 +48,11 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
   // Dynamic Working Days
   const [activeWorkingDays, setActiveWorkingDays] = useState([]);
   const [services, setServices] = useState([]);
+
+  // Local state purely for UI selection
+  const [selectedTipoTurnoId, setSelectedTipoTurnoId] = useState('');
+  const [selectedFecha, setSelectedFecha] = useState('');
+  const [selectedHora, setSelectedHora] = useState('');
 
   // Fetch working days on mount
   useEffect(() => {
@@ -63,7 +78,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
 
     try {
       const appointmentType = services.find(t => (t.id === tipoTurno || t.name === tipoTurno));
-      const effectiveExclude = excludeId || formData.id;
+      const effectiveExclude = excludeId || watch('id');
 
       const slots = await AppointmentService.getAvailableSlots(
         fecha,
@@ -72,12 +87,17 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
       );
 
       setAvailableSlots(slots);
+
+      // Clear selected hora if it's no longer available and not the initially loaded one
+      if (selectedHora && !slots.includes(selectedHora) && !open) {
+        setSelectedHora('');
+      }
     } catch (err) {
       setAvailableSlots([]);
     } finally {
       setLoadingAvailability(false);
     }
-  }, [formData.id]);
+  }, [watch('id'), selectedHora, open, services]);
 
   // Inicializar formulario cuando se abre el modal
   useEffect(() => {
@@ -124,7 +144,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
 
       const idTurno = turno.id || turno.eventId || turno._id || '';
 
-      setFormData({
+      reset({
         id: idTurno,
         dni: dniInicial,
         nombre: turno.patientName || turno.paciente || nombreDesdeDescripcion || '',
@@ -134,11 +154,15 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
         numeroAfiliado: turno.numeroAfiliado || '',
         alergias: turno.alergias || '',
         antecedentes: turno.antecedentes || '',
-        tipoTurno,
-        fecha,
-        hora,
-        notas: turno.description || turno.notas || ''
+        notas: turno.description || turno.notas || '',
+        fechaHora: startDate || new Date().toISOString(),
+        tipoTurnoNombre: tipoTurno, // will be overwritten on submit
+        status: turno.status || turno.estado || 'Confirmado'
       });
+
+      setSelectedFecha(fecha);
+      setSelectedHora(hora);
+      setSelectedTipoTurnoId(tipoTurno);
 
       // Aún no sabemos si existe en base; esperar resultado de checkPatient
       setPatientFound(false);
@@ -149,14 +173,11 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
         checkPatient(dniInicial);
       }
 
-      // Liberar turno actual solo una vez para que el horario quede disponible
-      // CORRECCIÓN: No borramos el turno al abrir. Usamos excludeId en getAvailableSlots.
-
       if (fecha && tipoTurno) {
         getAvailableSlots(fecha, tipoTurno, idTurno);
       }
     }
-  }, [open, turno, getAvailableSlots, services]);
+  }, [open, turno, reset, services, getAvailableSlots]);
 
   // Reset flag al cerrar el modal
   useEffect(() => {
@@ -177,16 +198,13 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     try {
       const patient = await PatientService.getPatientByDni(dni);
       if (patient) {
-        setFormData(prev => ({
-          ...prev,
-          nombre: patient.nombre || prev.nombre,
-          telefono: patient.telefono || prev.telefono,
-          email: patient.email || prev.email,
-          obraSocial: patient.obraSocial || prev.obraSocial,
-          numeroAfiliado: patient.numeroAfiliado || prev.numeroAfiliado,
-          alergias: patient.alergias || 'Ninguna',
-          antecedentes: patient.antecedentes || 'Ninguno',
-        }));
+        setValue('nombre', patient.nombre || watch('nombre'));
+        setValue('telefono', patient.telefono || watch('telefono'));
+        setValue('email', patient.email || watch('email'));
+        setValue('obraSocial', patient.obraSocial || watch('obraSocial'));
+        setValue('numeroAfiliado', patient.numeroAfiliado || watch('numeroAfiliado'));
+        setValue('alergias', patient.alergias || 'Ninguna');
+        setValue('antecedentes', patient.antecedentes || 'Ninguno');
         setPatientFound(true);
       } else {
         setPatientFound(false);
@@ -210,7 +228,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
       d.setDate(today.getDate() + i);
       const isWorkDay = activeWorkingDays.includes(d.getDay());
       const value = d.toISOString().split('T')[0];
-      if (isWorkDay || value === formData.fecha) {
+      if (isWorkDay || value === selectedFecha) {
         dates.push({
           value,
           label: d.toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long' }),
@@ -218,62 +236,47 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
       }
     }
     return dates;
-  }, [formData.fecha, activeWorkingDays]);
+  }, [selectedFecha, activeWorkingDays]);
 
-  const handleInputChange = (field, value) => {
-    // Si cambia fecha o tipo, limpiar hora seleccionada para evitar inconsistencias
-    if (field === 'fecha' || field === 'tipoTurno') {
-      const next = { ...formData, [field]: value, hora: '' };
-      setFormData(next);
-      if (next.fecha && next.tipoTurno) {
-        getAvailableSlots(next.fecha, next.tipoTurno, next.id || formData.id);
-      }
+  // Trigger getAvailableSlots when fecha or tipoTurno changes
+  useEffect(() => {
+    if (selectedFecha && selectedTipoTurnoId && open) {
+      getAvailableSlots(selectedFecha, selectedTipoTurnoId, watch('id'));
+    }
+  }, [selectedFecha, selectedTipoTurnoId, open, getAvailableSlots, watch('id')]);
+
+  const onSubmitForm = async (data) => {
+    if (!selectedFecha || !selectedHora || !selectedTipoTurnoId) {
+      message.error("Debes completar todos los campos del turno.");
       return;
     }
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (field === 'dni') checkPatient(value);
-  };
-
-  // Prefetch de horarios apenas se abre el modal o cambia fecha/tipo
-  useEffect(() => {
-    if (!open) return;
-    if (!formData.fecha || !formData.tipoTurno) return;
-    getAvailableSlots(formData.fecha, formData.tipoTurno, formData.id);
-  }, [open, formData.fecha, formData.tipoTurno, formData.id, getAvailableSlots]);
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setLoading(true);
     setError('');
-    try {
-      const appointmentType = services.find(t => (t.id === formData.tipoTurno || t.name === formData.tipoTurno));
-      const appointmentISO = combineDateTimeToISO(formData.fecha, formData.hora, 'America/Argentina/Buenos_Aires');
 
-      const payload = {
-        dni: formData.dni,
-        nombre: formData.nombre,
-        telefono: formData.telefono,
-        email: formData.email,
-        obraSocial: formData.obraSocial,
-        numeroAfiliado: formData.numeroAfiliado,
-        alergias: formData.alergias || 'Ninguna',
-        antecedentes: formData.antecedentes || 'Ninguno',
-        tipoTurno: formData.tipoTurno,
-        tipoTurnoNombre: appointmentType?.name || 'Consulta',
-        duracion: appointmentType?.duration || 30,
-        fechaHora: appointmentISO,
-        timezone: 'America/Argentina/Buenos_Aires',
-        notas: formData.notas,
-        isNewPatient: !patientFound,
-      };
+    try {
+      const appointmentType = services.find(t => (t.id === selectedTipoTurnoId || t.name === selectedTipoTurnoId));
+      const appointmentISO = combineDateTimeToISO(selectedFecha, selectedHora, 'America/Argentina/Buenos_Aires');
+
+      // Override contextual variables
+      data.duracion = appointmentType?.duration || 30;
+      data.tipoTurnoNombre = appointmentType?.name || 'Consulta';
+      data.fechaHora = appointmentISO;
 
       let saved;
-      if (freedRef.current || !formData.id) {
+      if (freedRef.current || !data.id) {
         // Create new
-        saved = await AppointmentService.createAppointment(payload);
+        saved = await AppointmentService.createAppointment({
+          ...data,
+          tipoTurno: selectedTipoTurnoId,
+          timezone: 'America/Argentina/Buenos_Aires',
+          isNewPatient: !patientFound
+        });
       } else {
         // Update existing
-        saved = await AppointmentService.updateAppointment(formData.id, payload);
+        saved = await AppointmentService.updateAppointment(data.id, {
+          ...data,
+          tipoTurno: selectedTipoTurnoId,
+          timezone: 'America/Argentina/Buenos_Aires'
+        });
       }
 
       if (onSaved) onSaved(saved);
@@ -283,8 +286,6 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
       const msg = err.message || 'Error al actualizar el turno. Intenta nuevamente.';
       setError(msg);
       message.error(msg);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -292,7 +293,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     setDeleting(true);
     setError('');
     try {
-      await AppointmentService.deleteAppointment(formData.id);
+      await AppointmentService.deleteAppointment(watch('id'));
       if (onDeleted) onDeleted(turno);
       message.success('Turno cancelado correctamente');
       onClose();
@@ -303,13 +304,6 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     } finally {
       setDeleting(false);
     }
-  };
-
-  const isFormValid = () => {
-    return (
-      formData.dni && formData.nombre &&
-      formData.tipoTurno && formData.fecha && formData.hora
-    );
   };
 
   if (!open) return null;
@@ -344,7 +338,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
 
           {/* Body */}
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] bg-white">
-            <form id="edit-turno-form" onSubmit={handleSave} className="p-6 space-y-6 pb-8">
+            <form id="edit-turno-form" onSubmit={handleSubmit(onSubmitForm)} className="p-6 space-y-6 pb-8">
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
                   <AlertCircle size={20} />
@@ -360,7 +354,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                 <div className="relative">
                   <input
                     type="text"
-                    value={formData.dni}
+                    {...register('dni')}
                     readOnly
                     className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] text-gray-700 cursor-not-allowed"
                   />
@@ -368,6 +362,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                     <Loader className="absolute right-3 top-2 w-5 h-5 text-gray-400 animate-spin" />
                   )}
                 </div>
+                {errors.dni && <p className="text-red-500 text-xs mt-1">{errors.dni.message}</p>}
                 {patientFound && (
                   <p className="text-teal-600 text-sm mt-1 flex items-center gap-1">
                     <CheckCircle size={16} /> Paciente encontrado - datos actualizados automáticamente
@@ -383,13 +378,12 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                   </label>
                   <input
                     type="text"
-                    value={formData.nombre}
+                    {...register('nombre')}
                     readOnly
-                    onChange={(e) => handleInputChange('nombre', e.target.value)}
                     placeholder="Juan Pérez"
                     className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] text-gray-700 cursor-not-allowed"
-                    required
                   />
+                  {errors.nombre && <p className="text-red-500 text-xs mt-1">{errors.nombre.message}</p>}
                 </div>
                 <div className="hidden">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -397,10 +391,11 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                   </label>
                   <input
                     type="tel"
-                    value={formData.telefono}
+                    {...register('telefono')}
                     readOnly
                     className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] text-gray-700 cursor-not-allowed"
                   />
+                  {errors.telefono && <p className="text-red-500 text-xs mt-1">{errors.telefono.message}</p>}
                 </div>
               </div>
 
@@ -409,11 +404,11 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                 <input
                   type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  {...register('email')}
                   placeholder="paciente@correo.com"
-                  className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] text-gray-700"
+                  className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.email ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] text-gray-700`}
                 />
+                {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
               </div>
 
               {/* Obra Social */}
@@ -422,8 +417,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                   <label className="block text-sm font-medium text-gray-700 mb-2">Obra Social</label>
                   <input
                     type="text"
-                    value={formData.obraSocial}
-                    onChange={(e) => handleInputChange('obraSocial', e.target.value)}
+                    {...register('obraSocial')}
                     placeholder="OSDE, Swiss Medical, etc."
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   />
@@ -432,8 +426,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                   <label className="block text-sm font-medium text-gray-700 mb-2">Número de Afiliado</label>
                   <input
                     type="text"
-                    value={formData.numeroAfiliado}
-                    onChange={(e) => handleInputChange('numeroAfiliado', e.target.value)}
+                    {...register('numeroAfiliado')}
                     placeholder="123456789"
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   />
@@ -446,8 +439,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                   <label className="block text-sm font-medium text-gray-700 mb-2">Alergias</label>
                   <input
                     type="text"
-                    value={formData.alergias}
-                    onChange={(e) => handleInputChange('alergias', e.target.value)}
+                    {...register('alergias')}
                     placeholder="Ninguna, Penicilina, etc."
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   />
@@ -456,8 +448,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                   <label className="block text-sm font-medium text-gray-700 mb-2">Antecedentes</label>
                   <input
                     type="text"
-                    value={formData.antecedentes}
-                    onChange={(e) => handleInputChange('antecedentes', e.target.value)}
+                    {...register('antecedentes')}
                     placeholder="Diabetes, Hipertensión, etc."
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   />
@@ -470,8 +461,10 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                   <Clock className="inline w-4 h-4 mr-1" /> Tipo de Turno
                 </label>
                 <select
-                  value={formData.tipoTurno}
-                  onChange={(e) => handleInputChange('tipoTurno', e.target.value)}
+                  value={selectedTipoTurnoId}
+                  onChange={(e) => {
+                    setSelectedTipoTurnoId(e.target.value);
+                  }}
                   className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] text-gray-700"
                   required
                 >
@@ -490,8 +483,10 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                   <Calendar className="inline w-4 h-4 mr-1" /> Fecha
                 </label>
                 <select
-                  value={formData.fecha}
-                  onChange={(e) => handleInputChange('fecha', e.target.value)}
+                  value={selectedFecha}
+                  onChange={(e) => {
+                    setSelectedFecha(e.target.value);
+                  }}
                   className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] text-gray-700"
                   required
                 >
@@ -503,7 +498,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
               </div>
 
               {/* Horario */}
-              {formData.fecha && formData.tipoTurno && (
+              {selectedFecha && selectedTipoTurnoId && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Clock className="inline w-4 h-4 mr-1" /> Horario Disponible
@@ -518,8 +513,10 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                         <button
                           key={slot}
                           type="button"
-                          onClick={() => handleInputChange('hora', slot)}
-                          className={`p-3 text-sm rounded-lg border transition-colors focus:outline-none ${formData.hora === slot
+                          onClick={() => {
+                            setSelectedHora(slot);
+                          }}
+                          className={`p-3 text-sm rounded-lg border transition-colors focus:outline-none ${selectedHora === slot
                             ? 'bg-teal-600 text-white border-teal-600'
                             : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500'
                             }`}
@@ -541,8 +538,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Notas adicionales</label>
                 <textarea
-                  value={formData.notas}
-                  onChange={(e) => handleInputChange('notas', e.target.value)}
+                  {...register('notas')}
                   rows={3}
                   placeholder="Información adicional sobre el turno..."
                   className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] text-gray-700"
@@ -557,7 +553,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
             <button
               type="button"
               onClick={() => setShowConfirm(true)}
-              disabled={deleting || loading}
+              disabled={deleting || isSubmitting}
               className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 px-6 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
             >
               Cancelar Turno
@@ -565,10 +561,10 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
             <button
               type="submit"
               form="edit-turno-form"
-              disabled={!isFormValid() || loading || deleting}
+              disabled={!isValid || isSubmitting || deleting}
               className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
             >
-              {loading ? (
+              {isSubmitting ? (
                 <>
                   <Loader className="w-5 h-5 animate-spin" />
                   Guardando...

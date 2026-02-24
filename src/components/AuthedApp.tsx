@@ -6,6 +6,8 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import ModalsRoot from './ModalsRoot';
 import AppRoutes from '../router/AppRoutes';
+import { AppointmentService } from '../services/AppointmentService';
+import { message } from 'antd';
 
 import { usePatients } from '../hooks/usePatients';
 import { useTurnos } from '../hooks/useTurnos';
@@ -31,10 +33,41 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
     }
   }, [justLoggedIn, navigate, onConsumedLogin]);
 
-  // NOTA: se eliminó el setInterval de syncPendingAppointments.
-  // La sincronización con Google Calendar debe delegarse al backend
-  // (Supabase Edge Function + pg_cron), no a un timer del frontend.
+  // Sincronización robusta con Google Calendar
+  useEffect(() => {
+    let syncInterval;
+    let hasFailedAuth = false;
 
+    const runSync = async () => {
+      if (hasFailedAuth) return;
+      try {
+        await AppointmentService.syncPendingAppointments(session);
+      } catch (err) {
+        const errorMsg = String(err?.message || err).toLowerCase();
+        if (errorMsg.includes('401') || errorMsg.includes('expir') || errorMsg.includes('invalid_grant')) {
+          console.error("AuthedApp: Credenciales de Google inválidas/expiradas. Deteniendo sync.");
+          hasFailedAuth = true;
+          if (syncInterval) clearInterval(syncInterval);
+          message.warning(
+            "Tu conexión a Google Calendar ha expirado. Por favor, reconéctate desde Configuración.",
+            7
+          );
+        } else {
+          console.error("AuthedApp: Error no crítico en sync:", err);
+        }
+      }
+    };
+
+    // Ejecutar inicial al montar/loguearse
+    runSync();
+
+    // Luego cada 5 minutos
+    syncInterval = setInterval(runSync, 5 * 60 * 1000);
+
+    return () => {
+      if (syncInterval) clearInterval(syncInterval);
+    };
+  }, [session]);
 
   // ─── Datos ────────────────────────────────────────────────────────────────
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
