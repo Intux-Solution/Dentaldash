@@ -5,14 +5,12 @@ import { z } from 'zod';
 const PatientBaseSchema = z.object({
     nombre: z
         .string()
-        .min(1, 'El nombre es obligatorio.')
-        .min(2, 'El nombre debe tener al menos 2 caracteres.')
+        .min(2, 'El nombre debe tener al menos 2 caracteres (es obligatorio).')
         .max(150, 'El nombre no puede superar los 150 caracteres.'),
 
     dni: z
         .string()
-        .min(1, 'El DNI es obligatorio.')
-        .min(6, 'El DNI debe tener al menos 6 caracteres.')
+        .min(6, 'El DNI debe tener al menos 6 caracteres (es obligatorio).')
         .max(20, 'El DNI no puede superar los 20 caracteres.'),
 
     telefono: z
@@ -82,12 +80,8 @@ export type AddPatientInput = z.infer<typeof AddPatientSchema>;
 // Todos los campos son opcionales; solo se validan los que se envíen.
 
 export const UpdatePatientSchema = PatientBaseSchema.partial().extend({
-    // id es obligatorio para identificar qué paciente editar
-    id: z.string().uuid('El ID del paciente debe ser un UUID válido.').optional(),
-    _id: z.string().uuid('El ID del paciente debe ser un UUID válido.').optional(),
-}).refine(
-    (data) => data.id || data._id,
-    { error: 'Se requiere id o _id para actualizar un paciente.' }
-);
+    /** UUID de PostgreSQL — único identificador válido */
+    id: z.string().uuid('El ID del paciente debe ser un UUID válido.'),
+});
 
 export type UpdatePatientInput = z.infer<typeof UpdatePatientSchema>;

@@ -75,15 +75,15 @@ export default function App() {
   const handleLogout = async () => {
     console.log('Manual logout triggered');
     try {
-      const signOutPromise = supabase.auth.signOut();
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('SignOut Timeout')), 3000)
-      );
-      const { error } = await Promise.race([signOutPromise, timeoutPromise]);
-      if (error) console.error('Supabase signOut threw an error, forcing local clear:', error);
+      // 1. Asegurar cierre correcto en el backend sin condiciones de carrera
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Error en Supabase durante signOut:', error);
+      }
     } catch (err) {
-      console.error('Logout caught error or timeout:', err);
+      console.error('Excepción inesperada en logout:', err);
     } finally {
+      // 2. Limpieza local exhaustiva siempre (incluso si hubo error de red)
       localStorage.clear();
       sessionStorage.clear();
       queryClient.clear();

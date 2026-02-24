@@ -6,8 +6,9 @@ import { AddPatientSchema, UpdatePatientSchema } from '../schemas/patient.schema
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export interface PatientPayload {
+  /** UUID de PostgreSQL — fuente única de verdad, nunca usar _id */
   id?: string;
-  _id?: string;
+  user_id?: string;
   nombre?: string;
   dni?: string;
   telefono?: string;
@@ -31,7 +32,7 @@ export interface ClinicalRecord {
   fecha: string;
   diagnostico: string;
   tratamiento: string;
-  odontogram_state: any;
+  odontogram_state: Record<string, unknown> | null;
   archivo_url?: string;
   created_at: string;
 }
@@ -220,7 +221,7 @@ export class PatientService {
     // — 1. Validación con Zod —
     const parsed = AddPatientSchema.safeParse(patientData);
     if (!parsed.success) {
-      const message = parsed.error.errors
+      const message = parsed.error.issues
         .map((e) => `${e.path.join('.')}: ${e.message}`)
         .join(' | ');
       throw new Error(`Datos de paciente inválidos: ${message}`);
@@ -283,13 +284,13 @@ export class PatientService {
     // — 1. Validación con Zod —
     const parsed = UpdatePatientSchema.safeParse(patientData);
     if (!parsed.success) {
-      const message = parsed.error.errors
+      const message = parsed.error.issues
         .map((e) => `${e.path.join('.')}: ${e.message}`)
         .join(' | ');
       throw new Error(`Datos de paciente inválidos: ${message}`);
     }
 
-    const id = patientData.id || patientData._id;
+    const id = patientData.id;
     if (!id) throw new Error('Patient ID is required for update');
 
     let newlyUploadedPath: string | null = null;

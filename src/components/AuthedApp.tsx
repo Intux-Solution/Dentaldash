@@ -11,7 +11,6 @@ import { usePatients } from '../hooks/usePatients';
 import { useTurnos } from '../hooks/useTurnos';
 import { ModalsProvider } from '../hooks/useModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
-import { AppointmentService } from '../services/AppointmentService';
 
 const titleByPath = (pathname) => {
   if (pathname.startsWith('/pacientes')) return 'Pacientes';
@@ -32,19 +31,10 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
     }
   }, [justLoggedIn, navigate, onConsumedLogin]);
 
-  // Sincronización periódica con Google Calendar
-  useEffect(() => {
-    const runSync = async () => {
-      try {
-        await AppointmentService.syncPendingAppointments(session);
-      } catch (e) {
-        console.error('Auto-Sync failed:', e);
-      }
-    };
-    const initialTimer = setTimeout(runSync, 2000);
-    const interval = setInterval(runSync, 300_000);
-    return () => { clearTimeout(initialTimer); clearInterval(interval); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // NOTA: se eliminó el setInterval de syncPendingAppointments.
+  // La sincronización con Google Calendar debe delegarse al backend
+  // (Supabase Edge Function + pg_cron), no a un timer del frontend.
+
 
   // ─── Datos ────────────────────────────────────────────────────────────────
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
