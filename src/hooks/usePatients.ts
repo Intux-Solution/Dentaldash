@@ -118,9 +118,51 @@ export function usePatients(
     });
 
     // ── useMutation: crear ────────────────────────────────────────────────────
-    const addMutation = useMutation<Patient, Error, PatientPayload>({
+    const addMutation = useMutation<Patient, Error, PatientPayload, { previousPatients?: PaginatedResult<Patient> }>({
         mutationFn: (data) => PatientService.createPatient(data, userId ?? ''),
-        onSuccess: () => {
+        onMutate: async (newPatient) => {
+            await queryClient.cancelQueries({ queryKey: PATIENTS_KEY });
+
+            const queryKey = [...PATIENTS_KEY, page, pageSize];
+            const previousPatients = queryClient.getQueryData<PaginatedResult<Patient>>(queryKey);
+
+            queryClient.setQueryData<PaginatedResult<Patient>>(queryKey, (old) => {
+                if (!old) return old;
+
+                const tempPatient = {
+                    id: `temp-${Date.now()}`,
+                    nombre: newPatient.nombre ?? '',
+                    dni: newPatient.dni ?? '',
+                    telefono: newPatient.telefono ?? '',
+                    email: newPatient.email ?? null,
+                    obra_social: newPatient.obraSocial ?? null,
+                    numero_afiliado: newPatient.numeroAfiliado ?? null,
+                    fecha_nacimiento: newPatient.fechaNacimiento ?? null,
+                    alergias: newPatient.alergias ? Array.isArray(newPatient.alergias) ? newPatient.alergias.join(', ') : newPatient.alergias : 'Ninguna',
+                    antecedentes: newPatient.antecedentes ?? 'Ninguno',
+                    notas: newPatient.notas ?? null,
+                    estado: newPatient.estado ?? 'Activo',
+                    historia_clinica: null,
+                    historia_clinica_url: null,
+                    ultima_visita: new Date().toISOString(),
+                    created_at: new Date().toISOString(),
+                } as unknown as Patient;
+
+                return {
+                    ...old,
+                    total: old.total + 1,
+                    data: [tempPatient, ...old.data],
+                };
+            });
+
+            return { previousPatients };
+        },
+        onError: (_err, _newPatient, context) => {
+            if (context?.previousPatients) {
+                queryClient.setQueryData([...PATIENTS_KEY, page, pageSize], context.previousPatients);
+            }
+        },
+        onSettled: () => {
             invalidate();
         },
     });

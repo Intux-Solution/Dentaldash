@@ -72,20 +72,6 @@ const mapDbPatient = (p: any): Patient => ({
 
 export class PatientService {
 
-  /**
-   * Obtener todos los pacientes (límite 300, sin paginación).
-   * Para paginación real, ver fetchPatientsPaginated.
-   */
-  static async fetchAllPatients(): Promise<Patient[]> {
-    const { data, error } = await supabase
-      .from('patients')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(300);
-
-    if (error) throw error;
-    return (data ?? []).map(mapDbPatient);
-  }
 
   /**
    * Obtener pacientes con paginación real usando .range().
