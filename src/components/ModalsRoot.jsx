@@ -9,7 +9,11 @@ import BookingModal from './BookingModal';
 import TurnoDetailsModal from './TurnoDetailsModal';
 import EditTurnoModal from './EditTurnoModal';
 
-export default function ModalsRoot({ patientsLoading = false, onDeletePatient, session }) {
+/**
+ * Raíz de todos los modales globales de la aplicación.
+ * No recibe props — consume todo el estado y las acciones desde el contexto.
+ */
+export default function ModalsRoot() {
   const {
     // Paciente
     selectedPatient,
@@ -17,28 +21,28 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient, s
     showEditModal,
     showAddModal,
     showRecordModal,
+    session,
     closeProfile,
     onEditFromProfile,
     onViewPatient,
     onSavedPatient,
     onCreatedPatient,
-
+    handleDeletePatient,
     // Turno
     selectedTurno,
     showBookingModal,
     showTurnoDetailsModal,
     showEditTurnoModal,
-    openBookingModal, // not used here, but kept for parity
     closeBookingModal,
     onBookingSuccess,
-    onViewTurno, // not used here
+    onViewTurno,
     onEditTurnoFromDetails,
     onDeleteTurnoFromDetails,
     closeTurnoDetails,
     closeEditTurno,
     onTurnoSaved,
     onTurnoDeleted,
-    // extra closers
+    // Extra closers
     closeAddPatient,
     closeEditPatient,
     closeRecordModal,
@@ -52,7 +56,7 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient, s
         patient={selectedPatient}
         onClose={closeProfile}
         onEdit={onEditFromProfile}
-        onDelete={onDeletePatient}
+        onDelete={handleDeletePatient}
         onOpenRecord={onOpenRecord}
       />
 
@@ -63,18 +67,14 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient, s
         onSaved={onSavedPatient}
         onBack={() => {
           closeEditPatient();
-          if (selectedPatient) {
-            onViewPatient(selectedPatient);
-          }
+          if (selectedPatient) onViewPatient(selectedPatient);
         }}
-        loading={patientsLoading}
       />
 
       <AddPatientModal
         open={showAddModal}
         onClose={closeAddPatient}
         onCreate={onCreatedPatient}
-        loading={patientsLoading}
       />
 
       <ClinicalRecordModal
@@ -106,10 +106,7 @@ export default function ModalsRoot({ patientsLoading = false, onDeletePatient, s
         onDeleted={onTurnoDeleted}
         onBack={() => {
           closeEditTurno();
-          // Usar el método del hook para abrir el modal de detalles
-          if (selectedTurno) {
-            onViewTurno(selectedTurno);
-          }
+          if (selectedTurno) onViewTurno(selectedTurno);
         }}
       />
     </>

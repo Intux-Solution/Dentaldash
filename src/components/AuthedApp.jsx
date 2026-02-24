@@ -1,7 +1,6 @@
 // src/components/AuthedApp.jsx
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Calendar, Users, LogOut, Menu, X, Settings } from 'lucide-react';
 
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -12,10 +11,7 @@ import { usePatients } from '../hooks/usePatients';
 import { useTurnos } from '../hooks/useTurnos';
 import { ModalsProvider } from '../hooks/useModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
-
-import { PatientService } from '../services/PatientService';
 import { AppointmentService } from '../services/AppointmentService';
-
 
 const titleByPath = (pathname) => {
   if (pathname.startsWith('/pacientes')) return 'Pacientes';
@@ -28,7 +24,7 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Navegar a home después del login
+  // Navegar a home tras login
   useEffect(() => {
     if (justLoggedIn) {
       navigate('/', { replace: true });
@@ -36,60 +32,24 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
     }
   }, [justLoggedIn, navigate, onConsumedLogin]);
 
-  // Sync pendientes con Google Calendar al iniciar y periódicamente
+  // Sincronización periódica con Google Calendar
   useEffect(() => {
     const runSync = async () => {
       try {
         await AppointmentService.syncPendingAppointments(session);
       } catch (e) {
-        console.error("Auto-Sync failed:", e);
+        console.error('Auto-Sync failed:', e);
       }
     };
-
-    // 1. Ejecutar al inicio (con delay)
     const initialTimer = setTimeout(runSync, 2000);
+    const interval = setInterval(runSync, 300_000);
+    return () => { clearTimeout(initialTimer); clearInterval(interval); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // 2. Ejecutar cada 5 minutos (300000 ms)
-    const interval = setInterval(runSync, 300000);
-
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(interval);
-    };
-  }, []);
-
+  // ─── Datos ────────────────────────────────────────────────────────────────
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
   const { turnos, refreshTurnos } = useTurnos(null, null, session);
-
   const { normalizedPatients } = useNormalizedPatients(patients);
-
-  // Eliminar paciente (para usar en ModalsRoot)
-  const handleDeletePatient = useCallback(
-    async (patientData) => {
-      try {
-        const patient =
-          typeof patientData === 'string'
-            ? normalizedPatients.find(
-              (p) =>
-                p?.id === patientData ||
-                p?._id === patientData ||
-                p?.dni === patientData
-            )
-            : patientData;
-
-        if (!patient) throw new Error('No se pudo encontrar el paciente');
-
-        const id = patient?.id || patient?._id;
-        if (!id) throw new Error('No se pudo identificar el paciente (falta ID)');
-
-        await PatientService.deletePatient(id);
-        await refreshPatients();
-      } catch (err) {
-        throw err;
-      }
-    },
-    [refreshPatients, normalizedPatients]
-  );
 
   const headerTitle = titleByPath(location.pathname);
 
@@ -101,6 +61,7 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
       updatePatient={updatePatient}
       refreshTurnos={refreshTurnos}
       refreshPatients={refreshPatients}
+      session={session}
     >
       <div className="flex h-screen bg-gray-100">
         <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} onLogout={onLogout} />
@@ -120,10 +81,17 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
           )}
 
           <main className="flex-1 overflow-auto">
-            <AppRoutes normalizedPatients={normalizedPatients} loading={loading} refreshPatients={refreshPatients} session={session} />
+            <AppRoutes
+              normalizedPatients={normalizedPatients}
+              loading={loading}
+              refreshPatients={refreshPatients}
+              session={session}
+            />
           </main>
         </div>
-        <ModalsRoot patientsLoading={loading} onDeletePatient={handleDeletePatient} session={session} />
+
+        {/* Sin props — todo llega por contexto */}
+        <ModalsRoot />
       </div>
     </ModalsProvider>
   );

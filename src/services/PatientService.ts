@@ -1,8 +1,10 @@
 import { supabase } from '../config/supabaseClient';
 import { StorageService } from './StorageService';
 import { Patient } from '../types/database.types';
+import { AddPatientSchema, UpdatePatientSchema } from '../schemas/patient.schema';
 
-// Omitted type definitions for the internal payload mapping for brevity, but we use 'Partial<Patient>' heavily
+// ─── Tipos ────────────────────────────────────────────────────────────────────
+
 export interface PatientPayload {
   id?: string;
   _id?: string;
@@ -22,9 +24,6 @@ export interface PatientPayload {
   historia_clinica_url?: string | null;
 }
 
-/**
- * Servicio para gestionar pacientes con Supabase
- */
 export interface ClinicalRecord {
   id: string;
   patient_id: string;
@@ -37,75 +36,174 @@ export interface ClinicalRecord {
   created_at: string;
 }
 
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+// ─── Helper: Normalizar DNI ───────────────────────────────────────────────────
+/**
+ * Elimina puntos, guiones y espacios del DNI antes de persistirlo.
+ * Ejemplo: "12.345-678 A" → "12345678A"
+ */
+const sanitizeDni = (dni: string): string =>
+  dni.replace(/[\.\-\s]/g, '').trim();
+
+// ─── Helper: mapDbPatient ─────────────────────────────────────────────────────
+/**
+ * Función centralizada que transforma una fila de PostgreSQL (snake_case)
+ * al modelo camelCase que usa la UI.
+ */
+const mapDbPatient = (p: any): Patient => ({
+  ...p,
+  obraSocial: p.obra_social,
+  numeroAfiliado: p.numero_afiliado,
+  fechaNacimiento: p.fecha_nacimiento,
+  historiaClinica: p.historia_clinica_url ?? p.historia_clinica ?? null,
+  ultimaVisita: p.ultima_visita,
+  estado: p.estado ?? 'Activo',
+});
+
+// ─── PatientService ───────────────────────────────────────────────────────────
+
 export class PatientService {
 
   /**
-   * Obtener todos los pacientes
-   * @returns {Promise<any[]>} Lista de pacientes
+   * Obtener todos los pacientes (límite 300, sin paginación).
+   * Para paginación real, ver fetchPatientsPaginated.
    */
-  static async fetchAllPatients(): Promise<any[]> {
-    try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(300);
+  static async fetchAllPatients(): Promise<Patient[]> {
+    const { data, error } = await supabase
+      .from('patients')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(300);
 
-      if (error) throw error;
-
-      return (data || []).map((p: any) => ({
-        ...p,
-        obraSocial: p.obra_social,
-        numeroAfiliado: p.numero_afiliado,
-        fechaNacimiento: p.fecha_nacimiento,
-        historiaClinica: p.historia_clinica_url || p.historia_clinica,
-        ultimaVisita: p.ultima_visita,
-        estado: p.estado || 'Activo',
-      }));
-    } catch (error) {
-      throw error;
-    }
+    if (error) throw error;
+    return (data ?? []).map(mapDbPatient);
   }
 
   /**
-   * Buscar paciente dinámicamente para la vista de listado
+   * Obtener pacientes con paginación real usando .range().
+   * @param page - Número de página (base 1)
+   * @param pageSize - Cantidad de registros por página
    */
-  static async searchPatients(term: string): Promise<any[]> {
-    try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .or(`nombre.ilike.%${term}%,dni.ilike.%${term}%`)
-        .order('created_at', { ascending: false })
-        .limit(100);
+  static async fetchPatientsPaginated(
+    page: number,
+    pageSize: number = 20
+  ): Promise<PaginatedResult<Patient>> {
+    // .range() es 0-indexed e inclusivo en ambos extremos
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-      if (error) throw error;
+    const { data, error, count } = await supabase
+      .from('patients')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
-      return (data || []).map((p: any) => ({
-        ...p,
-        obraSocial: p.obra_social,
-        numeroAfiliado: p.numero_afiliado,
-        fechaNacimiento: p.fecha_nacimiento,
-        historiaClinica: p.historia_clinica_url || p.historia_clinica,
-        ultimaVisita: p.ultima_visita,
-        estado: p.estado || 'Activo',
-      }));
-    } catch (error) {
-      throw error;
-    }
+    if (error) throw error;
+
+    const total = count ?? 0;
+    return {
+      data: (data ?? []).map(mapDbPatient),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   /**
-   * Añadir un nuevo registro clínico a la historia del paciente
+   * Buscar pacientes por nombre o DNI.
    */
-  static async addClinicalRecord(patientId: string, record: Omit<ClinicalRecord, 'id' | 'created_at'>, userId: string): Promise<ClinicalRecord> {
+  static async searchPatients(term: string): Promise<Patient[]> {
+    const { data, error } = await supabase
+      .from('patients')
+      .select('*')
+      .or(`nombre.ilike.%${term}%,dni.ilike.%${term}%`)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    return (data ?? []).map(mapDbPatient);
+  }
+
+  /**
+   * Obtener un paciente por ID.
+   */
+  static async getPatientById(id: string): Promise<Patient | null> {
+    const { data, error } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw error;
+    }
+
+    return mapDbPatient(data);
+  }
+
+  /**
+   * Obtener un paciente por DNI.
+   */
+  static async getPatientByDni(dni: string): Promise<Patient | null> {
+    const { data, error } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('dni', dni)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw error;
+    }
+
+    return data ? mapDbPatient(data) : null;
+  }
+
+  /**
+   * Subir un archivo de historia clínica al Storage.
+   * Retorna el PATH relativo dentro del bucket (no la URL pública).
+   */
+  static async uploadClinicalRecord(file: File, userId: string): Promise<string> {
+    if (!userId) throw new Error('Authentication session missing or expired.');
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${userId}/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('clinical-records')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+    return filePath;
+  }
+
+  /**
+   * Añadir un nuevo registro clínico.
+   */
+  static async addClinicalRecord(
+    patientId: string,
+    record: Omit<ClinicalRecord, 'id' | 'created_at'>,
+    userId: string
+  ): Promise<ClinicalRecord> {
     const { data, error } = await supabase
       .from('treatment_history')
       .insert([{
         patient_id: patientId,
         user_id: userId,
         ...record,
-        odontogram_state: record.odontogram_state ? JSON.stringify(record.odontogram_state) : null,
+        odontogram_state: record.odontogram_state
+          ? JSON.stringify(record.odontogram_state)
+          : null,
       }])
       .select()
       .single();
@@ -115,110 +213,42 @@ export class PatientService {
   }
 
   /**
-   * Buscar paciente por ID
+   * Crear un nuevo paciente.
+   * Valida con Zod y sanitiza el DNI antes de persistir.
    */
-  static async getPatientById(id: string): Promise<any | null> {
-    try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') return null;
-        throw error;
-      }
-
-      return {
-        ...data,
-        obraSocial: data.obra_social,
-        numeroAfiliado: data.numero_afiliado,
-        fechaNacimiento: data.fecha_nacimiento,
-        historiaClinica: data.historia_clinica_url || data.historia_clinica,
-        estado: data.estado || 'Activo',
-      };
-    } catch (error) {
-      throw error;
+  static async createPatient(patientData: PatientPayload, userId: string): Promise<Patient> {
+    // — 1. Validación con Zod —
+    const parsed = AddPatientSchema.safeParse(patientData);
+    if (!parsed.success) {
+      const message = parsed.error.errors
+        .map((e) => `${e.path.join('.')}: ${e.message}`)
+        .join(' | ');
+      throw new Error(`Datos de paciente inválidos: ${message}`);
     }
-  }
 
-  /**
-   * Buscar paciente por DNI
-   */
-  static async getPatientByDni(dni: string): Promise<any | null> {
-    try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('dni', dni)
-        .maybeSingle();
-
-      if (error) {
-        if (error.code === 'PGRST116') return null;
-        throw error;
-      }
-
-      if (!data) return null;
-
-      return {
-        ...data,
-        obraSocial: data.obra_social,
-        numeroAfiliado: data.numero_afiliado,
-        fechaNacimiento: data.fecha_nacimiento,
-        historiaClinica: data.historia_clinica_url || data.historia_clinica,
-        estado: data.estado || 'Activo',
-      };
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Subir archivo a Storage y retornar PATH (no URL pública)
-   */
-  static async uploadClinicalRecord(file: File, userId: string): Promise<string> {
-    try {
-      if (!userId) throw new Error("Authentication session missing or expired.");
-
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${userId}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('clinical-records')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      return filePath;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Crear un nuevo paciente
-   */
-  static async createPatient(patientData: PatientPayload, userId: string): Promise<any> {
     let historiaClinicaPath: string | null = null;
     try {
+      // — 2. Subir archivo clínico si viene —
       if (patientData.historiaClinicaFile && userId) {
-        historiaClinicaPath = await this.uploadClinicalRecord(patientData.historiaClinicaFile, userId);
+        historiaClinicaPath = await this.uploadClinicalRecord(
+          patientData.historiaClinicaFile,
+          userId
+        );
       }
 
+      // — 3. Construir payload para DB (con DNI sanitizado) —
       const newPatient = {
         nombre: patientData.nombre,
-        dni: patientData.dni,
+        dni: patientData.dni ? sanitizeDni(patientData.dni) : patientData.dni,
         telefono: patientData.telefono,
-        email: patientData.email,
+        email: patientData.email || null,
         obra_social: patientData.obraSocial,
         numero_afiliado: patientData.numeroAfiliado,
         fecha_nacimiento: patientData.fechaNacimiento || null,
-        alergias: patientData.alergias || 'Ninguna',
-        antecedentes: patientData.antecedentes || 'Ninguno',
+        alergias: patientData.alergias ?? 'Ninguna',
+        antecedentes: patientData.antecedentes ?? 'Ninguno',
         notas: patientData.notas,
-        estado: patientData.estado || 'Activo',
+        estado: patientData.estado ?? 'Activo',
         historia_clinica_url: historiaClinicaPath,
         ultima_visita: new Date().toISOString(),
       };
@@ -230,17 +260,10 @@ export class PatientService {
         .single();
 
       if (error) throw error;
-
-      return {
-        ...data,
-        obraSocial: data.obra_social,
-        numeroAfiliado: data.numero_afiliado,
-        fechaNacimiento: data.fecha_nacimiento,
-        historiaClinica: data.historia_clinica_url || data.historia_clinica,
-      };
+      return mapDbPatient(data);
 
     } catch (error) {
-      // Rollback: Si subimos un archivo a Storage pero la DB falló, purgamos la imagen subida.
+      // Rollback: Si subimos un archivo pero la DB falló, borramos el archivo
       if (historiaClinicaPath) {
         try {
           await StorageService.deleteFile(historiaClinicaPath, 'clinical-records');
@@ -253,19 +276,30 @@ export class PatientService {
   }
 
   /**
-   * Actualizar un paciente existente
+   * Actualizar un paciente existente.
+   * Valida con Zod y sanitiza el DNI antes de persistir.
    */
-  static async updatePatient(patientData: PatientPayload, userId: string): Promise<any> {
+  static async updatePatient(patientData: PatientPayload, userId: string): Promise<Patient> {
+    // — 1. Validación con Zod —
+    const parsed = UpdatePatientSchema.safeParse(patientData);
+    if (!parsed.success) {
+      const message = parsed.error.errors
+        .map((e) => `${e.path.join('.')}: ${e.message}`)
+        .join(' | ');
+      throw new Error(`Datos de paciente inválidos: ${message}`);
+    }
+
+    const id = patientData.id || patientData._id;
+    if (!id) throw new Error('Patient ID is required for update');
+
     let newlyUploadedPath: string | null = null;
     try {
-      const id = patientData.id || patientData._id;
-      if (!id) throw new Error("Patient ID is required for update");
-
-      const updates: any = {
+      // — 2. Construir payload de actualización (con DNI sanitizado) —
+      const updates: Record<string, any> = {
         nombre: patientData.nombre,
-        dni: patientData.dni,
+        dni: patientData.dni ? sanitizeDni(patientData.dni) : patientData.dni,
         telefono: patientData.telefono,
-        email: patientData.email,
+        email: patientData.email || null,
         obra_social: patientData.obraSocial,
         numero_afiliado: patientData.numeroAfiliado,
         fecha_nacimiento: patientData.fechaNacimiento || null,
@@ -275,10 +309,17 @@ export class PatientService {
         estado: patientData.estado,
       };
 
+      // — 3. Manejo de archivo clínico —
       if (patientData.historiaClinicaFile && userId) {
-        newlyUploadedPath = await this.uploadClinicalRecord(patientData.historiaClinicaFile, userId);
+        newlyUploadedPath = await this.uploadClinicalRecord(
+          patientData.historiaClinicaFile,
+          userId
+        );
         updates.historia_clinica_url = newlyUploadedPath;
-      } else if (patientData.historiaClinica === null || patientData.historia_clinica_url === null) {
+      } else if (
+        patientData.historiaClinica === null ||
+        patientData.historia_clinica_url === null
+      ) {
         updates.historia_clinica_url = null;
       }
 
@@ -290,23 +331,14 @@ export class PatientService {
         .single();
 
       if (error) throw error;
+      return mapDbPatient(data);
 
-      return {
-        ...data,
-        obraSocial: data.obra_social,
-        numeroAfiliado: data.numero_afiliado,
-        fechaNacimiento: data.fecha_nacimiento,
-        historiaClinica: data.historia_clinica_url || data.historia_clinica,
-        estado: data.estado,
-      };
     } catch (error) {
       console.error('Error updating patient:', error);
-      // Rollback: En actualizaciones también resguardamos la operación
+      // Rollback en caso de fallo en DB tras subir archivo
       if (newlyUploadedPath) {
-        console.warn('Rolling back newly uploaded file during update due to DB failure...');
+        console.warn('Rolling back newly uploaded file during update...');
         try {
-          // The deleteFile method in StorageService expects a path, not a public URL.
-          // If uploadClinicalRecord now returns a public URL, this rollback logic might need adjustment.
           await StorageService.deleteFile(newlyUploadedPath, 'clinical-records');
         } catch (cleanupError) {
           console.error('CRITICAL: Failed to rollback file in storage', cleanupError);
@@ -317,56 +349,45 @@ export class PatientService {
   }
 
   /**
-   * Eliminar la historia clínica de un paciente (Archivo y URL)
+   * Eliminar la historia clínica de un paciente (Storage + DB).
    */
   static async deleteClinicalRecord(patientId: string, filePath: string): Promise<boolean> {
-    try {
-      if (!patientId) throw new Error("ID de paciente requerido");
+    if (!patientId) throw new Error('ID de paciente requerido');
 
-      // If uploadClinicalRecord now returns a public URL, filePath might be a URL.
-      // StorageService.deleteFile might need to be updated to handle URLs or extract paths.
-      if (filePath && !filePath.startsWith('http')) {
-        await StorageService.deleteFile(filePath, 'clinical-records');
-      } else if (filePath && filePath.startsWith(supabase.storage.from('clinical-records').getPublicUrl('').data.publicUrl.split('.supabase.co')[0])) {
-        // Attempt to extract path from public URL if it's a Supabase URL
-        const publicUrlBase = supabase.storage.from('clinical-records').getPublicUrl('').data.publicUrl;
-        const pathInBucket = filePath.substring(publicUrlBase.length);
-        await StorageService.deleteFile(pathInBucket, 'clinical-records');
-      }
-
-
-      const { error } = await supabase
-        .from('patients')
-        .update({ historia_clinica_url: null })
-        .eq('id', patientId);
-
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      console.error('Error deleting clinical record:', error);
-      throw error;
+    if (filePath && !filePath.startsWith('http')) {
+      await StorageService.deleteFile(filePath, 'clinical-records');
+    } else if (filePath && filePath.startsWith('http')) {
+      const publicUrlBase = supabase.storage
+        .from('clinical-records')
+        .getPublicUrl('').data.publicUrl;
+      const pathInBucket = filePath.substring(publicUrlBase.length);
+      await StorageService.deleteFile(pathInBucket, 'clinical-records');
     }
+
+    const { error } = await supabase
+      .from('patients')
+      .update({ historia_clinica_url: null })
+      .eq('id', patientId);
+
+    if (error) throw error;
+    return true;
   }
 
   /**
-   * Eliminar un paciente
+   * Eliminar un paciente.
    */
   static async deletePatient(id: string): Promise<boolean> {
-    try {
-      const { error } = await supabase
-        .from('patients')
-        .delete()
-        .eq('id', id);
+    const { error } = await supabase
+      .from('patients')
+      .delete()
+      .eq('id', id);
 
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      throw error;
-    }
+    if (error) throw error;
+    return true;
   }
 
   /**
-   * Obtener lista única de todas las obras sociales registradas (en perfil y en pacientes)
+   * Obtener lista única de todas las obras sociales registradas.
    */
   static async getAllUniqueInsurances(userId: string | null = null): Promise<string[]> {
     try {
@@ -375,7 +396,7 @@ export class PatientService {
 
       if (!uid) {
         const { data: { session } } = await supabase.auth.getSession();
-        uid = session?.user?.id || null;
+        uid = session?.user?.id ?? null;
       }
 
       if (uid) {
@@ -395,13 +416,13 @@ export class PatientService {
 
       if (error) throw error;
 
-      const patientInsurances = patientData
-        .map(p => p.obra_social)
-        .filter(val => val && val.trim() !== '');
+      const patientInsurances = (patientData ?? [])
+        .map((p) => p.obra_social)
+        .filter((val): val is string => !!val && val.trim() !== '');
 
       const combined = [...new Set([...profileInsurances, ...patientInsurances])];
-
       return combined.sort((a, b) => a.localeCompare(b));
+
     } catch (error) {
       console.error('Error fetching unique insurances:', error);
       return [];
