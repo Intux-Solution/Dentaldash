@@ -226,8 +226,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
       data.tipoTurnoNombre = appointmentType?.name || selectedTipoTurnoId;
       data.fechaHora = combineDateTimeToISO(
         selectedFecha,
-        selectedHora,
-        'America/Argentina/Buenos_Aires'
+        selectedHora
       );
 
       if (patientId) {

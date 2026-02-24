@@ -5,10 +5,10 @@ export const CreateAppointmentSchema = z.object({
     fechaHora: z.string().refine((val) => !isNaN(Date.parse(val)), {
         message: "La fecha y hora no son válidas",
     }),
-    duracion: z.number().int().positive("La duración debe ser un número positivo").default(30),
+    duracion: z.number().int().positive("La duración debe ser un número positivo").optional(),
     tipoTurnoNombre: z.string().min(1, "El tipo de turno es requerido"),
     notas: z.string().optional(),
-    status: z.enum(['Pendiente', 'Confirmado', 'Completado', 'Cancelado']).default('Confirmado'),
+    status: z.enum(['Pendiente', 'Confirmado', 'Completado', 'Cancelado']).optional(),
     // Add these for backward compatibility depending on how the frontend builds the payload
     nombre: z.string().optional(),
     dni: z.string().optional(),
@@ -25,13 +25,19 @@ export const UpdateAppointmentSchema = z.object({
     fechaHora: z.string().refine((val) => !isNaN(Date.parse(val)), {
         message: "La fecha y hora no son válidas",
     }),
-    duracion: z.number().int().positive("La duración debe ser un número positivo").default(30),
+    duracion: z.number().int().positive("La duración debe ser un número positivo").optional(),
     tipoTurnoNombre: z.string().min(1, "El tipo de turno es requerido"),
     notas: z.string().optional(),
     status: z.enum(['Pendiente', 'Confirmado', 'Completado', 'Cancelado']).optional(),
     // Add these for backward compatibility depending on how the frontend builds the payload
     nombre: z.string().optional(),
+    dni: z.string().optional(),
+    telefono: z.string().optional(),
     email: z.string().email("Email inválido").optional().or(z.literal('')),
+    obraSocial: z.string().optional(),
+    numeroAfiliado: z.string().optional(),
+    alergias: z.union([z.string(), z.array(z.string())]).optional(),
+    antecedentes: z.string().optional(),
 });
 
 export type CreateAppointmentPayload = z.infer<typeof CreateAppointmentSchema>;

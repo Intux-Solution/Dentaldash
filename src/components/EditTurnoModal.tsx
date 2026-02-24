@@ -254,7 +254,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
 
     try {
       const appointmentType = services.find(t => (t.id === selectedTipoTurnoId || t.name === selectedTipoTurnoId));
-      const appointmentISO = combineDateTimeToISO(selectedFecha, selectedHora, 'America/Argentina/Buenos_Aires');
+      const appointmentISO = combineDateTimeToISO(selectedFecha, selectedHora);
 
       // Override contextual variables
       data.duracion = appointmentType?.duration || 30;
