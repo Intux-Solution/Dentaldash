@@ -117,53 +117,49 @@ export function usePatients(
         }),
     });
 
-    // ── useMutation: crear ────────────────────────────────────────────────────
-    const addMutation = useMutation<Patient, Error, PatientPayload, { previousPatients?: PaginatedResult<Patient> }>({
-        mutationFn: (data) => PatientService.createPatient(data, userId ?? ''),
-        onMutate: async (newPatient) => {
+    // ── Add mutation (Con Optimistic Updates) ─────────────────────────────────
+    const addMutation = useMutation({
+        mutationFn: async (data: PatientPayload) => {
+            if (!userId) throw new Error("No hay sesión activa para crear paciente");
+            return PatientService.createPatient(data, userId);
+        },
+        onMutate: async (newPatientData) => {
+            // Cancelar peticiones en vuelo para no pisar la data optimista
             await queryClient.cancelQueries({ queryKey: PATIENTS_KEY });
 
-            const queryKey = [...PATIENTS_KEY, page, pageSize];
-            const previousPatients = queryClient.getQueryData<PaginatedResult<Patient>>(queryKey);
+            // Guardar el snapshot de la data actual para un posible rollback
+            const previousData = queryClient.getQueryData<PaginatedResult<Patient>>([...PATIENTS_KEY, page, pageSize]);
 
-            queryClient.setQueryData<PaginatedResult<Patient>>(queryKey, (old) => {
+            // Crear un paciente optimista temporal
+            const optimisticPatient = {
+                ...newPatientData,
+                id: `temp_${Date.now()}`,
+                estado: newPatientData.estado || 'Activo',
+            } as unknown as Patient;
+
+            // Inyectar el paciente directamente en la caché de la UI
+            queryClient.setQueryData<PaginatedResult<Patient>>([...PATIENTS_KEY, page, pageSize], (old) => {
                 if (!old) return old;
-
-                const tempPatient = {
-                    id: `temp-${Date.now()}`,
-                    nombre: newPatient.nombre ?? '',
-                    dni: newPatient.dni ?? '',
-                    telefono: newPatient.telefono ?? '',
-                    email: newPatient.email ?? null,
-                    obra_social: newPatient.obraSocial ?? null,
-                    numero_afiliado: newPatient.numeroAfiliado ?? null,
-                    fecha_nacimiento: newPatient.fechaNacimiento ?? null,
-                    alergias: newPatient.alergias ? Array.isArray(newPatient.alergias) ? newPatient.alergias.join(', ') : newPatient.alergias : 'Ninguna',
-                    antecedentes: newPatient.antecedentes ?? 'Ninguno',
-                    notas: newPatient.notas ?? null,
-                    estado: newPatient.estado ?? 'Activo',
-                    historia_clinica: null,
-                    historia_clinica_url: null,
-                    ultima_visita: new Date().toISOString(),
-                    created_at: new Date().toISOString(),
-                } as unknown as Patient;
-
                 return {
                     ...old,
-                    total: old.total + 1,
-                    data: [tempPatient, ...old.data],
+                    data: [optimisticPatient, ...old.data],
+                    total: old.total + 1
                 };
             });
 
-            return { previousPatients };
+            return { previousData };
         },
-        onError: (_err, _newPatient, context) => {
-            if (context?.previousPatients) {
-                queryClient.setQueryData([...PATIENTS_KEY, page, pageSize], context.previousPatients);
+        onError: (err, newPatient, context) => {
+            // Si falla la DB, restauramos la caché original (Rollback)
+            if (context?.previousData) {
+                queryClient.setQueryData([...PATIENTS_KEY, page, pageSize], context.previousData);
             }
+            console.error("Error creando paciente:", err);
         },
         onSettled: () => {
-            invalidate();
+            // Sincronización final obligatoria
+            queryClient.invalidateQueries({ queryKey: PATIENTS_KEY });
+            window.dispatchEvent(new CustomEvent('patients:refresh'));
         },
     });
 
