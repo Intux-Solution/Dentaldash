@@ -14,9 +14,10 @@ export default function SettingsView({ session }) {
     const {
         profile, tenant, schedules, faqs, loading, saving,
         googleAvatar, avatarPreview, qrCodeData, instanceStatus, pollingActive,
-        setProfile, setTenant, setSchedules, setFaqs,
+        setProfile, setTenant, setFaqs,
         handleProfileChange, handleAutoSaveProfile, handleAvatarChange,
-        handleConnectWhatsApp, handleDisconnectWhatsApp
+        handleConnectWhatsApp, handleDisconnectWhatsApp,
+        updateSchedule, addSchedule, deleteSchedule
     } = useSettings(session);
 
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
@@ -69,14 +70,14 @@ export default function SettingsView({ session }) {
                 {activeTab === 'schedule' && (
                     <ScheduleTab
                         schedules={schedules}
-                        setSchedules={setSchedules}
+                        updateSchedule={updateSchedule}
+                        addSchedule={addSchedule}
+                        deleteSchedule={deleteSchedule}
                     />
                 )}
 
                 {activeTab === 'whatsapp' && (
                     <WhatsAppTab
-                        tenant={tenant}
-                        setTenant={setTenant}
                         profile={profile}
                         instanceStatus={instanceStatus}
                         pollingActive={pollingActive}
@@ -84,7 +85,6 @@ export default function SettingsView({ session }) {
                         saving={saving}
                         handleConnectWhatsApp={handleConnectWhatsApp}
                         handleDisconnectWhatsApp={handleDisconnectWhatsApp}
-                        session={session}
                     />
                 )}
 

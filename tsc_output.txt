@@ -1,0 +1,1 @@
+src/components/ModalsRoot.tsx(54,8): error TS2741: Property 'onMessage' is missing in type '{ open: any; patient: any; onClose: any; onEdit: any; onDelete: any; onOpenRecord: any; }' but required in type '{ open: any; patient: any; onClose: any; onEdit: any; onDelete: any; onMessage: any; onOpenRecord: any; }'.

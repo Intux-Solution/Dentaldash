@@ -6,6 +6,7 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import ModalsRoot from './ModalsRoot';
 import AppRoutes from '../router/AppRoutes';
+import ErrorBoundary from './ErrorBoundary'; // <--- NEW IMPORT
 import { AppointmentService } from '../services/AppointmentService';
 import { message } from 'antd';
 
@@ -70,12 +71,14 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
           )}
 
           <main className="flex-1 overflow-auto">
-            <AppRoutes
-              normalizedPatients={normalizedPatients}
-              loading={loading}
-              refreshPatients={refreshPatients}
-              session={session}
-            />
+            <ErrorBoundary fallbackMessage="Ocurrió un error inesperado cargando esta vista.">
+              <AppRoutes
+                normalizedPatients={normalizedPatients}
+                loading={loading}
+                refreshPatients={refreshPatients}
+                session={session}
+              />
+            </ErrorBoundary>
           </main>
         </div>
 

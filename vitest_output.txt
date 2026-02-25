@@ -1,0 +1,13 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mC:/Users/esteb/Desktop/Dentaldash[39m
+
+ [31mÔØ»[39m src/services/AppointmentService.test.ts [2m([22m[2m3 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[32m 58[2mms[22m[39m
+[31m     [31m├ù[31m Scenario 1: Given no appointments, should return all daily slots[39m[32m 9[2mms[22m[39m
+[31m     [31m├ù[31m Scenario 2: Given a Supabase appointment at 10:00 AM, should block that slot[39m[32m 1[2mms[22m[39m
+[31m     [31m├ù[31m Scenario 3: Given a Google Calendar appointment at 15:00 PM, should block that slot[39m[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[90m (3)[39m
+[2m   Start at [22m 09:40:40
+[2m   Duration [22m 1.94s[2m (transform 161ms, setup 0ms, import 279ms, tests 58ms, environment 1.06s)[22m
+

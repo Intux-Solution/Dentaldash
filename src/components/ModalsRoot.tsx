@@ -58,6 +58,7 @@ export default function ModalsRoot() {
         onEdit={onEditFromProfile}
         onDelete={handleDeletePatient}
         onOpenRecord={onOpenRecord}
+        onMessage={() => { }}
       />
 
       <EditPatientModal

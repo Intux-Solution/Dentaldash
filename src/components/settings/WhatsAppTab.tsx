@@ -1,13 +1,23 @@
 import React from 'react';
 import { MessageSquare } from 'lucide-react';
 import { QRCode } from 'antd';
-import { supabase } from '../../config/supabaseClient';
+import { ProfileData } from './useSettings';
+
+interface WhatsAppTabProps {
+    profile: ProfileData;
+    instanceStatus: string;
+    pollingActive: boolean;
+    qrCodeData: string | null;
+    saving: boolean;
+    handleConnectWhatsApp: () => void;
+    handleDisconnectWhatsApp: () => void;
+}
 
 export default function WhatsAppTab({
-    tenant, setTenant, profile,
+    profile,
     instanceStatus, pollingActive, qrCodeData, saving,
-    handleConnectWhatsApp, handleDisconnectWhatsApp, session
-}) {
+    handleConnectWhatsApp, handleDisconnectWhatsApp
+}: WhatsAppTabProps) {
     if (!profile?.user_id) {
         return (
             <div className="p-8 text-center py-12">

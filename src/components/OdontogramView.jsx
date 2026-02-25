@@ -19,6 +19,7 @@ import { PatientService } from '../services/PatientService';
 import { OdontogramService } from '../services/OdontogramService';
 import { EvolutionService } from '../services/EvolutionService';
 import Odontogram from './Odontogram';
+import ErrorBoundary from './ErrorBoundary'; // <--- NEW IMPORT
 
 export default function OdontogramView() {
     const { id } = useParams();
@@ -243,7 +244,9 @@ export default function OdontogramView() {
                             <span className="text-xs text-gray-400">Sistema FDI</span>
                         </div>
                         <div className="p-4 lg:p-8 overflow-x-auto">
-                            <Odontogram data={odontogramData} onChange={setOdontogramData} />
+                            <ErrorBoundary fallbackMessage="Ocurrió un error inesperado al renderizar el odontograma de este paciente. La historia clínica y datos permanecen seguros.">
+                                <Odontogram data={odontogramData} onChange={setOdontogramData} />
+                            </ErrorBoundary>
                         </div>
                     </div>
                 </div>

@@ -1,8 +1,18 @@
 import React, { useRef } from 'react';
 import { Camera, User, Save } from 'lucide-react';
+import { ProfileData } from './useSettings';
 
-export default function ProfileTab({ profile, handleProfileChange, handleAutoSaveProfile, avatarPreview, googleAvatar, handleAvatarChange }) {
-    const fileInputRef = useRef(null);
+interface ProfileTabProps {
+    profile: ProfileData;
+    handleProfileChange: (field: string, value: any) => void;
+    handleAutoSaveProfile: (updates: Partial<ProfileData>) => void;
+    avatarPreview: string | null;
+    googleAvatar: string | null;
+    handleAvatarChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+export default function ProfileTab({ profile, handleProfileChange, handleAutoSaveProfile, avatarPreview, googleAvatar, handleAvatarChange }: ProfileTabProps) {
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     return (
         <div className="p-8">
@@ -37,7 +47,7 @@ export default function ProfileTab({ profile, handleProfileChange, handleAutoSav
                         <div className="flex gap-2">
                             <input
                                 type="text"
-                                value={profile.full_name}
+                                value={profile?.full_name || ''}
                                 onChange={(e) => handleProfileChange('full_name', e.target.value)}
                                 className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all"
                             />
@@ -57,7 +67,7 @@ export default function ProfileTab({ profile, handleProfileChange, handleAutoSav
                         <div className="flex gap-2">
                             <input
                                 type="tel"
-                                value={profile.contact_phone || ''}
+                                value={profile?.contact_phone || ''}
                                 onChange={(e) => handleProfileChange('contact_phone', e.target.value)}
                                 placeholder="Ej: +54 9 11 1234-5678"
                                 className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all"

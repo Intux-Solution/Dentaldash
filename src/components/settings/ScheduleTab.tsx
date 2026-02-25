@@ -1,7 +1,13 @@
 import React from 'react';
 import { Trash2, Plus } from 'lucide-react';
-import { supabase } from '../../config/supabaseClient';
-import { message } from 'antd';
+import { ScheduleData } from './useSettings'; // Import type from useSettings
+
+interface ScheduleTabProps {
+    schedules: ScheduleData[];
+    updateSchedule: (params: { slotId: number; updates: Partial<ScheduleData> }) => void;
+    addSchedule: (dayId: number) => void;
+    deleteSchedule: (slotId: number) => void;
+}
 
 const DAYS = [
     { id: 0, name: 'Domingo' },
@@ -13,55 +19,7 @@ const DAYS = [
     { id: 6, name: 'Sábado' },
 ];
 
-export default function ScheduleTab({ schedules, setSchedules }) {
-    const handleUpdateScheduleSlot = async (slotId, updates) => {
-        try {
-            const { error } = await supabase.from('schedules').update(updates).eq('id', slotId);
-            if (error) throw error;
-            setSchedules(prev => prev.map(sc => sc.id === slotId ? { ...sc, ...updates } : sc));
-            message.success('Horario actualizado');
-        } catch (err) {
-            message.error('Error al actualizar horario: ' + err.message);
-        }
-    };
-
-    const handleAddScheduleSlot = async (dayId) => {
-        try {
-            const existingSlots = schedules.filter(s => s.day_of_week === dayId);
-            let defaultStart = '09:00:00';
-            let defaultEnd = '18:00:00';
-
-            if (existingSlots.length > 0) {
-                defaultStart = '16:00:00';
-                defaultEnd = '20:00:00';
-            }
-
-            const newSlot = {
-                day_of_week: dayId,
-                start_time: defaultStart,
-                end_time: defaultEnd,
-                is_active: true
-            };
-            const { data, error } = await supabase.from('schedules').insert(newSlot).select().single();
-            if (error) throw error;
-            setSchedules(prev => [...prev, data]);
-            message.success('Horario agregado');
-        } catch (err) {
-            message.error('Error al agregar horario: ' + err.message);
-        }
-    };
-
-    const handleDeleteScheduleSlot = async (slotId) => {
-        try {
-            const { error } = await supabase.from('schedules').delete().eq('id', slotId);
-            if (error) throw error;
-            setSchedules(prev => prev.filter(sc => sc.id !== slotId));
-            message.success('Horario eliminado');
-        } catch (err) {
-            message.error('Error al eliminar horario: ' + err.message);
-        }
-    };
-
+export default function ScheduleTab({ schedules, updateSchedule, addSchedule, deleteSchedule }: ScheduleTabProps) {
     return (
         <div className="divide-y divide-gray-50">
             {DAYS.map(day => {
@@ -81,20 +39,20 @@ export default function ScheduleTab({ schedules, setSchedules }) {
                                                 <input
                                                     type="time"
                                                     value={slot.start_time.slice(0, 5)}
-                                                    onChange={(e) => handleUpdateScheduleSlot(slot.id, { start_time: e.target.value })}
+                                                    onChange={(e) => updateSchedule({ slotId: slot.id, updates: { start_time: e.target.value } })}
                                                     className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500"
                                                 />
                                                 <span className="text-gray-300">-</span>
                                                 <input
                                                     type="time"
                                                     value={slot.end_time.slice(0, 5)}
-                                                    onChange={(e) => handleUpdateScheduleSlot(slot.id, { end_time: e.target.value })}
+                                                    onChange={(e) => updateSchedule({ slotId: slot.id, updates: { end_time: e.target.value } })}
                                                     className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500"
                                                 />
                                                 <Trash2
                                                     size={16}
                                                     className="text-gray-400 hover:text-red-500 cursor-pointer transition-colors"
-                                                    onClick={() => handleDeleteScheduleSlot(slot.id)}
+                                                    onClick={() => deleteSchedule(slot.id)}
                                                 />
                                             </div>
                                         </div>
@@ -102,7 +60,7 @@ export default function ScheduleTab({ schedules, setSchedules }) {
                                 ))
                             )}
                             <button
-                                onClick={() => handleAddScheduleSlot(day.id)}
+                                onClick={() => addSchedule(day.id)}
                                 className="text-sm text-teal-600 font-bold flex items-center gap-1 hover:text-teal-700 transition-all mt-2 pl-1"
                             >
                                 <Plus size={16} /> Agregar bloque horario
