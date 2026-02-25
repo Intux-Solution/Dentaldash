@@ -1,5 +1,6 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-21 (Refactored)
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../config/supabaseClient';
 import { useSettings } from './settings/useSettings';
 import ProfileTab from './settings/ProfileTab';
 import InsurancesTab from './settings/InsurancesTab';
@@ -8,8 +9,15 @@ import ScheduleTab from './settings/ScheduleTab';
 import WhatsAppTab from './settings/WhatsAppTab';
 import FaqsTab from './settings/FaqsTab';
 
-export default function SettingsView({ session }) {
+export default function SettingsView() {
+    const [session, setSession] = useState(null);
     const [activeTab, setActiveTab] = useState('profile');
+
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+        });
+    }, []);
 
     const {
         profile, tenant, schedules, faqs, loading, saving,

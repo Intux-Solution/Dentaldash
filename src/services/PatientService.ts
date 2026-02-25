@@ -80,7 +80,7 @@ export interface DbPatientRow {
  * al modelo camelCase que usa la UI.
  */
 const mapDbPatient = (p: DbPatientRow): Patient => ({
-  ...(p as any),
+  ...(p as unknown as Patient),
   obraSocial: p.obra_social,
   numeroAfiliado: p.numero_afiliado,
   fechaNacimiento: p.fecha_nacimiento,
@@ -303,7 +303,7 @@ export class PatientService {
     let newlyUploadedPath: string | null = null;
     try {
       // — 2. Construir payload de actualización (con DNI sanitizado) —
-      const updates: Record<string, any> = {
+      const updates: Record<string, unknown> = {
         nombre: patientData.nombre,
         dni: patientData.dni ? sanitizeDni(patientData.dni) : patientData.dni,
         telefono: patientData.telefono,
