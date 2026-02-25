@@ -7,7 +7,6 @@ import { useAppStore } from '../store/useAppStore';
 
 interface DashboardStats {
     totalPacientes: number;
-    ingresosMensuales: number;
     turnosHoy: number;
     isLoading: boolean;
     error: string | null;
@@ -16,7 +15,6 @@ interface DashboardStats {
 export function useDashboardStats() {
     const [stats, setStats] = useState<DashboardStats>({
         totalPacientes: 0,
-        ingresosMensuales: 0,
         turnosHoy: 0,
         isLoading: true,
         error: null
@@ -57,30 +55,10 @@ export function useDashboardStats() {
 
                 if (turnosErr) throw turnosErr;
 
-                // 3. Ingresos del Mes (Sumatoria)
-                const monthStart = startOfMonth(now).toISOString();
-                const monthEnd = endOfMonth(now).toISOString();
-
-                // Fallback a tabla payments si existe, sumando el amount
-                let ingresosMensuales = 0;
-                const { data: payments, error: paymentsErr } = await supabase
-                    .from('payments')
-                    .select('amount, monto')
-                    .gte('fecha', monthStart)
-                    .lte('fecha', monthEnd);
-
-                if (!paymentsErr && payments) {
-                    ingresosMensuales = payments.reduce((acc, curr) => {
-                        const val = Number(curr.amount || curr.monto) || 0;
-                        return acc + val;
-                    }, 0);
-                }
-
                 if (isMounted) {
                     setStats({
                         totalPacientes: totalPacientes || 0,
                         turnosHoy: turnosHoy || 0,
-                        ingresosMensuales,
                         isLoading: false,
                         error: null
                     });

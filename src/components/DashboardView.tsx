@@ -25,7 +25,6 @@ export default function DashboardView() {
     const {
         totalPacientes,
         turnosHoy,
-        ingresosMensuales,
         isLoading: statsLoading,
         upcomingAppointments,
         turnosLoading,
@@ -46,7 +45,7 @@ export default function DashboardView() {
 
     return (
         <div className="p-4 lg:p-8 bg-gray-50 min-h-screen">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mb-6 lg:mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
                 <StatsCard
                     title="Turnos de Hoy"
                     value={statsLoading ? "..." : turnosHoy}
@@ -57,11 +56,7 @@ export default function DashboardView() {
                     value={statsLoading ? "..." : totalPacientes}
                     color="text-gray-900"
                 />
-                <StatsCard
-                    title="Ingresos del Mes"
-                    value={statsLoading ? "..." : new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(ingresosMensuales)}
-                    color="text-green-600"
-                />
+
             </div>
 
             <div className="space-y-6 lg:space-y-8">
