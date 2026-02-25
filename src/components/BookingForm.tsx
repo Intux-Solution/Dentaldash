@@ -9,8 +9,10 @@ import InsuranceAutocomplete from './InsuranceAutocomplete';
 import { combineDateTimeToISO } from '../utils/helpers';
 import { message } from 'antd';
 import { CreateAppointmentSchema, CreateAppointmentPayload } from '../schemas/appointment.schema';
+import { useTurnos } from '../hooks/useTurnos';
 
 export default function BookingForm({ onSuccess, hideHeader = false, hideInternalSubmit = false, setFormSubmit }) {
+  const { addTurno } = useTurnos();
   // Configured React Hook Form
   const {
     register,
@@ -233,8 +235,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
         data.patient_id = patientId;
       }
 
-      // AppointmentService handles the rest (Validation has already passed Zod on UI level)
-      await AppointmentService.createAppointment({
+      await addTurno({
         ...data,
         tipoTurno: selectedTipoTurnoId, // legacy support for backend
       });

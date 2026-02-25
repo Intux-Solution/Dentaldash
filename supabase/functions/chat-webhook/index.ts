@@ -44,6 +44,7 @@ const toolsDefinition = [
             properties: {
                 date: { type: "string", description: "Fecha del turno (YYYY-MM-DD)" },
                 time: { type: "string", description: "Hora del turno (HH:mm)" },
+                appointment_type: { type: "string", description: "Servicio o tratamiento agendado (ej. Limpieza, Consulta General). Usa la descripción exacta de los Servicios." },
                 patient_name: { type: "string", description: "Nombre completo del paciente" },
                 dni: { type: "string", description: "DNI del paciente (sin puntos)" },
                 telefono: { type: "string", description: "Teléfono del paciente (si es diferente al de WhatsApp)" },
@@ -51,7 +52,7 @@ const toolsDefinition = [
                 email: { type: "string", description: "Email del paciente (opcional)" },
                 notes: { type: "string", description: "Motivo de la consulta o notas adicionales" }
             },
-            required: ["date", "time", "patient_name", "dni", "obra_social", "telefono"]
+            required: ["date", "time", "appointment_type", "patient_name", "dni", "obra_social", "telefono"]
         }
     }
 ];
@@ -401,7 +402,7 @@ serve(async (req) => {
                     }
                 };
 
-                const createAppointment = async (date: string, time: string, patientName: string, dni: string, obraSocial: string, email: string | undefined, notes: string, telefono: string | undefined) => {
+                const createAppointment = async (date: string, time: string, appointment_type: string, patientName: string, dni: string, obraSocial: string, email: string | undefined, notes: string, telefono: string | undefined) => {
                     try {
                         // Should prioritize the provided phone if available, otherwise use sanitizePhone(remoteJid)
                         // But sanitizePhone(remoteJid) is the one we use for lookup.
@@ -425,7 +426,7 @@ serve(async (req) => {
                             .eq('telefono', jidPhone) // Still lookup by WA number? Or by finalPhone?
                             // If I change numbers, I might break history. Let's lookup by JID phone.
                             // If not found, create with JID phone (or provided phone).
-                            .eq('organization_id', tenant.id)
+                            .eq('user_id', tenant.id)
                             .maybeSingle();
 
                         if (!patient) {
@@ -435,7 +436,7 @@ serve(async (req) => {
                                     .from('patients')
                                     .select('id')
                                     .eq('telefono', finalPhone)
-                                    .eq('organization_id', tenant.id)
+                                    .eq('user_id', tenant.id)
                                     .maybeSingle();
 
                                 if (existingByProvided) patient = existingByProvided;
@@ -468,7 +469,7 @@ serve(async (req) => {
                         const { data: appointment, error: apptError } = await supabase
                             .from('appointments')
                             .insert({
-                                title: `Consulta General - ${patientName}`,
+                                title: `${appointment_type} - ${patientName}`,
                                 patient_id: patient.id,
                                 user_id: tenant.id,
                                 start_time: startDateTime.toISOString(),
@@ -476,7 +477,7 @@ serve(async (req) => {
                                 duration: 30,
                                 status: 'confirmed',
                                 notes: notes || "Agendado vía WhatsApp",
-                                appointment_type: 'Consulta General'
+                                appointment_type: appointment_type
                             })
                             .select()
                             .single();
@@ -544,7 +545,7 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 
                 contextInfo += `\n--- ENTORNO ---\n`;
                 if (patientData) {
-                    contextInfo += `Paciente DB: ${JSON.stringify({ nombre: patientData.nombre })}\n(Llámalo por su nombre)\n`;
+                    contextInfo += `Paciente DB: ${JSON.stringify(patientData)}\n(Llámalo por su nombre y USA ESTOS DATOS en 'create_appointment' si necesitas agendar, NO le pidas sus datos de nuevo)\n`;
                 } else {
                     contextInfo += `Paciente DB: null\n`;
                 }
@@ -577,10 +578,12 @@ INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes a�
 3. AGENDAMIENTO (¡CRÍTICO!): 
    - NUNCA agendes un turno (usando 'create_appointment') sin recibir antes un "SÍ" EXPLÍCITO del paciente para la fecha y hora exacta propuesta.
    - Flujo correcto: 
-     a) Tu dices: "Tengo libre el Jueves a las 15:00. ¿Deseas que te anote en ese horario?"
-     b) Esperas a que el paciente diga "Sí, dale" o "Confirmado".
-     c) Recién entonces pides los datos faltantes que necesites y usas 'create_appointment'.
-4. DATOS NECESARIOS: Para agendar necesitas Nombre, DNI, Teléfono y Obra Social. Pídelos con amabilidad.
+     a) Muestras opciones de horario -> Paciente elige.
+     b) Preguntas el motivo o SERVICIO (ej. Limpieza, Ortodoncia) usando la lista "Servicios".
+     c) Verificas los datos faltantes (DNI, Obra Social). SI YA TIENES los datos en "Paciente DB", NO los pides de nuevo. Usa sus respuestas anteriores si las hizo en el chat.
+     d) Si el paciente menciona una Obra Social que NO ESTÁ en tu lista de "Obras Sociales", avísale que su atención será catalogada como "Particular". Si no especifica, asume "Particular".
+     e) Recién entonces usas 'create_appointment', asegurándote de enviar el "appointment_type" (servicio).
+4. DATOS NECESARIOS: Para agendar necesitas Nombre, DNI, Teléfono y Obra Social. Pídelos SOLO SI NO ESTÁN en "Paciente DB". NO vuelvas a pedir el nombre y datos si ya te figura en "Paciente DB".
 5. TONO: Profesional, amable y de CONCISIÓN EXTREMA. Usa bullet points si aplica.
 6. FECHA ACTUAL: ${currentDateTimeString}
 7. CALENDARIO (14 días): ${JSON.stringify(calContext)}
@@ -621,7 +624,7 @@ ${contextInfo}`;
                                 if (fnName === "get_available_slots") {
                                     fnResult = await getAvailableSlots(fnArgs.date);
                                 } else if (fnName === "create_appointment") {
-                                    fnResult = await createAppointment(fnArgs.date, fnArgs.time, fnArgs.patient_name, fnArgs.dni, fnArgs.obra_social, fnArgs.email, fnArgs.notes, fnArgs.telefono);
+                                    fnResult = await createAppointment(fnArgs.date, fnArgs.time, fnArgs.appointment_type || "Consulta General", fnArgs.patient_name, fnArgs.dni, fnArgs.obra_social, fnArgs.email, fnArgs.notes, fnArgs.telefono);
                                 } else {
                                     fnResult = "Función no reconocida.";
                                 }

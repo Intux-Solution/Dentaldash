@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useCallback, useMemo, useState } from 'react';
 import { AppointmentService } from '../services/AppointmentService';
 import { usePatients } from './usePatients';
+import { useTurnos } from './useTurnos';
 
 const ModalsContext = createContext(null);
 
@@ -22,6 +23,7 @@ export function ModalsProvider({
 }) {
   // ─── Acceso a la mutation de delete via TanStack Query ────────────────────
   const { deletePatient } = usePatients(session);
+  const { deleteTurno } = useTurnos(null, null, session);
 
   // ─── Estado: Pacientes ────────────────────────────────────────────────────
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -119,27 +121,17 @@ export function ModalsProvider({
   const onBookingSuccess = useCallback(() => {
     if (typeof refreshTurnos === 'function') refreshTurnos();
     if (typeof refreshPatients === 'function') refreshPatients();
-    try {
-      window.dispatchEvent(new CustomEvent('turnos:refresh'));
-      window.dispatchEvent(new CustomEvent('patients:refresh'));
-    } catch { }
     closeBookingModal();
   }, [refreshTurnos, refreshPatients, closeBookingModal]);
 
   const onTurnoSaved = useCallback(() => {
     if (typeof refreshTurnos === 'function') refreshTurnos();
-    try { window.dispatchEvent(new CustomEvent('turnos:refresh')); } catch { }
     setShowEditTurnoModal(false);
     setSelectedTurno(null);
   }, [refreshTurnos]);
 
   const onTurnoDeleted = useCallback((deletedTurno) => {
     if (typeof refreshTurnos === 'function') refreshTurnos();
-    try {
-      const id = deletedTurno?.id || deletedTurno?.eventId || deletedTurno?._id;
-      window.dispatchEvent(new CustomEvent('turnos:refresh'));
-      if (id) window.dispatchEvent(new CustomEvent('turnos:deleted', { detail: { id } }));
-    } catch { }
     setShowEditTurnoModal(false);
     setShowTurnoDetailsModal(false);
     setSelectedTurno(null);
@@ -149,12 +141,12 @@ export function ModalsProvider({
     const id = turno?.id || turno?.eventId || turno?._id;
     if (!id) { alert('No se pudo identificar el turno a cancelar'); return; }
     try {
-      await AppointmentService.deleteAppointment(id);
+      await deleteTurno(id);
       onTurnoDeleted({ ...turno, id });
     } catch (err) {
       alert(err.message || 'No se pudo cancelar el turno.');
     }
-  }, [onTurnoDeleted]);
+  }, [onTurnoDeleted, deleteTurno]);
 
   const onSavedPatient = useCallback(async (updatedPatientData) => {
     try {

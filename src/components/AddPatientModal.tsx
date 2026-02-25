@@ -129,9 +129,9 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate }) {
                   Nombre *
                 </label>
                 <input
-                  {...register('nombre')}
+                  {...register('nombre', { required: 'El nombre es obligatorio' })}
                   type="text"
-                  placeholder="Nombre completo del paciente"
+                  placeholder=""
                   className={inputCls(errors.nombre)}
                   disabled={isSubmitting}
                 />
@@ -195,6 +195,7 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate }) {
                     value={field.value}
                     onChange={(e) => field.onChange(e.target.value)}
                     disabled={isSubmitting}
+                    placeholder="Seleccionar..."
                   />
                 )}
               />

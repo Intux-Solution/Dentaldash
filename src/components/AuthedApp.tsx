@@ -20,7 +20,7 @@ const titleByPath = (pathname) => {
   return 'Dashboard';
 };
 
-export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, session }) {
+export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, session }: { onLogout: any, justLoggedIn: any, onConsumedLogin?: any, session: any }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -33,41 +33,7 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
     }
   }, [justLoggedIn, navigate, onConsumedLogin]);
 
-  // Sincronización robusta con Google Calendar
-  useEffect(() => {
-    let syncInterval;
-    let hasFailedAuth = false;
 
-    const runSync = async () => {
-      if (hasFailedAuth) return;
-      try {
-        await AppointmentService.syncPendingAppointments(session);
-      } catch (err) {
-        const errorMsg = String(err?.message || err).toLowerCase();
-        if (errorMsg.includes('401') || errorMsg.includes('expir') || errorMsg.includes('invalid_grant')) {
-          console.error("AuthedApp: Credenciales de Google inválidas/expiradas. Deteniendo sync.");
-          hasFailedAuth = true;
-          if (syncInterval) clearInterval(syncInterval);
-          message.warning(
-            "Tu conexión a Google Calendar ha expirado. Por favor, reconéctate desde Configuración.",
-            7
-          );
-        } else {
-          console.error("AuthedApp: Error no crítico en sync:", err);
-        }
-      }
-    };
-
-    // Ejecutar inicial al montar/loguearse
-    runSync();
-
-    // Luego cada 5 minutos
-    syncInterval = setInterval(runSync, 5 * 60 * 1000);
-
-    return () => {
-      if (syncInterval) clearInterval(syncInterval);
-    };
-  }, [session]);
 
   // ─── Datos ────────────────────────────────────────────────────────────────
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);

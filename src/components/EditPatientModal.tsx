@@ -183,9 +183,8 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
                   Nombre *
                 </label>
                 <input
-                  {...register('nombre')}
-                  type="text"
-                  placeholder="Nombre completo del paciente"
+                  {...register('nombre', { required: 'El nombre es obligatorio' })}
+                  placeholder=""
                   className={inputCls(errors.nombre)}
                   disabled={isSubmitting}
                 />
@@ -249,6 +248,7 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
                     value={field.value}
                     onChange={(e) => field.onChange(e.target.value)}
                     disabled={isSubmitting}
+                    placeholder="Seleccionar..."
                   />
                 )}
               />
