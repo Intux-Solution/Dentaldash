@@ -474,8 +474,7 @@ ${data.notas || 'Sin notas adicionales'}
                         await supabase
                             .from('appointments')
                             .update({
-                                google_event_id: googleEvent.id,
-                                google_sync_status: 'synced'
+                                google_event_id: googleEvent.id
                             })
                             .eq('id', appt.id);
                     }
