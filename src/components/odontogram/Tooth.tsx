@@ -1,13 +1,20 @@
 import React from 'react';
+import { ToothData, SurfaceStatus } from '../../schemas/odontogram.schema';
+
+interface ToothProps {
+    number: number;
+    data?: ToothData;
+    onZoneClick: (number: number, zone: string) => void;
+    disabled?: boolean;
+}
 
 /**
- * SVG de un diente con 5 zonas clicables (Vestibular, Lingual, Mesial, Distal, Oclusal)
- * Basado en una representación anatómica simplificada.
+ * Componente "Dumb" (Puro) de un Diente que sólo dibuja SVG
+ * según las props ingresadas.
  */
-const Tooth = ({ number, data = {}, onZoneClick, disabled = false }) => {
-    // data: { 'vestibular': 'caries', 'mesial': 'pendiente', ... }
+const Tooth: React.FC<ToothProps> = ({ number, data = {}, onZoneClick, disabled = false }) => {
 
-    const getZoneColor = (zone) => {
+    const getZoneColor = (zone: keyof ToothData) => {
         const status = data[zone];
         if (status === 'caries') return '#EF4444'; // Red-500
         if (status === 'tratado') return '#3B82F6'; // Blue-500
@@ -44,7 +51,7 @@ const Tooth = ({ number, data = {}, onZoneClick, disabled = false }) => {
                             className="cursor-pointer hover:opacity-80 transition-opacity"
                             onClick={() => !disabled && onZoneClick(number, 'vestibular')}
                         />
-                        {/* Distal (Lado dependiendo de la numeración, simplificamos a Izquierda) */}
+                        {/* Distal (Izquierda) */}
                         <path
                             d="M 10,10 L 25,25 L 25,75 L 10,90 Z"
                             fill={getZoneColor('distal')}

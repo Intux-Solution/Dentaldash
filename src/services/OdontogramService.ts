@@ -1,11 +1,12 @@
 import { supabase } from '../config/supabaseClient';
+import { OdontogramSchema, OdontogramData } from '../schemas/odontogram.schema';
 
 export const OdontogramService = {
     /**
      * Obtiene el odontograma de un paciente
-     * @param {string} patientId - UUID del paciente
+     * @param patientId UUID del paciente
      */
-    async getOdontogram(patientId) {
+    async getOdontogram(patientId: string) {
         if (!patientId) return null;
         try {
             const { data, error } = await supabase
@@ -15,6 +16,19 @@ export const OdontogramService = {
                 .maybeSingle();
 
             if (error && error.code !== 'PGRST116') throw error;
+
+            if (data && data.data) {
+                // Parseamos usando Zod para garantizar que la UI no reciba basura
+                const result = OdontogramSchema.safeParse(data.data);
+                if (result.success) {
+                    return { ...data, data: result.data };
+                } else {
+                    console.error("Zod Validation Error en getOdontogram:", result.error);
+                    // Retornar objeto vació si se corrompió
+                    return { ...data, data: {} };
+                }
+            }
+
             return data;
         } catch (error) {
             console.error('Error fetching odontogram:', error);
@@ -24,17 +38,21 @@ export const OdontogramService = {
 
     /**
      * Guarda o actualiza el odontograma de un paciente
-     * @param {string} patientId - UUID del paciente
-     * @param {Object} odontogramData - Datos de los dientes (JSON)
+     * @param patientId UUID del paciente
+     * @param odontogramData Datos de los dientes validados por Zod
      */
-    async saveOdontogram(patientId, odontogramData) {
+    async saveOdontogram(patientId: string, odontogramData: OdontogramData) {
         if (!patientId) throw new Error('Patient ID is required');
+
+        // Validamos la info de salida para evitar gurdar data corrupta
+        const validatedData = OdontogramSchema.parse(odontogramData);
+
         try {
             const { data, error } = await supabase
                 .from('odontograms')
                 .upsert({
                     patient_id: patientId,
-                    data: odontogramData,
+                    data: validatedData,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'patient_id' })
                 .select()

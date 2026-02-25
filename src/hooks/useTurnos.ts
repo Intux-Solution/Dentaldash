@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppointmentService } from '../services/AppointmentService';
+import { startOfDay, endOfDay, addDays, isAfter } from 'date-fns';
 
 export const turnosQueryKey = (fromDate: string | null = null, toDate: string | null = null) => {
     return ['turnos', fromDate, toDate];
@@ -24,9 +25,9 @@ export function useTurnos(fromDate: string | null = null, toDate: string | null 
                 let startDate = parseYMD(fromDate);
                 let endDate = parseYMD(toDate);
                 if (startDate && endDate) {
-                    startDate.setHours(0, 0, 0, 0);
-                    endDate.setHours(23, 59, 59, 999);
-                    if (startDate > endDate) {
+                    startDate = startOfDay(startDate);
+                    endDate = endOfDay(endDate);
+                    if (isAfter(startDate, endDate)) {
                         const tmp = startDate;
                         startDate = endDate;
                         endDate = tmp;
@@ -36,12 +37,10 @@ export function useTurnos(fromDate: string | null = null, toDate: string | null 
                 }
             } else {
                 const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const nextWeek = new Date(today);
-                nextWeek.setDate(nextWeek.getDate() + 7);
-                nextWeek.setHours(23, 59, 59, 999);
-                fromISO = today.toISOString();
-                toISO = nextWeek.toISOString();
+                const startDate = startOfDay(today);
+                const endDate = endOfDay(addDays(today, 7));
+                fromISO = startDate.toISOString();
+                toISO = endDate.toISOString();
             }
 
             const events = await AppointmentService.getAppointments(fromISO, toISO, session);

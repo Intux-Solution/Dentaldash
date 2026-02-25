@@ -1,8 +1,8 @@
-
 import { supabase } from '../config/supabaseClient';
 import { WORK_HOURS } from '../config/appointments';
 import { GoogleCalendarService } from './GoogleCalendarService';
 import { CreateAppointmentSchema, UpdateAppointmentSchema } from '../schemas/appointment.schema';
+import { addMinutes, isBefore, isAfter, startOfDay, endOfDay } from 'date-fns';
 
 export class AppointmentService {
 
@@ -100,7 +100,7 @@ export class AppointmentService {
 
             // 4. Time buffer: filter out slots that are in the past or < 30 min from now
             const nowTime = new Date();
-            const minTimeForAppt = new Date(nowTime.getTime() + 30 * 60000);
+            const minTimeForAppt = addMinutes(nowTime, 30);
 
             // 5. Generar slots para CADA rango horario definido
             const slots = [];
@@ -119,13 +119,13 @@ export class AppointmentService {
 
                 while (current < rangeEnd) {
                     const slotStart = new Date(current);
-                    const slotEnd = new Date(current.getTime() + durationMinutes * 60000);
+                    const slotEnd = addMinutes(current, durationMinutes);
 
-                    if (slotEnd > rangeEnd) break;
+                    if (isAfter(slotEnd, rangeEnd)) break;
 
                     // Si el turno completo (o su inicio) es anterior al tiempo mínimo, lo omitimos
-                    if (slotStart < minTimeForAppt) {
-                        current.setMinutes(current.getMinutes() + WORK_HOURS.interval);
+                    if (isBefore(slotStart, minTimeForAppt)) {
+                        current = addMinutes(current, WORK_HOURS.interval);
                         continue;
                     }
 
@@ -168,7 +168,7 @@ export class AppointmentService {
                     }
 
                     // Avanzar por intervalo (hardcoded 30 mins o configurable si quisieran)
-                    current.setMinutes(current.getMinutes() + WORK_HOURS.interval);
+                    current = addMinutes(current, WORK_HOURS.interval);
                 }
             }
 
@@ -304,7 +304,7 @@ ${data.notas || 'Sin notas adicionales'}
 
             // 2. Crear appointment
             const startTime = new Date(validatedData.fechaHora);
-            const endTime = new Date(startTime.getTime() + (validatedData.duracion || 30) * 60000);
+            const endTime = addMinutes(startTime, validatedData.duracion || 30);
 
             // Translate Status for the DB to avoid type mismatch
             const statusMap: Record<string, string> = {
@@ -375,7 +375,7 @@ ${data.notas || 'Sin notas adicionales'}
 
             // data: similar to create
             const startTime = new Date(validatedData.fechaHora);
-            const endTime = new Date(startTime.getTime() + (validatedData.duracion || 30) * 60000);
+            const endTime = addMinutes(startTime, validatedData.duracion || 30);
 
             const statusMap: Record<string, string> = {
                 'Pendiente': 'pending',

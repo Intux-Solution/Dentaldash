@@ -1,59 +1,76 @@
 import React from 'react';
-import Tooth from './Tooth';
+import Tooth from './odontogram/Tooth';
+import { useOdontogram } from '../hooks/useOdontogram';
+import { OdontogramData, SurfaceStatus } from '../schemas/odontogram.schema';
 
 const ADULT_UPPER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
 const ADULT_LOWER = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
 const CHILD_UPPER = [55, 54, 53, 52, 51, 61, 62, 63, 64, 65];
 const CHILD_LOWER = [85, 84, 83, 82, 81, 71, 72, 73, 74, 75];
 
-const TOOLS = [
+const TOOLS: { id: SurfaceStatus; label: string; color: string }[] = [
     { id: 'caries', label: 'Caries', color: 'bg-red-500' },
     { id: 'tratado', label: 'Tratado', color: 'bg-blue-500' },
     { id: 'pendiente', label: 'Pendiente', color: 'bg-amber-500' },
     { id: 'ausente', label: 'Ausente', color: 'bg-gray-200' },
 ];
 
-const Odontogram = ({ data = {}, onChange, readOnly = false }) => {
-    const [selectedTool, setSelectedTool] = React.useState('caries');
+interface OdontogramProps {
+    data?: OdontogramData;
+    onChange?: (data: OdontogramData) => void;
+    readOnly?: boolean;
+}
 
-    const handleZoneClick = (toothNumber, zone) => {
-        if (readOnly) return;
+const Odontogram: React.FC<OdontogramProps> = ({ data = {}, onChange, readOnly = false }) => {
 
-        const currentTooth = data[toothNumber] || {};
-        let newToothData;
+    // Conectar el hook visual con la capa de datos inyectada
+    const {
+        data: odontogramData,
+        selectedTool,
+        setSelectedTool,
+        handleZoneClick
+    } = useOdontogram(data, readOnly);
 
-        if (selectedTool === 'ausente') {
-            // Toggle de ausencia: si ya estaba ausente, lo limpiamos
-            newToothData = currentTooth.all === 'ausente' ? {} : { all: 'ausente' };
-        } else {
-            // Si el diente está marcado como ausente, cualquier click lo limpia primero para poder marcarlo
-            if (currentTooth.all === 'ausente') {
-                newToothData = { [zone === 'all' ? 'oclusal' : zone]: selectedTool };
+    // Si el usuario hace clicks, delegamos el onChange al padre enviando el nuevo diccionario.
+    const handleAndPropagate = (toothNumber: number, zone: string) => {
+        handleZoneClick(toothNumber, zone);
+
+        // Emulamos el comportamiento asincrono de setState delegando los datos nuevos al padre
+        // usando useOdontogram internamente, calculamos la mutación inline:
+        if (onChange && !readOnly) {
+            const currentTooth = odontogramData[String(toothNumber)] || {};
+            let newToothData;
+
+            if (selectedTool === 'ausente') {
+                newToothData = currentTooth.all === 'ausente' ? {} : { all: 'ausente' };
             } else {
-                // Toque Inteligente: Si la zona ya tiene la herramienta actual, se limpia.
-                if (currentTooth[zone] === selectedTool) {
-                    const { [zone]: _, ...rest } = currentTooth;
-                    newToothData = rest;
+                if (currentTooth.all === 'ausente') {
+                    newToothData = { [zone === 'all' ? 'oclusal' : zone]: selectedTool };
                 } else {
-                    newToothData = { ...currentTooth, [zone]: selectedTool };
+                    if (currentTooth[zone as keyof typeof currentTooth] === selectedTool) {
+                        const { [zone]: _, ...rest } = currentTooth as any;
+                        newToothData = rest;
+                    } else {
+                        newToothData = { ...currentTooth, [zone]: selectedTool };
+                    }
                 }
             }
-        }
 
-        onChange({
-            ...data,
-            [toothNumber]: newToothData
-        });
+            onChange({
+                ...odontogramData,
+                [String(toothNumber)]: newToothData
+            });
+        }
     };
 
-    const ToothRow = ({ numbers }) => (
+    const ToothRow = ({ numbers }: { numbers: number[] }) => (
         <div className="flex flex-wrap justify-center gap-2 p-2">
             {numbers.map(n => (
                 <Tooth
                     key={n}
                     number={n}
-                    data={data[n] || {}}
-                    onZoneClick={handleZoneClick}
+                    data={odontogramData[String(n)] || {}}
+                    onZoneClick={handleAndPropagate}
                     disabled={readOnly}
                 />
             ))}

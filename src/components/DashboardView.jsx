@@ -1,12 +1,12 @@
 import React, { useMemo, useCallback } from 'react';
 import { Eye, ArrowRight, Calendar, RefreshCcw, User } from 'lucide-react';
 import { useTurnos } from '../hooks/useTurnos';
+import { useDashboardStats } from '../hooks/useDashboardStats';
 import StatsCard from './StatsCard';
 import SearchInput from './SearchInput';
 import PatientTable from './PatientTable';
 import { Link } from 'react-router-dom';
 import { norm } from '../utils/helpers';
-import { AppointmentService } from '../services/AppointmentService';
 
 export default function DashboardView({
   dashboardSearchTerm,
@@ -142,54 +142,31 @@ export default function DashboardView({
 
   const handleSearchChange = useCallback((e) => setDashboardSearchTerm(e.target.value), [setDashboardSearchTerm]);
 
-  // Stats dinámicos (usar TODOS los eventos, no sólo los 3 próximos)
-  const turnosHoy = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    return (events || []).reduce((acc, ev) => {
-      const start = new Date(ev.start || ev.startTime);
-      if (!isNaN(start.getTime()) && start >= today && start < tomorrow) {
-        return acc + 1;
-      }
-      return acc;
-    }, 0);
-  }, [events]);
-
-  const turnosSemana = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const nextWeek = new Date(today);
-    nextWeek.setDate(nextWeek.getDate() + 7);
-
-    return (events || []).reduce((acc, ev) => {
-      const start = new Date(ev.start || ev.startTime);
-      if (!isNaN(start.getTime()) && start >= today && start < nextWeek) {
-        return acc + 1;
-      }
-      return acc;
-    }, 0);
-  }, [events]);
+  // Consumir el nuevo custom hook para las estadísticas de los cards superiores
+  const {
+    totalPacientes,
+    turnosHoy,
+    ingresosMensuales,
+    isLoading: statsLoading
+  } = useDashboardStats();
 
   return (
     <div className="p-4 lg:p-8 bg-gray-50 min-h-screen">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mb-6 lg:mb-8">
         <StatsCard
-          title="Turnos de hoy"
-          value={turnosLoading ? "..." : turnosHoy}
+          title="Turnos de Hoy"
+          value={statsLoading ? "..." : turnosHoy}
           color="text-teal-600"
         />
         <StatsCard
-          title="Turnos de la semana"
-          value={turnosLoading ? "..." : turnosSemana}
+          title="Pacientes Activos"
+          value={statsLoading ? "..." : totalPacientes}
           color="text-gray-900"
         />
         <StatsCard
-          title="Pacientes"
-          value={patientsLoading ? "..." : patients.length}
-          color="text-gray-900"
+          title="Ingresos del Mes"
+          value={statsLoading ? "..." : new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(ingresosMensuales)}
+          color="text-green-600"
         />
       </div>
 
