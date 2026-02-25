@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loader, X, ArrowLeft } from 'lucide-react';
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
-import './loader-spin.css';
 import { combineDateTimeToISO } from '../utils/helpers';
 import { message } from 'antd';
 import { UpdateAppointmentSchema, UpdateAppointmentPayload } from '../schemas/appointment.schema';

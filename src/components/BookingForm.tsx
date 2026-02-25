@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loader } from 'lucide-react';
-import './loader-spin.css';
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import InsuranceAutocomplete from './InsuranceAutocomplete';
@@ -339,7 +338,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
               className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.dni ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
             />
             {checkingPatient && (
-              <Loader className="absolute right-3 top-2 w-5 h-5 text-gray-400 spin-in-place" />
+              <Loader className="absolute right-3 top-2 w-5 h-5 text-gray-400 animate-spin" />
             )}
           </div>
           {errors.dni && <p className="text-red-500 text-xs mt-1">{errors.dni.message}</p>}

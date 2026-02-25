@@ -1,15 +1,22 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { Loader } from 'lucide-react';
 
-import DashboardView from '../components/DashboardView';
-import PacientesView from '../components/PacientesView';
-import TurnosView from '../components/TurnosView';
-import SettingsView from '../components/SettingsView';
-import OdontogramView from '../components/OdontogramView';
+const DashboardView = React.lazy(() => import('../components/DashboardView'));
+const PacientesView = React.lazy(() => import('../components/PacientesView'));
+const TurnosView = React.lazy(() => import('../components/TurnosView'));
+const SettingsView = React.lazy(() => import('../components/SettingsView'));
+const OdontogramView = React.lazy(() => import('../components/OdontogramView'));
 
 import { useModals } from '../hooks/useModals';
 import { PatientService } from '../services/PatientService';
 import ProtectedRoute from './ProtectedRoute';
+
+const GlobalLoader = () => (
+  <div className="flex h-screen w-full items-center justify-center bg-gray-50/50">
+    <Loader className="h-10 w-10 animate-spin text-teal-600" />
+  </div>
+);
 
 export default function AppRoutes({ normalizedPatients = [], loading = false, refreshPatients, session }) {
   const {
@@ -64,56 +71,58 @@ export default function AppRoutes({ normalizedPatients = [], loading = false, re
   }, [refreshPatients, patientsForViews]);
 
   return (
-    <Routes>
-      {/* ── Rutas privadas protegidas ────────────────────────────────── */}
-      <Route element={<ProtectedRoute session={session} />}>
-        <Route
-          path="/"
-          element={(
-            <DashboardView
-              dashboardSearchTerm={dashboardSearchTerm}
-              setDashboardSearchTerm={setDashboardSearchTerm}
-              statusFilter={dashboardStatusFilter}
-              setStatusFilter={setDashboardStatusFilter}
-              onAddPatient={openAddPatient}
-              onViewPatient={onViewPatient}
-              onOpenRecord={onOpenRecord}
-              onOpenBooking={openBookingModal}
-              onViewTurno={onViewTurno}
-              patients={patientsForViews}
-              latestPatients={latestPatients}
-              loading={loading}
-            />
-          )}
-        />
-        <Route
-          path="/turnos"
-          element={<TurnosView onOpenBooking={openBookingModal} onViewTurno={onViewTurno} />}
-        />
-        <Route
-          path="/pacientes"
-          element={(
-            <PacientesView
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
-              onAddPatient={openAddPatient}
-              onViewPatient={onViewPatient}
-              onOpenRecord={onOpenRecord}
-              patients={patientsForViews}
-              loading={loading}
-              onDeletePatient={handleDeletePatient}
-            />
-          )}
-        />
-        <Route path="/configuracion" element={<SettingsView session={session} />} />
-        <Route path="/pacientes/:id/odontograma" element={<OdontogramView />} />
-      </Route>
+    <Suspense fallback={<GlobalLoader />}>
+      <Routes>
+        {/* ── Rutas privadas protegidas ────────────────────────────────── */}
+        <Route element={<ProtectedRoute session={session} />}>
+          <Route
+            path="/"
+            element={(
+              <DashboardView
+                dashboardSearchTerm={dashboardSearchTerm}
+                setDashboardSearchTerm={setDashboardSearchTerm}
+                statusFilter={dashboardStatusFilter}
+                setStatusFilter={setDashboardStatusFilter}
+                onAddPatient={openAddPatient}
+                onViewPatient={onViewPatient}
+                onOpenRecord={onOpenRecord}
+                onOpenBooking={openBookingModal}
+                onViewTurno={onViewTurno}
+                patients={patientsForViews}
+                latestPatients={latestPatients}
+                loading={loading}
+              />
+            )}
+          />
+          <Route
+            path="/turnos"
+            element={<TurnosView onOpenBooking={openBookingModal} onViewTurno={onViewTurno} />}
+          />
+          <Route
+            path="/pacientes"
+            element={(
+              <PacientesView
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
+                onAddPatient={openAddPatient}
+                onViewPatient={onViewPatient}
+                onOpenRecord={onOpenRecord}
+                patients={patientsForViews}
+                loading={loading}
+                onDeletePatient={handleDeletePatient}
+              />
+            )}
+          />
+          <Route path="/configuracion" element={<SettingsView session={session} />} />
+          <Route path="/pacientes/:id/odontograma" element={<OdontogramView />} />
+        </Route>
 
-      {/* ── Rutas de utilidad / fallback ────────────────────────────── */}
-      <Route path="/update-password" element={<Navigate to="/" />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* ── Rutas de utilidad / fallback ────────────────────────────── */}
+        <Route path="/update-password" element={<Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }
