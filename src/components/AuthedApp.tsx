@@ -72,12 +72,7 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
 
           <main className="flex-1 overflow-auto">
             <ErrorBoundary fallbackMessage="Ocurrió un error inesperado cargando esta vista.">
-              <AppRoutes
-                normalizedPatients={normalizedPatients}
-                loading={loading}
-                refreshPatients={refreshPatients}
-                session={session}
-              />
+              <AppRoutes session={session} />
             </ErrorBoundary>
           </main>
         </div>

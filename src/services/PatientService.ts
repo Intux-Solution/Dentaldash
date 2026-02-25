@@ -54,12 +54,33 @@ const sanitizeDni = (dni: string): string =>
   dni.replace(/[\.\-\s]/g, '').trim();
 
 // ─── Helper: mapDbPatient ─────────────────────────────────────────────────────
+export interface DbPatientRow {
+  id: string;
+  user_id?: string;
+  nombre: string;
+  dni?: string;
+  telefono?: string;
+  email?: string;
+  obra_social?: string;
+  numero_afiliado?: string;
+  fecha_nacimiento?: string;
+  alergias?: string | string[];
+  antecedentes?: string;
+  notas?: string;
+  estado?: string;
+  historia_clinica?: string | null;
+  historia_clinica_url?: string | null;
+  ultima_visita?: string;
+  created_at?: string;
+  [key: string]: any; // Allow remaining PostgreSQL payload fields
+}
+
 /**
  * Función centralizada que transforma una fila de PostgreSQL (snake_case)
  * al modelo camelCase que usa la UI.
  */
-const mapDbPatient = (p: any): Patient => ({
-  ...p,
+const mapDbPatient = (p: DbPatientRow): Patient => ({
+  ...(p as any),
   obraSocial: p.obra_social,
   numeroAfiliado: p.numero_afiliado,
   fechaNacimiento: p.fecha_nacimiento,
@@ -376,7 +397,14 @@ export class PatientService {
 
       if (patient?.historia_clinica_url) {
         try {
-          await StorageService.deleteFile(patient.historia_clinica_url, 'clinical-records');
+          let pathToDelete = patient.historia_clinica_url;
+          if (pathToDelete.startsWith('http')) {
+            const publicUrlBase = supabase.storage
+              .from('clinical-records')
+              .getPublicUrl('').data.publicUrl;
+            pathToDelete = pathToDelete.substring(publicUrlBase.length);
+          }
+          await StorageService.deleteFile(pathToDelete, 'clinical-records');
         } catch (storageErr) {
           console.warn('PatientService: No se pudo eliminar la historia clínica vinculada. Error:', storageErr);
         }

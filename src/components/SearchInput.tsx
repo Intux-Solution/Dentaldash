@@ -1,7 +1,13 @@
 import React from 'react';
 import { Search } from 'lucide-react';
 
-export default React.memo(function SearchInput({ value, onChange, placeholder }) {
+interface SearchInputProps {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+}
+
+export default React.memo(function SearchInput({ value, onChange, placeholder }: SearchInputProps) {
   return (
     <div className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />

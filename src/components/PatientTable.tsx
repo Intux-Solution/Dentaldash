@@ -2,7 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, XCircle } from 'lucide-react';
 
-export default React.memo(function PatientTable({ patients, onView, onOpenRecord, onDelete, showActions = false }) {
+interface PatientTableProps {
+  patients: any[];
+  onView?: (patient: any) => void;
+  onOpenRecord?: (patient: any) => void;
+  onDelete?: (patient: any) => Promise<void>;
+  showActions?: boolean;
+}
+
+export default React.memo(function PatientTable({ patients, onView, onOpenRecord, onDelete, showActions = false }: PatientTableProps) {
   const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
