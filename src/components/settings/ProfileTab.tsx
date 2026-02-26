@@ -48,11 +48,14 @@ export default function ProfileTab({ profile, handleProfileChange, handleAutoSav
                             <input
                                 type="text"
                                 value={profile?.full_name || ''}
-                                onChange={(e) => handleProfileChange('full_name', e.target.value)}
+                                onChange={(e) => {
+                                    handleProfileChange('full_name', e.target.value);
+                                    handleProfileChange('business_name', e.target.value);
+                                }}
                                 className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all"
                             />
                             <button
-                                onClick={() => handleAutoSaveProfile({ full_name: profile.full_name })}
+                                onClick={() => handleAutoSaveProfile({ full_name: profile.full_name, business_name: profile.full_name })}
                                 className="px-4 py-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-all flex items-center justify-center"
                                 title="Guardar nombre"
                             >
