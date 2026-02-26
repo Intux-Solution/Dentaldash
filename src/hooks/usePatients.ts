@@ -5,7 +5,7 @@ import { PatientService } from '../services/PatientService';
 import type { Patient, PatientPayload, PaginatedResult } from '../types/database.types';
 
 // ─── Query Key ────────────────────────────────────────────────────────────────
-export const PATIENTS_KEY = ['patients'] as const;
+const PATIENTS_KEY = ['patients'] as const;
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 interface NormalizedPatient extends Patient {
@@ -15,7 +15,7 @@ interface NormalizedPatient extends Patient {
 }
 
 /** Resultado de usePatients compatible con la API anterior del hook */
-export interface UsePatientsResult {
+interface UsePatientsResult {
     patients: NormalizedPatient[];
     loading: boolean;
     error: string | null;

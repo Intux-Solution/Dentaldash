@@ -95,17 +95,7 @@ export interface DbPatientRow {
     [key: string]: any;
 }
 
-export interface Appointment {
-    id: string;
-    patient_id: string;
-    date: string;
-    time: string;
-    end_time?: string;
-    type: string;
-    status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
-    notes?: string;
-    created_at?: string;
-}
+
 
 export interface ClinicalRecord {
     id: string;

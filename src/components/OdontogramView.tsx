@@ -16,159 +16,36 @@ import {
 } from 'lucide-react';
 import { message } from 'antd';
 import { PatientService } from '../services/PatientService';
-import { OdontogramService } from '../services/OdontogramService';
-import { EvolutionService } from '../services/EvolutionService';
+import { useOdontogramView } from '../hooks/useOdontogramView';
 import Odontogram from './Odontogram';
-import ErrorBoundary from './ErrorBoundary'; // <--- NEW IMPORT
+import ErrorBoundary from './ErrorBoundary';
 
 export default function OdontogramView() {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const [patient, setPatient] = useState(null);
-    const [odontogramData, setOdontogramData] = useState({});
-    const [history, setHistory] = useState([]);
-
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState(null);
-
-    // Formulario para nueva nota
-    const [newNote, setNewNote] = useState({
-        tooth_number: '',
-        procedure_type: '',
-        description: ''
-    });
-    const [addingNote, setAddingNote] = useState(false);
-
-    // Estado para edición inline
-    const [editingId, setEditingId] = useState(null);
-    const [editForm, setEditForm] = useState({
-        tooth_number: '',
-        procedure_type: '',
-        description: ''
-    });
-    const [savingEdit, setSavingEdit] = useState(false);
-
-    useEffect(() => {
-        if (id) {
-            loadInitialData();
-        }
-    }, [id]);
-
-    const loadInitialData = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-
-            const [pData, oData, hData] = await Promise.all([
-                PatientService.getPatientById(id),
-                OdontogramService.getOdontogram(id),
-                EvolutionService.getHistory(id)
-            ]);
-
-            if (!pData) {
-                setError('Paciente no encontrado');
-                return;
-            }
-
-            setPatient(pData);
-            setOdontogramData(oData?.data || {});
-            setHistory(hData || []);
-        } catch (err) {
-            console.error('Error loading data:', err);
-            setError('Error al cargar la información.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSaveOdontogram = async () => {
-        try {
-            setSaving(true);
-            await OdontogramService.saveOdontogram(id, odontogramData);
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
-            message.success('Odontograma guardado correctamente');
-        } catch (err) {
-            console.error('Error saving:', err);
-            message.error('Error al guardar el odontograma');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleAddHistory = async (e) => {
-        e.preventDefault();
-        if (!newNote.procedure_type || !newNote.description) return;
-
-        try {
-            setAddingNote(true);
-            const entry = await EvolutionService.addEntry({
-                patient_id: id,
-                ...newNote,
-                tooth_number: newNote.tooth_number ? parseInt(newNote.tooth_number) : null
-            });
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
-            setHistory([entry, ...history]);
-            setNewNote({ tooth_number: '', procedure_type: '', description: '' });
-            message.success('Registro añadido correctamente');
-        } catch (err) {
-            console.error('Error adding history:', err);
-            message.error('Error al añadir registro');
-        } finally {
-            setAddingNote(false);
-        }
-    };
-
-    const handleDeleteHistory = async (historyId) => {
-        if (!window.confirm('¿Eliminar este registro del historial?')) return;
-        try {
-            await EvolutionService.deleteEntry(historyId);
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
-            setHistory(history.filter(h => h.id !== historyId));
-            message.success('Registro eliminado');
-        } catch (err) {
-            message.error('Error al eliminar');
-        }
-    };
-
-    const handleStartEdit = (entry) => {
-        setEditingId(entry.id);
-        setEditForm({
-            tooth_number: entry.tooth_number ? entry.tooth_number.toString() : '',
-            procedure_type: entry.procedure_type || '',
-            description: entry.description || ''
-        });
-    };
-
-    const handleCancelEdit = () => {
-        setEditingId(null);
-        setEditForm({ tooth_number: '', procedure_type: '', description: '' });
-    };
-
-    const handleSaveEdit = async (historyId) => {
-        if (!editForm.procedure_type || !editForm.description) return;
-
-        try {
-            setSavingEdit(true);
-            const updatedEntry = await EvolutionService.updateEntry(historyId, {
-                tooth_number: editForm.tooth_number ? parseInt(editForm.tooth_number) : null,
-                procedure_type: editForm.procedure_type,
-                description: editForm.description
-            });
-
-            // Actualizar la lista localmente
-            setHistory(history.map(item => item.id === historyId ? updatedEntry : item));
-            setEditingId(null);
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
-            message.success('Cambios guardados con éxito');
-        } catch (err) {
-            console.error('Error updating history:', err);
-            message.error('Error al guardar los cambios');
-        } finally {
-            setSavingEdit(false);
-        }
-    };
+    const {
+        patient,
+        odontogramData,
+        setOdontogramData,
+        history,
+        loading,
+        saving,
+        error,
+        newNote,
+        setNewNote,
+        addingNote,
+        editingId,
+        editForm,
+        setEditForm,
+        savingEdit,
+        handleSaveOdontogram,
+        handleAddHistory,
+        handleDeleteHistory,
+        handleStartEdit,
+        handleCancelEdit,
+        handleSaveEdit
+    } = useOdontogramView(id);
 
     if (loading) {
         return (

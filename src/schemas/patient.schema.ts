@@ -74,7 +74,7 @@ const PatientBaseSchema = z.object({
 
 export const AddPatientSchema = PatientBaseSchema;
 
-export type AddPatientInput = z.infer<typeof AddPatientSchema>;
+type AddPatientInput = z.infer<typeof AddPatientSchema>;
 
 // ─── Schema para ACTUALIZAR un paciente ──────────────────────────────────────
 // Todos los campos son opcionales; solo se validan los que se envíen.
@@ -84,4 +84,4 @@ export const UpdatePatientSchema = PatientBaseSchema.partial().extend({
     id: z.string().uuid('El ID del paciente debe ser un UUID válido.'),
 });
 
-export type UpdatePatientInput = z.infer<typeof UpdatePatientSchema>;
+type UpdatePatientInput = z.infer<typeof UpdatePatientSchema>;

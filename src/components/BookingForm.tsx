@@ -2,13 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loader } from 'lucide-react';
-import { AppointmentService } from '../services/AppointmentService';
-import { PatientService } from '../services/PatientService';
 import InsuranceAutocomplete from './InsuranceAutocomplete';
-import { combineDateTimeToISO } from '../utils/helpers';
-import { message } from 'antd';
-import { CreateAppointmentSchema, CreateAppointmentPayload } from '../schemas/appointment.schema';
-import { useTurnos } from '../hooks/useTurnos';
+import { useBookingForm } from '../hooks/useBookingForm';
 
 interface BookingFormProps {
   onSuccess: () => void;
@@ -18,259 +13,35 @@ interface BookingFormProps {
 }
 
 export default function BookingForm({ onSuccess, hideHeader = false, hideInternalSubmit = false, setFormSubmit }: BookingFormProps) {
-  const { addTurno } = useTurnos();
-  // Configured React Hook Form
   const {
     register,
     handleSubmit,
     setValue,
     watch,
-    trigger,
-    formState: { errors, isSubmitting, isValid },
-    reset
-  } = useForm<CreateAppointmentPayload>({
-    resolver: zodResolver(CreateAppointmentSchema),
-    defaultValues: {
-      dni: '',
-      nombre: '',
-      telefono: '',
-      email: '',
-      obraSocial: '',
-      numeroAfiliado: '',
-      alergias: '',
-      antecedentes: '',
-      tipoTurnoNombre: '',
-      fechaHora: new Date().toISOString(), // Temporary bypass, overwritten before submit
-      notas: '',
-      status: 'Confirmado',
-      patient_id: '00000000-0000-0000-0000-000000000000'
-    },
-    mode: 'onChange' // Triggers validation on change
-  });
-
-  // UI state
-  const [checkingPatient, setCheckingPatient] = useState(false);
-  const [patientFound, setPatientFound] = useState(false);
-  const [patientId, setPatientId] = useState(null);
-  const [availableSlots, setAvailableSlots] = useState([]);
-  const [loadingAvailability, setLoadingAvailability] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState('');
-  const [patientNotice, setPatientNotice] = useState('');
-
-  // Watch necessary fields for dynamic updates
-  const dniStr = watch('dni');
-
-  // Local state purely for UI selection (since API needs a combined ISO string we construct at submit)
-  const [selectedTipoTurnoId, setSelectedTipoTurnoId] = useState('');
-  const [selectedFecha, setSelectedFecha] = useState('');
-  const [selectedHora, setSelectedHora] = useState('');
-
-  // Dynamic Working Days
-  const [activeWorkingDays, setActiveWorkingDays] = useState([]);
-  const [services, setServices] = useState([]);
-
-  // Fetch working days on mount
-  useEffect(() => {
-    const fetchConfig = async () => {
-      const [days, servs] = await Promise.all([
-        AppointmentService.getActiveWorkingDays(),
-        AppointmentService.getServices()
-      ]);
-      setActiveWorkingDays(days);
-      setServices(servs);
-    };
-    fetchConfig();
-  }, []);
-
-  // Exponer submit del form al contenedor para el botón del footer del modal
-  const formRef = React.useRef(null);
-  const hiddenSubmitRef = React.useRef(null);
-  React.useEffect(() => {
-    if (typeof setFormSubmit === 'function') {
-      setFormSubmit(() => () => {
-        try {
-          if (formRef.current?.requestSubmit) {
-            formRef.current.requestSubmit(hiddenSubmitRef.current || undefined);
-          } else {
-            hiddenSubmitRef.current?.click();
-          }
-        } catch {
-          try { hiddenSubmitRef.current?.click(); } catch { }
-        }
-      });
-    }
-  }, [setFormSubmit]);
-
-  // Debounced checkPatient (simplified for React effect)
-  useEffect(() => {
-    if (dniStr && dniStr.length >= 7) {
-      const timer = setTimeout(() => {
-        checkPatient(dniStr);
-      }, 500);
-      return () => clearTimeout(timer);
-    } else {
-      setPatientFound(false);
-      setPatientNotice('');
-      setPatientId(null);
-    }
-  }, [dniStr]);
-
-  // Check patient by DNI
-  const checkPatient = async (dni) => {
-    setCheckingPatient(true);
-    setError('');
-    setPatientNotice('');
-
-    try {
-      const patient = await PatientService.getPatientByDni(dni);
-
-      if (patient) {
-        // Autocompletar datos del paciente encontrado
-        setValue('nombre', patient.nombre || patient.name || '', { shouldValidate: true });
-        setValue('telefono', patient.telefono || patient.phone || '', { shouldValidate: true });
-        setValue('email', patient.email || '', { shouldValidate: true });
-        setValue('obraSocial', patient.obraSocial || '', { shouldValidate: true });
-        setValue('numeroAfiliado', patient.numeroAfiliado || '', { shouldValidate: true });
-        setValue('alergias', patient.alergias || 'Ninguna', { shouldValidate: true });
-        setValue('antecedentes', patient.antecedentes || 'Ninguno', { shouldValidate: true });
-
-        // This makes sure the update gets linked correctly
-        setValue('patient_id', patient.id);
-        setPatientId(patient.id);
-
-        setPatientFound(true);
-        setPatientNotice('');
-      } else {
-        // Form states remains as user typed for new patient
-        setPatientId(null);
-        setValue('patient_id', '00000000-0000-0000-0000-000000000000');
-        setPatientFound(false);
-        setPatientNotice('Paciente nuevo: se creará automáticamente al confirmar.');
-      }
-    } catch (err) {
-      setPatientNotice('Error al buscar paciente');
-      setPatientFound(false);
-    } finally {
-      setCheckingPatient(false);
-    }
-  };
-
-  // Trigger getAvailableSlots when fecha or tipoTurno changes
-  useEffect(() => {
-    if (selectedFecha && selectedTipoTurnoId) {
-      getAvailableSlots(selectedFecha, selectedTipoTurnoId);
-    }
-  }, [selectedFecha, selectedTipoTurnoId]);
-
-  // Get available slots for selected date and appointment type
-  const getAvailableSlots = async (fecha, tipoTurno) => {
-    setLoadingAvailability(true);
-    try {
-      const appointmentType = services.find(t => (t.id === tipoTurno || t.name === tipoTurno));
-      const duration = appointmentType?.duration || 30;
-      const slots = await AppointmentService.getAvailableSlots(fecha, duration);
-      setAvailableSlots(slots);
-
-      // Clear selected hora if it's no longer available
-      if (selectedHora && !slots.includes(selectedHora)) {
-        setSelectedHora('');
-      }
-    } catch (err) {
-      setAvailableSlots([]);
-    } finally {
-      setLoadingAvailability(false);
-    }
-  };
-
-  // Generate available dates (next 2 weeks, only work days)
-  const availableDates = useMemo(() => {
-    if (activeWorkingDays.length === 0) return [];
-
-    const dates = [];
-    const today = new Date();
-
-    const toLocalYMD = (d) => {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    };
-
-    // Incluir hoy (i = 0) y los próximos 13 días: total 14 días
-    for (let i = 0; i < 14; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-
-      // Check against dynamic activeWorkingDays
-      if (activeWorkingDays.includes(date.getDay())) {
-        dates.push({
-          value: toLocalYMD(date),
-          label: date.toLocaleDateString('es-AR', {
-            weekday: 'long',
-            day: '2-digit',
-            month: 'long',
-          })
-        });
-      }
-    }
-
-    return dates;
-  }, [activeWorkingDays]); // Recompute when activeWorkingDays changes
-
-  // Submit appointment via react-hook-form
-  const onSubmit = async (data) => {
-    if (!selectedFecha || !selectedHora || !selectedTipoTurnoId) {
-      message.error("Debes completar todos los campos del turno.");
-      return;
-    }
-    setError('');
-
-    try {
-      const appointmentType = services.find(t => (t.id === selectedTipoTurnoId || t.name === selectedTipoTurnoId));
-
-      // Override schema form data with contextual values
-      data.duracion = appointmentType?.duration ? Number(appointmentType.duration) : 30;
-      data.tipoTurnoNombre = appointmentType?.name || selectedTipoTurnoId;
-      data.fechaHora = combineDateTimeToISO(
-        selectedFecha,
-        selectedHora
-      );
-
-      if (patientId) {
-        data.patient_id = patientId;
-      }
-
-      await addTurno({
-        ...data,
-        tipoTurno: selectedTipoTurnoId, // legacy support for backend
-      });
-
-      setSuccess(true);
-
-      // Notificar al padre que el turno se creó exitosamente después de un breve delay
-      setTimeout(() => {
-        if (onSuccess) onSuccess();
-      }, 2000);
-    } catch (err) {
-      const msg = err.message || 'Error al crear el turno. Intenta nuevamente.';
-      setError(msg);
-      message.error(msg);
-    }
-  };
-
-  // Reset form for new appointment
-  const resetForm = () => {
-    reset();
-    setSelectedFecha('');
-    setSelectedHora('');
-    setSelectedTipoTurnoId('');
-    setSuccess(false);
-    setError('');
-    setPatientFound(false);
-    setAvailableSlots([]);
-    setPatientId(null);
-  };
+    errors,
+    isSubmitting,
+    isValid,
+    checkingPatient,
+    patientFound,
+    availableSlots,
+    loadingAvailability,
+    success,
+    error,
+    patientNotice,
+    obraSocial,
+    selectedTipoTurnoId,
+    setSelectedTipoTurnoId,
+    selectedFecha,
+    setSelectedFecha,
+    selectedHora,
+    setSelectedHora,
+    services,
+    availableDates,
+    onSubmit,
+    resetForm,
+    formRef,
+    hiddenSubmitRef
+  } = useBookingForm(onSuccess, setFormSubmit);
 
   if (success) {
     return (
@@ -406,8 +177,8 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Obra Social (Searchable Autocomplete) */}
           <InsuranceAutocomplete
-            value={watch('obraSocial') || ''}
-            onChange={(e) => setValue('obraSocial', e.target.value, { shouldValidate: true })}
+            value={obraSocial || ''}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValue('obraSocial', e.target.value, { shouldValidate: true })}
             disabled={isSubmitting}
             placeholder="OSDE, Swiss Medical, etc."
           />
