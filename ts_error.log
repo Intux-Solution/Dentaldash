@@ -1,0 +1,43 @@
+src/components/BookingModal.tsx(51,14): error TS2741: Property 'setFormSubmit' is missing in type '{ onSuccess: () => void; }' but required in type '{ onSuccess: any; hideHeader?: boolean; hideInternalSubmit?: boolean; setFormSubmit: any; }'.
+src/components/MessagePatientModal.tsx(89,6): error TS2741: Property 'footer' is missing in type '{ children: Element; title: string; onClose: any; }' but required in type '{ title: any; onClose: any; children: any; footer: any; maxWidth?: string; }'.
+src/components/PatientProfileModal.tsx(119,8): error TS2741: Property 'footer' is missing in type '{ children: Element; title: string; onClose: () => void; }' but required in type '{ title: any; onClose: any; children: any; footer: any; maxWidth?: string; }'.
+src/components/settings/FaqsTab.tsx(77,18): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/FaqsTab.tsx(77,39): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/FaqsTab.tsx(83,35): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/FaqsTab.tsx(84,33): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/FaqsTab.tsx(92,17): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/FaqsTab.tsx(93,17): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/InsurancesTab.tsx(7,16): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/InsurancesTab.tsx(8,79): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/InsurancesTab.tsx(10,16): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/ServicesTab.tsx(8,20): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/ServicesTab.tsx(9,31): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/ServicesTab.tsx(10,82): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/ServicesTab.tsx(10,121): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/ServicesTab.tsx(12,20): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/settings/ServicesTab.tsx(13,19): error TS2339: Property 'value' does not exist on type 'HTMLElement'.
+src/components/SettingsView.tsx(25,9): error TS2339: Property 'setProfile' does not exist on type '{ profile: ProfileData; tenant: ProfileData; schedules: ScheduleData[]; faqs: FaqData[]; loading: boolean; saving: boolean; error: string; ... 12 more ...; setQrCodeData: Dispatch<...>; }'.
+src/components/SettingsView.tsx(25,21): error TS2339: Property 'setTenant' does not exist on type '{ profile: ProfileData; tenant: ProfileData; schedules: ScheduleData[]; faqs: FaqData[]; loading: boolean; saving: boolean; error: string; ... 12 more ...; setQrCodeData: Dispatch<...>; }'.
+src/components/SettingsView.tsx(25,32): error TS2339: Property 'setFaqs' does not exist on type '{ profile: ProfileData; tenant: ProfileData; schedules: ScheduleData[]; faqs: FaqData[]; loading: boolean; saving: boolean; error: string; ... 12 more ...; setQrCodeData: Dispatch<...>; }'.
+src/components/SettingsView.tsx(28,9): error TS2339: Property 'updateSchedule' does not exist on type '{ profile: ProfileData; tenant: ProfileData; schedules: ScheduleData[]; faqs: FaqData[]; loading: boolean; saving: boolean; error: string; ... 12 more ...; setQrCodeData: Dispatch<...>; }'.
+src/components/SettingsView.tsx(28,25): error TS2339: Property 'addSchedule' does not exist on type '{ profile: ProfileData; tenant: ProfileData; schedules: ScheduleData[]; faqs: FaqData[]; loading: boolean; saving: boolean; error: string; ... 12 more ...; setQrCodeData: Dispatch<...>; }'.
+src/components/SettingsView.tsx(28,38): error TS2339: Property 'deleteSchedule' does not exist on type '{ profile: ProfileData; tenant: ProfileData; schedules: ScheduleData[]; faqs: FaqData[]; loading: boolean; saving: boolean; error: string; ... 12 more ...; setQrCodeData: Dispatch<...>; }'.
+src/services/AppointmentService.ts(99,62): error TS2554: Expected 3 arguments, but got 2.
+src/services/AppointmentService.ts(343,65): error TS2554: Expected 2 arguments, but got 1.
+src/services/AppointmentService.ts(414,49): error TS2554: Expected 3 arguments, but got 2.
+src/services/AppointmentService.ts(507,49): error TS2554: Expected 2 arguments, but got 1.
+src/services/GoogleCalendarService.ts(58,25): error TS2339: Property 'headers' does not exist on type '{}'.
+src/services/GoogleCalendarService.ts(98,38): error TS2339: Property 'json' does not exist on type 'Response | { ok: boolean; status: number; statusText: string; }'.
+  Property 'json' does not exist on type '{ ok: boolean; status: number; statusText: string; }'.
+src/services/GoogleCalendarService.ts(98,60): error TS2339: Property 'json' does not exist on type 'Response | { ok: boolean; status: number; statusText: string; }'.
+  Property 'json' does not exist on type '{ ok: boolean; status: number; statusText: string; }'.
+src/services/GoogleCalendarService.ts(103,41): error TS2339: Property 'json' does not exist on type 'Response | { ok: boolean; status: number; statusText: string; }'.
+  Property 'json' does not exist on type '{ ok: boolean; status: number; statusText: string; }'.
+src/services/GoogleCalendarService.ts(136,44): error TS2339: Property 'json' does not exist on type 'Response | { ok: boolean; status: number; statusText: string; }'.
+  Property 'json' does not exist on type '{ ok: boolean; status: number; statusText: string; }'.
+src/services/GoogleCalendarService.ts(136,66): error TS2339: Property 'json' does not exist on type 'Response | { ok: boolean; status: number; statusText: string; }'.
+  Property 'json' does not exist on type '{ ok: boolean; status: number; statusText: string; }'.
+src/services/GoogleCalendarService.ts(141,41): error TS2339: Property 'json' does not exist on type 'Response | { ok: boolean; status: number; statusText: string; }'.
+  Property 'json' does not exist on type '{ ok: boolean; status: number; statusText: string; }'.
+src/services/GoogleCalendarService.ts(170,35): error TS2339: Property 'json' does not exist on type 'Response | { ok: boolean; status: number; statusText: string; }'.
+  Property 'json' does not exist on type '{ ok: boolean; status: number; statusText: string; }'.
