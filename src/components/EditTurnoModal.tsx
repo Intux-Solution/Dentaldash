@@ -40,7 +40,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
       <div className="flex min-h-full items-center justify-center p-4 overflow-hidden">
         <div className="relative bg-white rounded-2xl shadow-2xl border max-w-2xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden flex flex-col">
           {/* Header */}
-          <div className="sticky top-0 z-[1] bg-white/80 backdrop-blur border-b px-6 min-h-[75px] flex items-center relative">
+          <div className="sticky top-0 z-[1] bg-white/80 backdrop-blur border-b px-6 min-h-[75px] flex items-center">
             <div className="flex-1 flex items-center justify-start gap-1">
               {onBack && (
                 <button
