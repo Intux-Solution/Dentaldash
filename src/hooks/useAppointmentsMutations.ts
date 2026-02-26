@@ -2,66 +2,74 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppointmentService } from '../services/AppointmentService';
 import { message } from 'antd';
 import { turnosQueryKey } from './useAppointmentsQuery';
+import { Appointment, AppointmentPayload } from '../types/appointments';
 
 export function useAppointmentsMutations(fromDate: string | null = null, toDate: string | null = null) {
     const queryClient = useQueryClient();
     const currentQueryKey = turnosQueryKey(fromDate, toDate);
 
     const addMutation = useMutation({
-        mutationFn: async (data: any) => {
+        mutationFn: async (data: AppointmentPayload) => {
             return await AppointmentService.createAppointment(data);
         },
         onMutate: async (newAppointment) => {
-            await queryClient.cancelQueries({ queryKey: turnosQueryKey() });
-            const previousTurnos = queryClient.getQueryData<any[]>(currentQueryKey);
+            // Cancel any outgoing refetches so they don't overwrite optimistic update
+            await queryClient.cancelQueries({ queryKey: currentQueryKey });
+
+            // Snapshot the previous value
+            const previousTurnos = queryClient.getQueryData<Appointment[]>(currentQueryKey);
 
             // Optimistic update
-            queryClient.setQueryData(currentQueryKey, (old: any[] = []) => {
-                // Approximate the shape of a new appointment for instant feedback
-                const optimisticAppt = {
+            queryClient.setQueryData<Appointment[]>(currentQueryKey, (old = []) => {
+                const optimisticAppt: Appointment = {
                     id: `temp-${Date.now()}`,
-                    title: `${newAppointment.tipoTurnoNombre} - ${newAppointment.nombre || 'Paciente'}`,
-                    start: newAppointment.fechaHora,
-                    end: new Date(new Date(newAppointment.fechaHora).getTime() + (newAppointment.duracion || 30) * 60000).toISOString(),
+                    title: `${newAppointment.appointment_type} - ${newAppointment.title || 'Paciente'}`,
+                    start: newAppointment.start_time,
+                    end: new Date(new Date(newAppointment.start_time).getTime() + (newAppointment.duration || 30) * 60000).toISOString(),
                     status: newAppointment.status || 'pending',
-                    notes: newAppointment.notas,
-                    patientName: newAppointment.nombre,
-                    patientDni: newAppointment.dni,
-                    tipoTurnoNombre: newAppointment.tipoTurnoNombre,
-                    tipoTurno: newAppointment.tipoTurnoNombre,
+                    notes: newAppointment.notes,
+                    patientId: newAppointment.patient_id,
+                    patientName: newAppointment.title, // Temporal map
+                    tipoTurnoNombre: newAppointment.appointment_type,
+                    tipoTurno: newAppointment.appointment_type,
                 };
                 return [...old, optimisticAppt];
             });
 
+            // Return context object with the snapshotted value
             return { previousTurnos };
         },
         onError: (err, newAppointment, context) => {
+            // Rollback to the previous value if mutation fails
             if (context?.previousTurnos) {
                 queryClient.setQueryData(currentQueryKey, context.previousTurnos);
             }
             message.error(`Error al crear el turno: ${err.message}`);
         },
         onSettled: () => {
+            // Always refetch after error or success
             queryClient.invalidateQueries({ queryKey: ['turnos'] });
         },
     });
 
     const updateMutation = useMutation({
-        mutationFn: async ({ id, data }: { id: string, data: any }) => {
+        mutationFn: async ({ id, data }: { id: string, data: Partial<AppointmentPayload> }) => {
             return await AppointmentService.updateAppointment(id, data);
         },
         onMutate: async ({ id, data }) => {
-            await queryClient.cancelQueries({ queryKey: turnosQueryKey() });
-            const previousTurnos = queryClient.getQueryData<any[]>(currentQueryKey);
+            await queryClient.cancelQueries({ queryKey: currentQueryKey });
+            const previousTurnos = queryClient.getQueryData<Appointment[]>(currentQueryKey);
 
-            queryClient.setQueryData(currentQueryKey, (old: any[] = []) => {
+            queryClient.setQueryData<Appointment[]>(currentQueryKey, (old = []) => {
                 return old.map(turno => {
                     if (turno.id === id) {
                         return {
                             ...turno,
                             ...data,
-                            start: data.fechaHora || turno.start,
-                            title: data.tipoTurnoNombre ? `${data.tipoTurnoNombre} - ${data.nombre || turno.patientName}` : turno.title
+                            start: data.start_time || turno.start,
+                            end: data.end_time || turno.end,
+                            status: data.status || turno.status,
+                            title: data.appointment_type ? `${data.appointment_type} - ${data.title || turno.patientName}` : turno.title
                         };
                     }
                     return turno;
@@ -86,10 +94,10 @@ export function useAppointmentsMutations(fromDate: string | null = null, toDate:
             return await AppointmentService.deleteAppointment(id);
         },
         onMutate: async (id) => {
-            await queryClient.cancelQueries({ queryKey: turnosQueryKey() });
-            const previousTurnos = queryClient.getQueryData<any[]>(currentQueryKey);
+            await queryClient.cancelQueries({ queryKey: currentQueryKey });
+            const previousTurnos = queryClient.getQueryData<Appointment[]>(currentQueryKey);
 
-            queryClient.setQueryData(currentQueryKey, (old: any[] = []) => {
+            queryClient.setQueryData<Appointment[]>(currentQueryKey, (old = []) => {
                 return old.filter(turno => turno.id !== id);
             });
 
@@ -107,11 +115,12 @@ export function useAppointmentsMutations(fromDate: string | null = null, toDate:
     });
 
     return {
-        addTurno: async (data: any) => await addMutation.mutateAsync(data),
-        updateTurno: async (id: string, data: any) => await updateMutation.mutateAsync({ id, data }),
+        addTurno: async (data: AppointmentPayload) => await addMutation.mutateAsync(data),
+        updateTurno: async (id: string, data: Partial<AppointmentPayload>) => await updateMutation.mutateAsync({ id, data }),
         deleteTurno: async (id: string) => await deleteMutation.mutateAsync(id),
         isAdding: addMutation.isPending,
         isUpdating: updateMutation.isPending,
         isDeleting: deleteMutation.isPending
     };
 }
+

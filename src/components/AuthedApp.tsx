@@ -1,7 +1,5 @@
-// src/components/AuthedApp.tsx
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Session } from '@supabase/supabase-js';
 
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -15,6 +13,7 @@ import { usePatients } from '../hooks/usePatients';
 import { useTurnos } from '../hooks/useTurnos';
 import { ModalsProvider } from '../hooks/useModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
+import { useAuth } from '../context/AuthContext';
 
 const titleByPath = (pathname: string) => {
   if (pathname.startsWith('/pacientes')) return 'Pacientes';
@@ -26,13 +25,13 @@ interface AuthedAppProps {
   onLogout: () => void;
   justLoggedIn: boolean;
   onConsumedLogin?: () => void;
-  session: Session | null;
 }
 
-export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, session }: AuthedAppProps) {
+export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }: AuthedAppProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { session } = useAuth();
 
   // Navegar a home tras login
   useEffect(() => {
@@ -43,8 +42,8 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
   }, [justLoggedIn, navigate, onConsumedLogin]);
 
   // ─── Datos ────────────────────────────────────────────────────────────────
-  const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
-  const { turnos, refreshTurnos } = useTurnos(null, null, session);
+  const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients();
+  const { turnos, refreshTurnos } = useTurnos(null, null);
   const { normalizedPatients } = useNormalizedPatients(patients);
 
   const headerTitle = titleByPath(location.pathname);
@@ -57,13 +56,12 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
       updatePatient={updatePatient}
       refreshTurnos={refreshTurnos}
       refreshPatients={refreshPatients}
-      session={session}
     >
       <div className="flex h-screen bg-gray-100">
         <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} onLogout={onLogout} />
 
         <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
-          <Header title={headerTitle} setSidebarOpen={setSidebarOpen} onLogout={onLogout} session={session} />
+          <Header title={headerTitle} setSidebarOpen={setSidebarOpen} onLogout={onLogout} />
 
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 mx-4 mt-4 rounded">
@@ -78,7 +76,7 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
 
           <main className="flex-1 overflow-auto">
             <ErrorBoundary fallbackMessage="Ocurrió un error inesperado cargando esta vista.">
-              <AppRoutes session={session} />
+              <AppRoutes />
             </ErrorBoundary>
           </main>
         </div>

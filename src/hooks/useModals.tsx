@@ -2,14 +2,14 @@ import React, { createContext, useContext, useCallback, useMemo, useState } from
 import { AppointmentService } from '../services/AppointmentService';
 import { usePatients } from './usePatients';
 import { useTurnos } from './useTurnos';
+import { useAuth } from '../context/AuthContext';
 
-const ModalsContext = createContext(null);
+const ModalsContext = createContext<any>(null);
 
 /**
  * Provider global de modales.
  *
- * Recibe `session` para poder ejecutar operaciones de datos (delete)
- * internamente, eliminando la necesidad de pasar callbacks desde AuthedApp.
+ * Internamente asume que está envuelto en AuthProvider.
  */
 export function ModalsProvider({
   children,
@@ -19,8 +19,9 @@ export function ModalsProvider({
   updatePatient,
   refreshTurnos,
   refreshPatients,
-  session,
-}) {
+}: any) {
+  const { session } = useAuth();
+
   // ─── Acceso a la mutation de delete via TanStack Query ────────────────────
   const { deletePatient } = usePatients(session);
   const { deleteTurno } = useTurnos(null, null, session);

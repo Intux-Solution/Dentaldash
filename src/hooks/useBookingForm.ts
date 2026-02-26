@@ -190,7 +190,7 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
             return `${y}-${m}-${day}`;
         };
 
-        // Incluir hoy (i = 0) y los próximos 13 días: total 14 días
+        // Incluir hoy y los próximos días
         for (let i = 0; i < 14; i++) {
             const date = new Date(today);
             date.setDate(today.getDate() + i);

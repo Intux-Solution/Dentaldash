@@ -135,8 +135,10 @@ ${data.notas || 'Sin notas adicionales'}
                 if (googleEvent && googleEvent.id) {
                     await AppointmentRepository.updateGoogleEventId(result.id, googleEvent.id);
                 }
-            } catch (syncError) {
-                console.error('Google Sync Error:', syncError);
+            } catch (syncError: any) {
+                // We rollback the DB insert if Google fails to guarantee syncing consistency
+                await AppointmentRepository.deleteAppointment(result.id);
+                throw new Error(`Fallo al sincronizar con Google Calendar: ${syncError.message}`);
             }
 
             return result;
@@ -184,8 +186,8 @@ ${data.notas || 'Sin notas adicionales'}
                         notes: description
                     });
                 }
-            } catch (syncError) {
-                console.error('Google Sync Error (Update):', syncError);
+            } catch (syncError: any) {
+                throw new Error(`Fallo al actualizar en Google Calendar: ${syncError.message}`);
             }
 
             return result;
@@ -203,22 +205,26 @@ ${data.notas || 'Sin notas adicionales'}
             console.log(`Sincronizando ${pending.length} turnos pendientes...`);
             for (const appt of pending) {
                 try {
-                    const googleEvent = await GoogleCalendarService.createEvent({
+                    const eventData = {
                         title: `${appt.title} - ${appt.patient?.nombre || 'Paciente'}`,
                         start_time: appt.start_time,
                         end_time: appt.end_time,
                         notes: appt.notes
-                    }, session);
+                    };
+
+                    const googleEvent = await GoogleCalendarService.createEvent(eventData);
 
                     if (googleEvent && googleEvent.id) {
                         await AppointmentRepository.updateGoogleEventId(appt.id, googleEvent.id);
                     }
-                } catch (e) {
-                    console.error(`Error sincronizando turno ${appt.id}:`, e);
+                } catch (e: any) {
+                    // We throw instead of swallow to surface this up to the caller
+                    throw new Error(`Sincronización fallida para el turno ${appt.id}: ${e.message}`);
                 }
             }
         } catch (error) {
             console.error('Error in syncPendingAppointments:', error);
+            throw error;
         }
     }
 
@@ -228,8 +234,8 @@ ${data.notas || 'Sin notas adicionales'}
             if (appointment?.google_event_id) {
                 try {
                     await GoogleCalendarService.deleteEvent(appointment.google_event_id);
-                } catch (syncError) {
-                    console.error('Google Sync Error (Delete):', syncError);
+                } catch (syncError: any) {
+                    throw new Error(`Fallo al borrar el evento en Google Calendar: ${syncError.message}`);
                 }
             }
             return true;

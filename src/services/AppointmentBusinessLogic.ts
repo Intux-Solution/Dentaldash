@@ -2,7 +2,7 @@ import { AppointmentRepository } from '../repositories/AppointmentRepository';
 import { GoogleCalendarService } from '../services/GoogleCalendarService';
 import { WORK_HOURS } from '../config/appointments';
 import { addMinutes, isAfter, isBefore } from 'date-fns';
-import { createLocalMidday, getDayBounds, formatTimeAR, isSlotWithinRange } from '../utils/date-manager';
+import { createLocalMidday, getDayBounds, formatTimeAR, isSlotWithinRange } from '../utils/dateUtils';
 
 export class AppointmentBusinessLogic {
     static async getAvailableSlots(date: string, durationMinutes: number, excludeId: string | null = null) {

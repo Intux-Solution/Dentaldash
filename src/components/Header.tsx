@@ -3,9 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { Settings, LogOut, User, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
-export default function Header({ title, setSidebarOpen, onLogout, session }) {
+export default function Header({ title, setSidebarOpen, onLogout }) {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [userData, setUserData] = useState({
     name: 'Usuario',

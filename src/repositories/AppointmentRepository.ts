@@ -147,4 +147,13 @@ export class AppointmentRepository {
         if (error) throw error;
         return data || [];
     }
+
+    static async deleteAppointment(id: string) {
+        const { error } = await supabase
+            .from('appointments')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
+        return true;
+    }
 }

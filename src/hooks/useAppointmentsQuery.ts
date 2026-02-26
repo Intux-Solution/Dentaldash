@@ -2,8 +2,9 @@ import { useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Session } from '@supabase/supabase-js';
 import { AppointmentService } from '../services/AppointmentService';
-import { parseLocalYMD, getDayBounds } from '../utils/date-manager';
+import { parseLocalYMD, getDayBounds } from '../utils/dateUtils';
 import { addDays, isAfter } from 'date-fns';
+import { Appointment } from '../types/appointments';
 
 export const turnosQueryKey = (fromDate: string | null = null, toDate: string | null = null) => {
     return ['turnos', fromDate, toDate];

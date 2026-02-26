@@ -1,7 +1,7 @@
 // src/App.tsx
 import React, { useEffect, useState } from 'react';
 import './App.css';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { supabase } from './config/supabaseClient';
@@ -10,6 +10,8 @@ import AuthedApp from './components/AuthedApp';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import ErrorBoundary from './components/ErrorBoundary';
+import { AuthProvider } from './context/AuthContext';
+import { AppointmentService } from './services/AppointmentService';
 
 // Instancia global de QueryClient, creada fuera del componente para evitar re-creaciones
 const queryClient = new QueryClient({
@@ -57,6 +59,13 @@ export default function App() {
             if (error) console.error('App: Error syncing refresh token:', error);
           });
       }
+
+      if (newSession && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        // Ejecutar sync global
+        AppointmentService.syncPendingAppointments(newSession).catch(err => {
+          console.error('Error in global background sync:', err);
+        });
+      }
     });
 
     return () => {
@@ -89,25 +98,26 @@ export default function App() {
     );
   }
 
+  // Se mueve la configuración del router aquí tras determinar la sesión
+  const router = createBrowserRouter([
+    { path: '/privacy', element: <PrivacyPolicy /> },
+    { path: '/terms', element: <TermsOfService /> },
+    {
+      path: '/*',
+      element: !session ? (
+        <LoginView onSuccess={() => { }} />
+      ) : (
+        <AuthedApp onLogout={handleLogout} justLoggedIn={false} />
+      ),
+    }
+  ]);
+
   return (
     <ErrorBoundary fallbackMessage="Ha ocurrido un error inesperado al cargar la aplicación principal. Por favor, intenta de nuevo.">
       <QueryClientProvider client={queryClient}>
-        <Router>
-          <Routes>
-            <Route path="/privacy" element={<PrivacyPolicy />} />
-            <Route path="/terms" element={<TermsOfService />} />
-            <Route
-              path="/*"
-              element={
-                !session ? (
-                  <LoginView onSuccess={() => { }} />
-                ) : (
-                  <AuthedApp onLogout={handleLogout} justLoggedIn={false} session={session} />
-                )
-              }
-            />
-          </Routes>
-        </Router>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
