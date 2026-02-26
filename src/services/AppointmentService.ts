@@ -1,34 +1,15 @@
-import { supabase } from '../config/supabaseClient';
-import { WORK_HOURS } from '../config/appointments';
+import { AppointmentRepository } from '../repositories/AppointmentRepository';
+import { AppointmentBusinessLogic } from './AppointmentBusinessLogic';
 import { GoogleCalendarService } from './GoogleCalendarService';
 import { CreateAppointmentSchema, UpdateAppointmentSchema } from '../schemas/appointment.schema';
-import { addMinutes, isBefore, isAfter, startOfDay, endOfDay } from 'date-fns';
+import { addMinutes } from 'date-fns';
+import { Session } from '@supabase/supabase-js';
 
 export class AppointmentService {
-
-    /**
-     * Obtener turnos en un rango de fechas
-     */
-    static async getAppointments(from, to, session = null) {
+    static async getAppointments(fromISO: string, toISO: string, session: Session | null = null) {
         try {
-            // Removemos getSession concurrente que causaba deadlock en F5
-
-            const { data, error } = await supabase
-                .from('appointments')
-                .select(`
-          *,
-          patient:patients (
-            nombre,
-            dni,
-            telefono,
-            email
-          )
-        `)
-                .gte('start_time', from)
-                .lte('end_time', to);
-
-            if (error) throw error;
-            return data.map(app => ({
+            const data = await AppointmentRepository.getAppointments(fromISO, toISO);
+            return data.map((app: any) => ({
                 id: app.id,
                 title: app.title,
                 start: app.start_time,
@@ -43,198 +24,37 @@ export class AppointmentService {
                 tipoTurno: app.appointment_type,
             }));
         } catch (error) {
+            console.error('Error fetching appointments:', error);
             throw error;
         }
     }
 
-    /**
-     * Calcular horarios disponibles para una fecha y duración
-     */
-    static async getAvailableSlots(date, durationMinutes, excludeId = null) {
-        try {
-            // 0. Determinar día de la semana (PARSE LOCAL)
-            // date coming as YYYY-MM-DD
-            const [yStr, mStr, dStr] = String(date).split('-');
-            const inputDate = new Date(
-                parseInt(yStr, 10),
-                parseInt(mStr, 10) - 1,
-                parseInt(dStr, 10),
-                12, 0, 0 // Use noon to avoid any edge flips during day math
-            );
-
-            // getDay() returns 0 (Sun) to 6 (Sat)
-            const dayOfWeek = inputDate.getDay();
-
-            // 1. Obtener configuración de horarios para ese día
-            const { data: daySchedules, error: schedError } = await supabase
-                .from('schedules')
-                .select('*')
-                .eq('day_of_week', dayOfWeek)
-                .eq('is_active', true);
-
-            if (schedError) throw schedError;
-
-            if (!daySchedules || daySchedules.length === 0) {
-                return []; // No se trabaja este día
-            }
-
-            // 2. Traer turnos existentes ese día (para collision check)
-            // Definimos el rango total del día para la query basado en la fecha parsed local
-            const dayStartBound = new Date(inputDate);
-            dayStartBound.setHours(0, 0, 0, 0);
-
-            const dayEndBound = new Date(inputDate);
-            dayEndBound.setHours(23, 59, 59, 999);
-
-            const { data: existing, error } = await supabase
-                .from('appointments')
-                .select('id, start_time, end_time')
-                .gte('start_time', dayStartBound.toISOString())
-                .lte('start_time', dayEndBound.toISOString())
-                .neq('status', 'cancelled');
-
-            if (error) throw error;
-
-            // 3. Traer eventos de Google Calendar (si está conectado)
-            const googleEvents = await GoogleCalendarService.listEvents(dayStartBound, dayEndBound);
-
-            // 4. Time buffer: filter out slots that are in the past or < 30 min from now
-            const nowTime = new Date();
-            const minTimeForAppt = addMinutes(nowTime, 30);
-
-            // 5. Generar slots para CADA rango horario definido
-            const slots = [];
-
-            for (const schedule of daySchedules) {
-                const [startHour, startMinute] = schedule.start_time.split(':');
-                const [endHour, endMinute] = schedule.end_time.split(':');
-
-                const rangeStart = new Date(inputDate);
-                rangeStart.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
-
-                const rangeEnd = new Date(inputDate);
-                rangeEnd.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
-
-                let current = new Date(rangeStart);
-
-                while (current < rangeEnd) {
-                    const slotStart = new Date(current);
-                    const slotEnd = addMinutes(current, durationMinutes);
-
-                    if (isAfter(slotEnd, rangeEnd)) break;
-
-                    // Si el turno completo (o su inicio) es anterior al tiempo mínimo, lo omitimos
-                    if (isBefore(slotStart, minTimeForAppt)) {
-                        current = addMinutes(current, WORK_HOURS.interval);
-                        continue;
-                    }
-
-                    // Verificar colisión con turnos locales
-                    const isOccupiedLocal = existing.some(app => {
-                        if (excludeId && app.id === excludeId) return false;
-                        const appStart = new Date(app.start_time);
-                        const appEnd = new Date(app.end_time);
-                        return (slotStart < appEnd && slotEnd > appStart);
-                    });
-
-                    // Verificar colisión con Google Calendar
-                    const isOccupiedGoogle = googleEvents.some(event => {
-                        // Google "transparency": "transparent" = disponible, "opaque" = ocupado.
-                        if (event.transparency === 'transparent') return false;
-
-                        let eventStart, eventEnd;
-
-                        if (event.start.date) {
-                            // All-day event: Google gives YYYY-MM-DD
-                            // We must parse it as local midnight to avoid UTC shifts
-                            const [sY, sM, sD] = event.start.date.split('-').map(Number);
-                            eventStart = new Date(sY, sM - 1, sD, 0, 0, 0);
-
-                            const [eY, eM, eD] = event.end.date.split('-').map(Number);
-                            eventEnd = new Date(eY, eM - 1, eD, 0, 0, 0);
-                        } else {
-                            eventStart = new Date(event.start.dateTime);
-                            eventEnd = new Date(event.end.dateTime);
-                        }
-
-                        // Overlap check: (StartA < EndB) && (EndA > StartB)
-                        return (slotStart < eventEnd && slotEnd > eventStart);
-                    });
-
-                    if (!isOccupiedLocal && !isOccupiedGoogle) {
-                        slots.push(
-                            slotStart.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-                        );
-                    }
-
-                    // Avanzar por intervalo (hardcoded 30 mins o configurable si quisieran)
-                    current = addMinutes(current, WORK_HOURS.interval);
-                }
-            }
-
-            // Ordenar y eliminar duplicados (por si se solapan rangos configurados)
-            return Array.from(new Set(slots)).sort();
-
-        } catch (error) {
-            console.error('Error getting available slots:', error);
-            return [];
-        }
+    static async getAvailableSlots(date: string, durationMinutes: number, excludeId: string | null = null) {
+        return await AppointmentBusinessLogic.getAvailableSlots(date, durationMinutes, excludeId);
     }
 
-    /**
-     * Obtener los servicios configurados en el perfil del usuario
-     */
-    static async getServices(session = null) {
+    static async getServices(session: Session | null = null) {
+        if (!session?.user?.id) return [];
         try {
-            let userId = session?.user?.id;
-            if (!userId) {
-                const { data } = await supabase.auth.getSession();
-                userId = data?.session?.user?.id;
-            }
-            if (!userId) return [];
-
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('services')
-                .eq('id', userId)
-                .single();
-
-            if (error) throw error;
-            return data.services || [];
+            return await AppointmentRepository.getServices(session.user.id);
         } catch (error) {
             console.error('Error fetching services:', error);
             return [];
         }
     }
 
-    /**
-     * Obtener los días laborales activos desde la configuración
-     */
     static async getActiveWorkingDays() {
         try {
-            const { data, error } = await supabase
-                .from('schedules')
-                .select('day_of_week')
-                .eq('is_active', true);
-
-            if (error) throw error;
-
-            // Extraer días únicos
-            const days = [...new Set(data.map(item => item.day_of_week))].sort();
-            return days;
+            return await AppointmentRepository.getActiveWorkingDays();
         } catch (error) {
             console.error('Error fetching working days:', error);
-            // Fallback a los días por defecto si falla la DB, pero idealmente debería retornar vacío o error
-            return [1, 2, 3, 4, 5]; // L-V default fallback
+            return [1, 2, 3, 4, 5];
         }
     }
 
-    /**
-     * Helper para formatear la descripción del evento de Google
-     */
-    static formatEventDescription(data) {
+    static formatEventDescription(data: any) {
         return `
-Pacinte: ${data.nombre}
+Paciente: ${data.nombre}
 DNI: ${data.dni}
 Teléfono: ${data.telefono}
 Email: ${data.email || 'No informado'}
@@ -249,64 +69,40 @@ ${data.notas || 'Sin notas adicionales'}
         `.trim();
     }
 
-    /**
-     * Crear un turno
-     */
     static async createAppointment(data: any): Promise<any> {
         try {
-            // -- 1. Zod Validation (Validamos una versión flexible por compatibilidad con UI actual) --
-            // La UI manda raw: { dni, nombre, telefono... tipoTurno, fechaHora, duracion, notes, isNewPatient }
             const validatedData = CreateAppointmentSchema.parse({
                 ...data,
-                // Assign a temporary UUID to pass validation if patient doesn't exist yet, 
-                // we'll replace it below. Real strictly typed UI should send patient_id directly.
                 patient_id: data.patient_id || '00000000-0000-0000-0000-000000000000',
             });
 
             let patientId = data.patient_id;
-
-            // 1. Gestionar paciente
             const cleanDni = validatedData.dni?.trim();
 
             if (!patientId && cleanDni) {
-                const { data: existingPatient } = await supabase
-                    .from('patients')
-                    .select('id, email')
-                    .eq('dni', cleanDni)
-                    .maybeSingle();
-
+                const existingPatient = await AppointmentRepository.findPatientByDni(cleanDni);
                 if (existingPatient) {
                     patientId = existingPatient.id;
                 } else {
-                    const { data: newPatient, error: createError } = await supabase
-                        .from('patients')
-                        .insert([{
-                            dni: cleanDni,
-                            nombre: validatedData.nombre?.trim(),
-                            telefono: validatedData.telefono?.trim(),
-                            email: validatedData.email?.trim() || null,
-                            obra_social: validatedData.obraSocial?.trim(),
-                            numero_afiliado: validatedData.numeroAfiliado?.trim(),
-                            alergias: validatedData.alergias,
-                            antecedentes: validatedData.antecedentes
-                        }])
-                        .select()
-                        .single();
-
-                    if (createError) throw createError;
+                    const newPatient = await AppointmentRepository.createPatient({
+                        dni: cleanDni,
+                        nombre: validatedData.nombre?.trim(),
+                        telefono: validatedData.telefono?.trim(),
+                        email: validatedData.email?.trim() || null,
+                        obra_social: validatedData.obraSocial?.trim(),
+                        numero_afiliado: validatedData.numeroAfiliado?.trim(),
+                        alergias: validatedData.alergias,
+                        antecedentes: validatedData.antecedentes
+                    });
                     patientId = newPatient.id;
                 }
             }
 
-            if (!patientId) {
-                throw new Error("Patient ID is required or a valid DNI to create/find one.");
-            }
+            if (!patientId) throw new Error("Patient ID is required or a valid DNI to create/find one.");
 
-            // 2. Crear appointment
             const startTime = new Date(validatedData.fechaHora);
             const endTime = addMinutes(startTime, validatedData.duracion || 30);
 
-            // Translate Status for the DB to avoid type mismatch
             const statusMap: Record<string, string> = {
                 'Pendiente': 'pending',
                 'Confirmado': 'confirmed',
@@ -325,55 +121,35 @@ ${data.notas || 'Sin notas adicionales'}
                 status: statusMap[validatedData.status] || 'confirmed'
             };
 
-            const { data: result, error } = await supabase
-                .from('appointments')
-                .insert([appointment])
-                .select()
-                .single();
+            const result = await AppointmentRepository.insertAppointmentRPC(appointment);
 
-            if (error) throw error;
-
-            // Sync with Google Calendar
             try {
-                // Determine patient email (existing or from data)
-                const patientEmail = data.email || null; // Simplified for strictly types
-
                 const description = this.formatEventDescription(validatedData);
-
                 const googleEvent = await GoogleCalendarService.createEvent({
                     ...result,
                     title: appointment.title,
-                    patientEmail: patientEmail,
-                    notes: description // Usamos la descripción enriquecida
+                    patientEmail: data.email || null,
+                    notes: description
                 });
 
                 if (googleEvent && googleEvent.id) {
-                    await supabase.from('appointments').update({ google_event_id: googleEvent.id }).eq('id', result.id);
+                    await AppointmentRepository.updateGoogleEventId(result.id, googleEvent.id);
                 }
             } catch (syncError) {
                 console.error('Google Sync Error:', syncError);
             }
 
             return result;
-
         } catch (error) {
             console.error('Error creating appointment:', error);
             throw error;
         }
     }
 
-    /**
-     * Actualizar turno
-     */
     static async updateAppointment(id: string, data: any): Promise<any> {
         try {
-            // -- 1. Zod Validation --
-            const validatedData = UpdateAppointmentSchema.parse({
-                ...data,
-                id
-            });
+            const validatedData = UpdateAppointmentSchema.parse({ ...data, id });
 
-            // data: similar to create
             const startTime = new Date(validatedData.fechaHora);
             const endTime = addMinutes(startTime, validatedData.duracion || 30);
 
@@ -397,27 +173,16 @@ ${data.notas || 'Sin notas adicionales'}
                 updates.status = statusMap[validatedData.status] || validatedData.status;
             }
 
-            const { data: result, error } = await supabase
-                .from('appointments')
-                .update(updates)
-                .eq('id', id)
-                .select()
-                .single();
+            const result = await AppointmentRepository.updateAppointment(id, updates);
 
-            if (error) throw error;
-
-            // Sync with Google Calendar
             try {
                 if (result.google_event_id) {
                     const description = this.formatEventDescription(validatedData);
-
                     await GoogleCalendarService.updateEvent(result.google_event_id, {
                         ...updates,
                         patientEmail: validatedData.email,
-                        notes: description // Update description with rich text
+                        notes: description
                     });
-                } else {
-                    console.warn('Skipping Google Update: No google_event_id found for appointment', id);
                 }
             } catch (syncError) {
                 console.error('Google Sync Error (Update):', syncError);
@@ -430,37 +195,12 @@ ${data.notas || 'Sin notas adicionales'}
         }
     }
 
-    /**
-     * Sincronizar turnos pendientes con Google Calendar (Client-Side)
-     * Se llama al iniciar la app para asegurar que turnos creados por Bot/Backend se suban a Google.
-     */
-    static async syncPendingAppointments(session: any = null): Promise<void> {
+    static async syncPendingAppointments(session: Session | null = null): Promise<void> {
         try {
-            const today = new Date().toISOString();
-
-            // 1. Buscar turnos futuros, confirmados y SIN google_event_id
-            const { data: pending, error } = await supabase
-                .from('appointments')
-                .select(`
-                    *,
-                    patient:patients (
-                        nombre,
-                        dni,
-                        telefono,
-                        email,
-                        obra_social,
-                        numero_afiliado
-                    )
-                `)
-                .eq('status', 'confirmed')
-                .is('google_event_id', null)
-                .gte('start_time', today);
-
-            if (error) throw error;
+            const pending = await AppointmentRepository.getPendingGoogleSync(new Date().toISOString());
             if (!pending || pending.length === 0) return;
 
             console.log(`Sincronizando ${pending.length} turnos pendientes...`);
-
             for (const appt of pending) {
                 try {
                     const googleEvent = await GoogleCalendarService.createEvent({
@@ -471,12 +211,7 @@ ${data.notas || 'Sin notas adicionales'}
                     }, session);
 
                     if (googleEvent && googleEvent.id) {
-                        await supabase
-                            .from('appointments')
-                            .update({
-                                google_event_id: googleEvent.id
-                            })
-                            .eq('id', appt.id);
+                        await AppointmentRepository.updateGoogleEventId(appt.id, googleEvent.id);
                     }
                 } catch (e) {
                     console.error(`Error sincronizando turno ${appt.id}:`, e);
@@ -487,21 +222,9 @@ ${data.notas || 'Sin notas adicionales'}
         }
     }
 
-    /**
-     * Eliminar (cancelar) turno
-     */
     static async deleteAppointment(id: string): Promise<boolean> {
         try {
-            // 1. Fetch appointment to get google_event_id
-            const { data: appointment, error } = await supabase
-                .from('appointments')
-                .select('google_event_id')
-                .eq('id', id)
-                .single();
-
-            if (error) throw error;
-
-            // 3. Delete from Google Calendar
+            const appointment = await AppointmentRepository.getAppointmentGoogleId(id);
             if (appointment?.google_event_id) {
                 try {
                     await GoogleCalendarService.deleteEvent(appointment.google_event_id);
@@ -509,7 +232,6 @@ ${data.notas || 'Sin notas adicionales'}
                     console.error('Google Sync Error (Delete):', syncError);
                 }
             }
-
             return true;
         } catch (error) {
             console.error('Error deleting appointment:', error);

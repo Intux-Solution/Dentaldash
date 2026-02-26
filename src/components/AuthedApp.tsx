@@ -1,12 +1,13 @@
-// src/components/AuthedApp.jsx
+// src/components/AuthedApp.tsx
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { Session } from '@supabase/supabase-js';
 
 import Sidebar from './Sidebar';
 import Header from './Header';
 import ModalsRoot from './ModalsRoot';
 import AppRoutes from '../router/AppRoutes';
-import ErrorBoundary from './ErrorBoundary'; // <--- NEW IMPORT
+import ErrorBoundary from './ErrorBoundary';
 import { AppointmentService } from '../services/AppointmentService';
 import { message } from 'antd';
 
@@ -15,13 +16,20 @@ import { useTurnos } from '../hooks/useTurnos';
 import { ModalsProvider } from '../hooks/useModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
 
-const titleByPath = (pathname) => {
+const titleByPath = (pathname: string) => {
   if (pathname.startsWith('/pacientes')) return 'Pacientes';
   if (pathname.startsWith('/turnos')) return 'Turnos';
   return 'Dashboard';
 };
 
-export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, session }: { onLogout: any, justLoggedIn: any, onConsumedLogin?: any, session: any }) {
+interface AuthedAppProps {
+  onLogout: () => void;
+  justLoggedIn: boolean;
+  onConsumedLogin?: () => void;
+  session: Session | null;
+}
+
+export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, session }: AuthedAppProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -33,8 +41,6 @@ export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin, ses
       if (onConsumedLogin) onConsumedLogin();
     }
   }, [justLoggedIn, navigate, onConsumedLogin]);
-
-
 
   // ─── Datos ────────────────────────────────────────────────────────────────
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
