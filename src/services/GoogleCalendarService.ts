@@ -48,12 +48,14 @@ export class GoogleCalendarService {
     /**
      * Middleware fetching function that handles auth and 401 retries
      */
-    static async fetchWithAuth(url, options = {}, session) {
+    static async fetchWithAuth(url: string, options: any = {}, session: any = null): Promise<Response> {
         let token = this.getProviderToken(session);
-        if (!token) return { ok: false, status: 401, statusText: 'No token available' };
+        if (!token) {
+            return new Response(null, { status: 401, statusText: 'No token available' });
+        }
 
         // Prepare headers
-        const headers = {
+        const headers: Record<string, string> = {
             'Content-Type': 'application/json',
             ...(options.headers || {}),
             'Authorization': `Bearer ${token}`
@@ -83,7 +85,7 @@ export class GoogleCalendarService {
     /**
      * List events from the primary calendar.
      */
-    static async listEvents(timeMin, timeMax, session) {
+    static async listEvents(timeMin: Date, timeMax: Date, session: any = null) {
         try {
             const params = new URLSearchParams({
                 timeMin: timeMin.toISOString(),
@@ -111,7 +113,7 @@ export class GoogleCalendarService {
     /**
      * Create an event in the primary calendar.
      */
-    static async createEvent(appointment, session) {
+    static async createEvent(appointment: any, session: any = null) {
         const event = {
             summary: appointment.title,
             description: appointment.notes || '',
@@ -149,7 +151,7 @@ export class GoogleCalendarService {
     /**
      * Update an existing event.
      */
-    static async updateEvent(googleEventId, appointment, session) {
+    static async updateEvent(googleEventId: string, appointment: any, session: any = null) {
         if (!googleEventId) return null;
 
         const event = {
@@ -177,7 +179,7 @@ export class GoogleCalendarService {
     /**
      * Delete an event.
      */
-    static async deleteEvent(googleEventId, session) {
+    static async deleteEvent(googleEventId: string, session: any = null) {
         if (!googleEventId) return;
 
         try {

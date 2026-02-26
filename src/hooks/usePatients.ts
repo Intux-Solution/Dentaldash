@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
-import { PatientService, PatientPayload, PaginatedResult } from '../services/PatientService';
-import type { Patient } from '../types/database.types';
+import { PatientService } from '../services/PatientService';
+import type { Patient, PatientPayload, PaginatedResult } from '../types/database.types';
 
 // ─── Query Key ────────────────────────────────────────────────────────────────
 export const PATIENTS_KEY = ['patients'] as const;
@@ -68,11 +68,15 @@ const normalizePatient = (p: Patient): NormalizedPatient => {
  * @param session - Sesión de Supabase (para obtener userId en mutaciones)
  * @param page    - Página actual (base 1), default 1
  * @param pageSize - Registros por página, default 300
+ * @param searchTerm - Filtro de búsqueda server-side
+ * @param statusFilter - Filtro de estado server-side
  */
 export function usePatients(
     session: Session | null = null,
     page = 1,
     pageSize = 300,
+    searchTerm = '',
+    statusFilter = 'Todos'
 ): UsePatientsResult {
     const userId = session?.user?.id ?? null;
     const queryClient = useQueryClient();
@@ -109,8 +113,8 @@ export function usePatients(
         isError,
         error: queryError,
     } = useQuery<PaginatedResult<Patient>, Error>({
-        queryKey: [...PATIENTS_KEY, page, pageSize],
-        queryFn: () => PatientService.fetchPatientsPaginated(page, pageSize),
+        queryKey: [...PATIENTS_KEY, page, pageSize, searchTerm, statusFilter],
+        queryFn: () => PatientService.fetchPatientsPaginated(page, pageSize, searchTerm, statusFilter),
         select: (result): PaginatedResult<NormalizedPatient> => ({
             ...result,
             data: result.data.map(normalizePatient),

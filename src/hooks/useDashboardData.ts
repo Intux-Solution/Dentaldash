@@ -1,12 +1,9 @@
 import { useMemo } from 'react';
 import { isToday, isSameWeek, isSameDay, isAfter, parseISO, isValid, startOfDay } from 'date-fns';
 
-export function useDashboardStats(
+export function useDashboardData(
     turnosCrudos: any[],
-    turnosLoading: boolean,
-    patientsRaw: any[],
-    searchTerm: string,
-    statusFilter: string
+    turnosLoading: boolean
 ) {
     return useMemo(() => {
         let turnosHoy = 0;
@@ -73,43 +70,11 @@ export function useDashboardStats(
             nextTurnos.sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
         }
 
-        const safeGetDate = (p: any): number => {
-            if (!p) return 0;
-            if (p._createdAt) return p._createdAt;
-            const raw = p.fechaRegistro || p['Fecha Registro'] || p.createdTime || p.created_at || p.createdAt;
-            if (!raw) return 0;
-            const date = typeof raw === 'string' ? parseISO(raw) : new Date(raw);
-            return isValid(date) ? date.getTime() : 0;
-        };
-
-        const term = (searchTerm || '').trim().toLowerCase();
-        let latestPatients = [];
-
-        if (patientsRaw && patientsRaw.length > 0) {
-            const base = [...patientsRaw];
-            if (!term && (!statusFilter || statusFilter === 'Todos')) {
-                latestPatients = base.sort((a, b) => safeGetDate(b) - safeGetDate(a)).slice(0, 4);
-            } else {
-                latestPatients = base
-                    .filter((p) => {
-                        const normalizedName = (p.nombre || '').toLowerCase();
-                        const matchesSearch = normalizedName.includes(term);
-                        const matchesStatus = statusFilter === 'Todos'
-                            ? (p.estado !== 'Inactivo')
-                            : (p.estado === statusFilter);
-                        return matchesSearch && matchesStatus;
-                    })
-                    .sort((a, b) => safeGetDate(b) - safeGetDate(a))
-                    .slice(0, 4);
-            }
-        }
-
         return {
             turnosHoy,
             turnosSemana,
             nextTurnos: nextTurnos.slice(0, 3),
-            loadingStats: turnosLoading,
-            latestPatients
+            loadingStats: turnosLoading
         };
-    }, [turnosCrudos, turnosLoading, patientsRaw, searchTerm, statusFilter]);
+    }, [turnosCrudos, turnosLoading]);
 }

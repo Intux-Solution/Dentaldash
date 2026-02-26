@@ -7,6 +7,7 @@ export interface Patient {
     id: string;
     organization_id?: string;
     tenant_id?: string;
+    user_id?: string;
 
     // ─── Datos personales (snake_case = columnas DB) ──────────────────────────
     nombre?: string;
@@ -54,6 +55,46 @@ export interface Patient {
     blood_type?: string;
 }
 
+export interface PatientPayload {
+    id?: string;
+    user_id?: string;
+    nombre?: string;
+    dni?: string;
+    telefono?: string;
+    email?: string;
+    obraSocial?: string;
+    numeroAfiliado?: string;
+    fechaNacimiento?: string;
+    alergias?: string | string[];
+    antecedentes?: string;
+    notas?: string;
+    estado?: string;
+    historiaClinicaFile?: File;
+    historiaClinica?: string | null;
+    historia_clinica_url?: string | null;
+}
+
+export interface DbPatientRow {
+    id: string;
+    user_id?: string;
+    nombre: string;
+    dni?: string;
+    telefono?: string;
+    email?: string;
+    obra_social?: string;
+    numero_afiliado?: string;
+    fecha_nacimiento?: string;
+    alergias?: string | string[];
+    antecedentes?: string;
+    notas?: string;
+    estado?: string;
+    historia_clinica?: string | null;
+    historia_clinica_url?: string | null;
+    ultima_visita?: string;
+    created_at?: string;
+    [key: string]: any;
+}
+
 export interface Appointment {
     id: string;
     patient_id: string;
@@ -68,10 +109,20 @@ export interface Appointment {
 
 export interface ClinicalRecord {
     id: string;
-    patient_id?: string;
-    date?: string;
-    diagnosis?: string;
-    treatment?: string;
-    notes?: string;
-    created_at?: string;
+    patient_id: string;
+    user_id: string;
+    fecha: string;
+    diagnostico: string;
+    tratamiento: string;
+    odontogram_state: Record<string, unknown> | null;
+    archivo_url?: string;
+    created_at: string;
+}
+
+export interface PaginatedResult<T> {
+    data: T[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
 }

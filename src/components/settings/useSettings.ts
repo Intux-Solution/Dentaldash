@@ -447,5 +447,37 @@ export function useSettings(session: any = null) {
         setInstanceStatus,
         setPollingActive,
         setQrCodeData,
+
+        // Mutators and Setters expected by SettingsView
+        updateSchedule: (args: any) => updateScheduleMutation.mutate(args),
+        addSchedule: (dayId: number) => addScheduleMutation.mutate(dayId),
+        deleteSchedule: (slotId: number) => deleteScheduleMutation.mutate(slotId),
+        setFaqs: (updater: any) => {
+            queryClient.setQueryData(['settings', userId], (oldData: any) => {
+                if (!oldData) return oldData;
+                return {
+                    ...oldData,
+                    faqs: typeof updater === 'function' ? updater(oldData.faqs || []) : updater
+                };
+            });
+        },
+        setProfile: (updater: any) => {
+            queryClient.setQueryData(['settings', userId], (oldData: any) => {
+                if (!oldData) return oldData;
+                return {
+                    ...oldData,
+                    profile: typeof updater === 'function' ? updater(oldData.profile) : updater
+                };
+            });
+        },
+        setTenant: (updater: any) => {
+            queryClient.setQueryData(['settings', userId], (oldData: any) => {
+                if (!oldData) return oldData;
+                return {
+                    ...oldData,
+                    profile: typeof updater === 'function' ? updater(oldData.profile) : updater
+                };
+            });
+        }
     };
 }

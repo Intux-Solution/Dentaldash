@@ -3,8 +3,8 @@ import { CreditCard, X } from 'lucide-react';
 
 export default function InsurancesTab({ profile, handleProfileChange, handleAutoSaveProfile }) {
     const handleAdd = async () => {
-        const el = document.getElementById('ins-input');
-        if (el.value.trim()) {
+        const el = document.getElementById('ins-input') as HTMLInputElement;
+        if (el?.value.trim()) {
             const newInsurances = [...(profile.accepted_insurances || []), el.value.trim()];
             handleProfileChange('accepted_insurances', newInsurances);
             el.value = '';

@@ -72,9 +72,9 @@ export default function FaqsTab({ tenant, faqs, setFaqs }) {
     const tenantId = tenant?.user_id || tenant?.id;
 
     const handleAddFAQ = async () => {
-        const qEl = document.getElementById('faq-question');
-        const aEl = document.getElementById('faq-answer');
-        if (!qEl.value.trim() || !aEl.value.trim()) return;
+        const qEl = document.getElementById('faq-question') as HTMLInputElement;
+        const aEl = document.getElementById('faq-answer') as HTMLTextAreaElement;
+        if (!qEl?.value.trim() || !aEl?.value.trim()) return;
 
         try {
             const { data, error } = await supabase

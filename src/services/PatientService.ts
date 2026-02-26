@@ -1,49 +1,7 @@
 import { supabase } from '../config/supabaseClient';
 import { StorageService } from './StorageService';
-import { Patient } from '../types/database.types';
+import { Patient, PatientPayload, ClinicalRecord, DbPatientRow, PaginatedResult } from '../types/database.types';
 import { AddPatientSchema, UpdatePatientSchema } from '../schemas/patient.schema';
-
-// ─── Tipos ────────────────────────────────────────────────────────────────────
-
-export interface PatientPayload {
-  /** UUID de PostgreSQL — fuente única de verdad, nunca usar _id */
-  id?: string;
-  user_id?: string;
-  nombre?: string;
-  dni?: string;
-  telefono?: string;
-  email?: string;
-  obraSocial?: string;
-  numeroAfiliado?: string;
-  fechaNacimiento?: string;
-  alergias?: string | string[];
-  antecedentes?: string;
-  notas?: string;
-  estado?: string;
-  historiaClinicaFile?: File;
-  historiaClinica?: string | null;
-  historia_clinica_url?: string | null;
-}
-
-export interface ClinicalRecord {
-  id: string;
-  patient_id: string;
-  user_id: string;
-  fecha: string;
-  diagnostico: string;
-  tratamiento: string;
-  odontogram_state: Record<string, unknown> | null;
-  archivo_url?: string;
-  created_at: string;
-}
-
-export interface PaginatedResult<T> {
-  data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
 
 // ─── Helper: Normalizar DNI ───────────────────────────────────────────────────
 /**
@@ -54,26 +12,6 @@ const sanitizeDni = (dni: string): string =>
   dni.replace(/[\.\-\s]/g, '').trim();
 
 // ─── Helper: mapDbPatient ─────────────────────────────────────────────────────
-export interface DbPatientRow {
-  id: string;
-  user_id?: string;
-  nombre: string;
-  dni?: string;
-  telefono?: string;
-  email?: string;
-  obra_social?: string;
-  numero_afiliado?: string;
-  fecha_nacimiento?: string;
-  alergias?: string | string[];
-  antecedentes?: string;
-  notas?: string;
-  estado?: string;
-  historia_clinica?: string | null;
-  historia_clinica_url?: string | null;
-  ultima_visita?: string;
-  created_at?: string;
-  [key: string]: any; // Allow remaining PostgreSQL payload fields
-}
 
 /**
  * Función centralizada que transforma una fila de PostgreSQL (snake_case)
@@ -89,27 +27,53 @@ const mapDbPatient = (p: DbPatientRow): Patient => ({
   estado: p.estado ?? 'Activo',
 });
 
+// ─── Constantes y Validaciones ───────────────────────────────────────────────
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png'
+];
+
 // ─── PatientService ───────────────────────────────────────────────────────────
 
 export class PatientService {
 
 
   /**
-   * Obtener pacientes con paginación real usando .range().
+   * Obtener pacientes con paginación real usando .range() y filtrado server-side.
    * @param page - Número de página (base 1)
    * @param pageSize - Cantidad de registros por página
+   * @param searchTerm - Término de búsqueda (nombre o dni)
+   * @param statusFilter - Filtro de estado (ej: 'Activo', 'Todos')
    */
   static async fetchPatientsPaginated(
     page: number,
-    pageSize: number = 20
-  ): Promise<PaginatedResult<Patient>> {
+    pageSize: number = 20,
+    searchTerm: string = '',
+    statusFilter: string = 'Todos'
+  ) {
     // .range() es 0-indexed e inclusivo en ambos extremos
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    const { data, error, count } = await supabase
+    let query = supabase
       .from('patients')
-      .select('*', { count: 'exact' })
+      .select('*', { count: 'exact' });
+
+    if (searchTerm.trim()) {
+      query = query.or(`nombre.ilike.%${searchTerm.trim()}%,dni.ilike.%${searchTerm.trim()}%`);
+    }
+
+    if (statusFilter !== 'Todos') {
+      query = query.eq('estado', statusFilter);
+    } else {
+      // Si es "Todos", opcionalmente podríamos excluir a los 'Inactivo' por defecto
+      // Pero para mantener la funcionalidad original:
+      query = query.neq('estado', 'Inactivo');
+    }
+
+    const { data, error, count } = await query
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -182,6 +146,14 @@ export class PatientService {
    */
   static async uploadClinicalRecord(file: File, userId: string): Promise<string> {
     if (!userId) throw new Error('Authentication session missing or expired.');
+
+    // File Validation
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error(`El archivo excede el límite de 5MB.`);
+    }
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      throw new Error(`Tipo de archivo no permitido. Solo se permiten PDF, JPEG y PNG.`);
+    }
 
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random()}.${fileExt}`;

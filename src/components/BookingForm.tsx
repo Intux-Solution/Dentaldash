@@ -10,7 +10,14 @@ import { message } from 'antd';
 import { CreateAppointmentSchema, CreateAppointmentPayload } from '../schemas/appointment.schema';
 import { useTurnos } from '../hooks/useTurnos';
 
-export default function BookingForm({ onSuccess, hideHeader = false, hideInternalSubmit = false, setFormSubmit }) {
+interface BookingFormProps {
+  onSuccess: () => void;
+  hideHeader?: boolean;
+  hideInternalSubmit?: boolean;
+  setFormSubmit?: (submitFn: () => void) => void;
+}
+
+export default function BookingForm({ onSuccess, hideHeader = false, hideInternalSubmit = false, setFormSubmit }: BookingFormProps) {
   const { addTurno } = useTurnos();
   // Configured React Hook Form
   const {
@@ -456,7 +463,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             onChange={(e) => {
               setSelectedTipoTurnoId(e.target.value);
             }}
-            className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] focus:outline-none focus:ring-0 focus:border-transparent text-sm"
+            className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] focus:outline-none focus:ring-0 focus:border-transparent"
             required
           >
             <option value="">Selecciona el tipo de consulta</option>
@@ -479,7 +486,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             onChange={(e) => {
               setSelectedFecha(e.target.value);
             }}
-            className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] focus:outline-none focus:ring-0 focus:border-transparent text-sm"
+            className="text-sm w-full px-3 py-2 rounded-xl border border-transparent bg-[#F5F5F5] focus:outline-none focus:ring-0 focus:border-transparent"
             required
           >
             <option value="">Selecciona una fecha</option>

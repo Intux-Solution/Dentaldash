@@ -14,7 +14,16 @@ import { X } from 'lucide-react';
  * queden siempre visibles. Además, el contenedor de la tarjeta
  * usa `overflow-hidden` para que la barra de scroll no sobresalga.
  */
-export default function ModalShell({ title, onClose, children, footer, maxWidth = 'max-w-md' }) {
+
+interface ModalShellProps {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  maxWidth?: string;
+}
+
+export default function ModalShell({ title, onClose, children, footer, maxWidth = 'max-w-md' }: ModalShellProps) {
   useEffect(() => {
     const original = document.body.style.overflow;
     document.body.style.overflow = 'hidden';

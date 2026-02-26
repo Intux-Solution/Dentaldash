@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Eye, ArrowRight, Calendar, RefreshCcw, User } from 'lucide-react';
-import { useDashboardStats } from '../hooks/useDashboardStats';
+import { useDashboardData } from '../hooks/useDashboardData';
 import { useModals } from '../hooks/useModals';
 import { useAppStore } from '../store/useAppStore';
 import { useTurnos } from '../hooks/useTurnos';
@@ -25,20 +25,23 @@ export default function DashboardView() {
     const setDashboardStatusFilter = useAppStore(state => state.setDashboardStatusFilter);
 
     const { turnos, loading: turnosIsLoading, error: turnosError } = useTurnos();
-    const { patients, loading: patientsLoading } = usePatients();
+
+    const { patients: latestPatients, loading: patientsLoading } = usePatients(
+        null,
+        1,
+        4,
+        dashboardSearchTerm,
+        dashboardStatusFilter
+    );
 
     const {
         turnosHoy,
         turnosSemana,
         nextTurnos,
-        loadingStats,
-        latestPatients
-    } = useDashboardStats(
+        loadingStats
+    } = useDashboardData(
         turnos,
-        turnosIsLoading,
-        patients,
-        dashboardSearchTerm,
-        dashboardStatusFilter
+        turnosIsLoading
     );
 
     const handleSearchChange = useCallback(

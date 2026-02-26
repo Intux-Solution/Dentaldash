@@ -3,9 +3,9 @@ import { Briefcase, Trash2, Plus } from 'lucide-react';
 
 export default function ServicesTab({ profile, handleProfileChange, handleAutoSaveProfile }) {
     const handleAdd = async () => {
-        const nameEl = document.getElementById('service-name');
-        const durEl = document.getElementById('service-duration');
-        if (nameEl.value.trim()) {
+        const nameEl = document.getElementById('service-name') as HTMLInputElement;
+        const durEl = document.getElementById('service-duration') as HTMLInputElement;
+        if (nameEl?.value.trim()) {
             const id = nameEl.value.toLowerCase().replace(/\s+/g, '_');
             const newServices = [...(profile.services || []), { id, name: nameEl.value.trim(), duration: parseInt(durEl.value) || 30 }];
             handleProfileChange('services', newServices);
