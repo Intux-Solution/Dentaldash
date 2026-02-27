@@ -210,7 +210,6 @@ ${data.notas || 'Sin notas adicionales'}
 
     static async syncPendingAppointments(session: Session | null = null): Promise<void> {
         if (!session?.provider_token) {
-            console.warn('syncPendingAppointments: No Google Calendar token available, skipping sync.');
             return;
         }
 
@@ -218,7 +217,6 @@ ${data.notas || 'Sin notas adicionales'}
             const pending = await AppointmentRepository.getPendingGoogleSync(new Date().toISOString());
             if (!pending || pending.length === 0) return;
 
-            console.log(`Sincronizando ${pending.length} turnos pendientes...`);
             for (const appt of pending) {
                 try {
                     const eventData = {

@@ -35,7 +35,6 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
           filter: `id=eq.${session.user.id}`
         },
         () => {
-          console.log("Header: Profile changed, refreshing...");
           fetchUserData();
         }
       )
@@ -49,14 +48,11 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
 
   const fetchUserData = async () => {
     try {
-      console.log("Header: fetching user data...");
       if (!session) {
-        console.warn("Header: No session handed down from props");
         return;
       }
 
       const user = session.user;
-      console.log("Header: Full User Metadata:", user.user_metadata);
 
       // Query the flat profiles table
       const { data: profileData, error: profileError } = await supabase
@@ -75,18 +71,14 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
       let businessName = 'Mi Consultorio'; // Default business name
 
       if (profileData) {
-        console.log("Header: Found profile in DB:", profileData);
         if (profileData.full_name) name = profileData.full_name;
         if (profileData.business_name) businessName = profileData.business_name;
 
         if (profileData.avatar_url) {
-          console.log("Header: Using profile avatar_url from storage:", profileData.avatar_url);
           const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(profileData.avatar_url);
           if (publicUrlData?.publicUrl) avatar = publicUrlData.publicUrl;
         }
       }
-
-      console.log("Header: Final name:", name, "Final avatar:", avatar, "Final businessName:", businessName);
 
       setUserData({
         name: name || 'Usuario',

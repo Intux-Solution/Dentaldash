@@ -10,13 +10,11 @@ const SettingsView = React.lazy(() => import('../components/SettingsView'));
 const OdontogramView = React.lazy(() => import('../components/OdontogramView'));
 
 export default function AppRoutes() {
-    const { session } = useAuth();
-
     return (
         <Suspense fallback={<div className="flex h-screen items-center justify-center">Cargando...</div>}>
             <Routes>
                 {/* ── Rutas privadas protegidas ────────────────────────────────── */}
-                <Route element={<ProtectedRoute session={session} />}>
+                <Route element={<ProtectedRoute />}>
                     <Route path="/" element={<DashboardView />} />
                     <Route path="/turnos" element={<TurnosView />} />
                     <Route path="/pacientes" element={<PacientesView />} />

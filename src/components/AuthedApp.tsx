@@ -23,23 +23,11 @@ const titleByPath = (pathname: string) => {
 
 interface AuthedAppProps {
   onLogout: () => void;
-  justLoggedIn: boolean;
-  onConsumedLogin?: () => void;
 }
 
-export default function AuthedApp({ onLogout, justLoggedIn, onConsumedLogin }: AuthedAppProps) {
+export default function AuthedApp({ onLogout }: AuthedAppProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { session } = useAuth();
-
-  // Navegar a home tras login
-  useEffect(() => {
-    if (justLoggedIn) {
-      navigate('/', { replace: true });
-      if (onConsumedLogin) onConsumedLogin();
-    }
-  }, [justLoggedIn, navigate, onConsumedLogin]);
 
   // ─── Datos ────────────────────────────────────────────────────────────────
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients();

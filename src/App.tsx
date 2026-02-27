@@ -74,7 +74,6 @@ export default function App() {
   }, []);
 
   const handleLogout = async () => {
-    console.log('Manual logout triggered');
     try {
       const { error } = await supabase.auth.signOut();
       if (error) console.error('Error during Supabase signOut:', error);
@@ -107,7 +106,7 @@ export default function App() {
       element: !session ? (
         <LoginView onSuccess={() => { }} />
       ) : (
-        <AuthedApp onLogout={handleLogout} justLoggedIn={false} />
+        <AuthedApp onLogout={handleLogout} />
       ),
     }
   ]);
