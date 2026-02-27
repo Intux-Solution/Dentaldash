@@ -4,6 +4,10 @@ import { GoogleCalendarService } from './GoogleCalendarService';
 import { CreateAppointmentSchema, UpdateAppointmentSchema } from '../schemas/appointment.schema';
 import { addMinutes } from 'date-fns';
 import { Session } from '@supabase/supabase-js';
+import * as z from 'zod';
+
+export type CreateAppointmentInput = z.infer<typeof CreateAppointmentSchema> & { patient_id?: string; email?: string };
+export type UpdateAppointmentInput = z.infer<typeof UpdateAppointmentSchema> & { email?: string; status?: string };
 
 export class AppointmentService {
     static async getAppointments(fromISO: string, toISO: string, session: Session | null = null) {
@@ -52,7 +56,7 @@ export class AppointmentService {
         }
     }
 
-    static formatEventDescription(data: any) {
+    static formatEventDescription(data: Record<string, any>) {
         return `
 Paciente: ${data.nombre}
 DNI: ${data.dni}
@@ -69,7 +73,7 @@ ${data.notas || 'Sin notas adicionales'}
         `.trim();
     }
 
-    static async createAppointment(data: any): Promise<any> {
+    static async createAppointment(data: CreateAppointmentInput): Promise<any> {
         try {
             const validatedData = CreateAppointmentSchema.parse({
                 ...data,
@@ -121,7 +125,14 @@ ${data.notas || 'Sin notas adicionales'}
                 status: statusMap[validatedData.status] || 'confirmed'
             };
 
-            const result = await AppointmentRepository.insertAppointmentRPC(appointment);
+            const rpcResult = await AppointmentRepository.insertAppointmentRPC(appointment);
+
+            if (!rpcResult.success) {
+                throw new Error(rpcResult.error || "Error: El horario ya no está disponible.");
+            }
+
+            // Since RPC only returns { success, id, error }, we construct the full object for Google Calendar
+            const result = { ...appointment, id: rpcResult.id };
 
             try {
                 const description = this.formatEventDescription(validatedData);

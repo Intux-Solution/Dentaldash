@@ -77,7 +77,7 @@ export class AppointmentRepository {
 
     static async insertAppointmentRPC(appointment: any) {
         // Use the new atomic RPC to avoid overlapping concurrent bookings
-        const { data, error } = await supabase.rpc('reserve_slot', {
+        const { data, error } = await supabase.rpc('confirm_appointment_safe', {
             p_patient_id: appointment.patient_id,
             p_title: appointment.title,
             p_start_time: appointment.start_time,
@@ -88,19 +88,9 @@ export class AppointmentRepository {
             p_status: appointment.status
         });
 
-        // Fallback to straight insert if RPC doesn't exist yet (for dev env without migrations run)
-        if (error && error.message.includes('Could not find the function')) {
-            console.warn('RPC reserve_slot not found, falling back to basic insert. Please run SQL migration.');
-            const fallback = await supabase
-                .from('appointments')
-                .insert([appointment])
-                .select()
-                .single();
-            if (fallback.error) throw fallback.error;
-            return fallback.data;
-        }
-
         if (error) throw error;
+
+        // Return structured JSON data exactly as the RPC yields
         return data;
     }
 
