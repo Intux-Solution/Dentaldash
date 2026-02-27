@@ -57,11 +57,16 @@ export class AppointmentRepository {
     }
 
     static async findPatientByDni(dni: string) {
-        const { data } = await supabase
+        const { data, error } = await supabase
             .from('patients')
-            .select('id, email')
+            .select('id, dni, email')
             .eq('dni', dni)
             .maybeSingle();
+
+        if (error) {
+            console.error('Error finding patient by DNI:', error);
+            return null;
+        }
         return data;
     }
 

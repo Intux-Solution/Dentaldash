@@ -81,13 +81,17 @@ ${data.notas || 'Sin notas adicionales'}
             });
 
             let patientId = data.patient_id;
-            const cleanDni = validatedData.dni?.trim();
+            // Clean DNI strictly: keep only numbers
+            const cleanDni = validatedData.dni ? validatedData.dni.replace(/\D/g, '') : undefined;
 
             if (!patientId && cleanDni) {
                 const existingPatient = await AppointmentRepository.findPatientByDni(cleanDni);
-                if (existingPatient) {
+
+                if (existingPatient?.id) {
                     patientId = existingPatient.id;
+                    console.log(`[AppointmentService] Found existing patient by DNI ${cleanDni} -> ID: ${patientId}`);
                 } else {
+                    console.log(`[AppointmentService] No existing patient found for DNI ${cleanDni}, creating new one.`);
                     const newPatient = await AppointmentRepository.createPatient({
                         dni: cleanDni,
                         nombre: validatedData.nombre?.trim(),
