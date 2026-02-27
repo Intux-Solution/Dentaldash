@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import './App.css';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -10,8 +10,7 @@ import AuthedApp from './components/AuthedApp';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import ErrorBoundary from './components/ErrorBoundary';
-import { AuthProvider } from './context/AuthContext';
-import { AppointmentService } from './services/AppointmentService';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Instancia global de QueryClient, creada fuera del componente para evitar re-creaciones
 const queryClient = new QueryClient({
@@ -24,71 +23,41 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function App() {
-  const [session, setSession] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+const RootRoute = () => {
+  const { session } = useAuth();
 
-  useEffect(() => {
-    // 1. Hidratación inicial optimizada
-    supabase.auth.getSession().then(({ data: { session: initialSession }, error }) => {
-      if (!error) {
-        setSession(initialSession);
-      }
-      setLoading(false);
-    });
+  if (!session) {
+    return <LoginView onSuccess={() => { }} />;
+  }
 
-    // 2. Suscripción a cambios futuros
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      setSession(newSession);
-
-      if (event === 'SIGNED_OUT' || !newSession) {
+  return (
+    <AuthedApp onLogout={async () => {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error('Logout error:', err);
+      } finally {
+        localStorage.clear();
+        sessionStorage.clear();
         queryClient.clear();
       }
+    }} />
+  );
+};
 
-      if (
-        newSession?.provider_refresh_token &&
-        newSession.user &&
-        (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')
-      ) {
-        supabase
-          .from('profiles')
-          .upsert({ id: newSession.user.id, google_refresh_token: newSession.provider_refresh_token })
-          .then(({ error }) => {
-            if (error) console.error('App: Error syncing refresh token:', error);
-          });
-      }
+const globalRouter = createBrowserRouter([
+  { path: '/privacy', element: <PrivacyPolicy /> },
+  { path: '/terms', element: <TermsOfService /> },
+  {
+    path: '/*',
+    element: <RootRoute />
+  }
+]);
 
-      if (newSession && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        // Ejecutar sync global
-        AppointmentService.syncPendingAppointments(newSession).catch(err => {
-          console.error('Error in global background sync:', err);
-        });
-      }
-    });
+const AppContent = () => {
+  const { isLoading } = useAuth();
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) console.error('Error during Supabase signOut:', error);
-    } catch (err) {
-      console.error('Unexpected exception during logout:', err);
-    } finally {
-      localStorage.clear();
-      sessionStorage.clear();
-      queryClient.clear();
-      setSession(null);
-      // Let React Router handle navigation if needed or just drop session to render LoginView
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50 text-teal-600 font-medium font-sans">
         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mr-2" />
@@ -97,25 +66,15 @@ export default function App() {
     );
   }
 
-  // Se mueve la configuración del router aquí tras determinar la sesión
-  const router = createBrowserRouter([
-    { path: '/privacy', element: <PrivacyPolicy /> },
-    { path: '/terms', element: <TermsOfService /> },
-    {
-      path: '/*',
-      element: !session ? (
-        <LoginView onSuccess={() => { }} />
-      ) : (
-        <AuthedApp onLogout={handleLogout} />
-      ),
-    }
-  ]);
+  return <RouterProvider router={globalRouter} />;
+};
 
+export default function App() {
   return (
     <ErrorBoundary fallbackMessage="Ha ocurrido un error inesperado al cargar la aplicación principal. Por favor, intenta de nuevo.">
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <AppContent />
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
