@@ -16,7 +16,11 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
     role: 'Odontólogo'
   });
 
+  if (!session?.user) return null;
+
   useEffect(() => {
+    if (!session?.user) return;
+
     window.addEventListener('profile:updated', fetchUserData);
     fetchUserData();
 
@@ -41,7 +45,7 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
       window.removeEventListener('profile:updated', fetchUserData);
       supabase.removeChannel(profileSubscription);
     };
-  }, []);
+  }, [session]);
 
   const fetchUserData = async () => {
     try {

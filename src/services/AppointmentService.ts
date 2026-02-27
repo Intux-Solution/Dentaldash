@@ -209,6 +209,11 @@ ${data.notas || 'Sin notas adicionales'}
     }
 
     static async syncPendingAppointments(session: Session | null = null): Promise<void> {
+        if (!session?.provider_token) {
+            console.warn('syncPendingAppointments: No Google Calendar token available, skipping sync.');
+            return;
+        }
+
         try {
             const pending = await AppointmentRepository.getPendingGoogleSync(new Date().toISOString());
             if (!pending || pending.length === 0) return;
@@ -223,7 +228,7 @@ ${data.notas || 'Sin notas adicionales'}
                         notes: appt.notes
                     };
 
-                    const googleEvent = await GoogleCalendarService.createEvent(eventData);
+                    const googleEvent = await GoogleCalendarService.createEvent(eventData, session);
 
                     if (googleEvent && googleEvent.id) {
                         await AppointmentRepository.updateGoogleEventId(appt.id, googleEvent.id);
