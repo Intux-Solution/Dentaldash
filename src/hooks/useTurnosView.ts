@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTurnos } from './useTurnos';
+import { useAuth } from '../context/AuthContext';
 
 export function groupByDate(events: any[]) {
     const by: Record<string, any[]> = {};
@@ -48,7 +49,8 @@ export function useTurnosView() {
     const [dateFrom, setDateFrom] = useState(defaultDates.from);
     const [dateTo, setDateTo] = useState(defaultDates.to);
 
-    const { turnos: events, loading, error, refreshTurnos } = useTurnos(dateFrom, dateTo);
+    const { session } = useAuth();
+    const { turnos: events, loading, error, refreshTurnos } = useTurnos(dateFrom, dateTo, session);
 
     const grouped = useMemo(() => groupByDate(events), [events]);
 

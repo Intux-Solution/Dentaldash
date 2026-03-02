@@ -24,35 +24,49 @@ export class GoogleCalendarService {
      * Refresh the Google Access Token using our Edge Function
      */
     static async refreshGoogleToken(session) {
+        console.log("[GoogleCalendarService] refreshGoogleToken called with session user ID:", session?.user?.id);
         try {
             let refreshToken = this.getRefreshToken(session);
+            console.log("[GoogleCalendarService] Refresh token from session object:", refreshToken ? "Yes" : "No");
 
             // Si el token no está en la sesión efímera (por ej. recarga F5), 
             // lo buscamos en la base de datos (guardado previamente por AuthContext)
             if (!refreshToken && session?.user?.id) {
+                console.log("[GoogleCalendarService] Attempting to fetch refresh_token from DB for user", session.user.id);
                 const { data, error } = await supabase
                     .from('profiles')
                     .select('google_refresh_token')
                     .eq('id', session.user.id)
                     .single();
 
+                if (error) {
+                    console.error("[GoogleCalendarService] DB Error fetching refresh token:", error);
+                }
+
                 if (!error && data?.google_refresh_token) {
+                    console.log("[GoogleCalendarService] Successfully retrieved refresh_token from DB");
                     refreshToken = data.google_refresh_token;
                 }
             }
 
             if (!refreshToken) {
-                console.warn("GoogleCalendarService: No refresh token available in session or DB.");
+                console.warn("[GoogleCalendarService] No refresh token available in session or DB.");
                 return null;
             }
+
+            console.log("[GoogleCalendarService] Invoking google-token-refresh edge function...");
 
             const { data, error } = await supabase.functions.invoke('google-token-refresh', {
                 body: { refresh_token: refreshToken }
             });
 
-            if (error) return null;
+            if (error) {
+                console.error("[GoogleCalendarService] Edge function error:", error);
+                return null;
+            }
 
             if (data?.access_token) {
+                console.log("[GoogleCalendarService] Edge function successfully returned new access_token");
                 cachedToken = data.access_token;
                 return data.access_token;
             }
@@ -67,21 +81,26 @@ export class GoogleCalendarService {
      * Middleware fetching function that handles auth and 401 retries
      */
     static async fetchWithAuth(url: string, options: any = {}, session: any = null): Promise<Response> {
+        console.log(`[GoogleCalendarService] fetchWithAuth to ${url}`);
+        console.log(`[GoogleCalendarService] fetchWithAuth received session object:`, session ? `Yes (ID: ${session?.user?.id})` : "No (null/undefined)");
+
         let token = this.getProviderToken(session);
 
         // Si el token es null (ej: F5 o sesión restaurada), intentamos refrescar proactivamente
         if (!token && session) {
-            console.log("GoogleCalendarService: Token efímero no encontrado. Intentando refrescar...");
+            console.log("[GoogleCalendarService] Token efímero no encontrado. Intentando refrescar proactivamente...");
             token = await this.refreshGoogleToken(session);
         }
 
         if (!token) {
-            console.error("GoogleCalendarService: No fue posible obtener un token. El usuario debe reautenticar.");
+            console.error("[GoogleCalendarService] Fatal: No fue posible obtener un token. El usuario debe reautenticar.");
             return new Response(
                 JSON.stringify({ error: { message: 'No token available. Please re-authenticate with Google.' } }),
                 { status: 401, statusText: 'No token available', headers: { 'Content-Type': 'application/json' } }
             );
         }
+
+        console.log("[GoogleCalendarService] Token acquired successfully. Proceeding with fetch...");
 
         // Prepare headers
         const headers: Record<string, string> = {

@@ -4,6 +4,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { useModals } from '../hooks/useModals';
 import { useAppStore } from '../store/useAppStore';
 import { useTurnos } from '../hooks/useTurnos';
+import { useAuth } from '../context/AuthContext';
 import { usePatients } from '../hooks/usePatients';
 import StatsCard from './StatsCard';
 import SearchInput from './SearchInput';
@@ -24,7 +25,8 @@ export default function DashboardView() {
     const dashboardStatusFilter = useAppStore(state => state.dashboardStatusFilter);
     const setDashboardStatusFilter = useAppStore(state => state.setDashboardStatusFilter);
 
-    const { turnos, loading: turnosIsLoading, error: turnosError } = useTurnos();
+    const { session } = useAuth();
+    const { turnos, loading: turnosIsLoading, error: turnosError } = useTurnos(null, null, session);
 
     const { patients: latestPatients, loading: patientsLoading } = usePatients(
         null,

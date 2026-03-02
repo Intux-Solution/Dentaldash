@@ -83,7 +83,8 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             const slots = await AppointmentService.getAvailableSlots(
                 fecha,
                 appointmentType?.duration || 30,
-                effectiveExclude
+                effectiveExclude,
+                session
             );
 
             setAvailableSlots(slots);

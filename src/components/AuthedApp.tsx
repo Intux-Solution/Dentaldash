@@ -32,7 +32,7 @@ export default function AuthedApp({ onLogout }: AuthedAppProps) {
 
   // ─── Datos ────────────────────────────────────────────────────────────────
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
-  const { turnos, refreshTurnos } = useTurnos(null, null);
+  const { turnos, refreshTurnos } = useTurnos(null, null, session);
   const { normalizedPatients } = useNormalizedPatients(patients);
 
   const headerTitle = titleByPath(location.pathname);

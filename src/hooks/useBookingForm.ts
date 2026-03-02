@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 
 export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn: () => void) => void) {
     const { session } = useAuth();
-    const { addTurno } = useTurnos();
+    const { addTurno } = useTurnos(null, null, session);
 
     // Configured React Hook Form
     const {
@@ -165,7 +165,7 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
         try {
             const appointmentType = services.find(t => (t.id === tipoTurno || t.name === tipoTurno));
             const duration = appointmentType?.duration || 30;
-            const slots = await AppointmentService.getAvailableSlots(fecha, duration);
+            const slots = await AppointmentService.getAvailableSlots(fecha, duration, null, session);
             setAvailableSlots(slots);
 
             // Clear selected hora if it's no longer available
