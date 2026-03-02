@@ -13,19 +13,23 @@ const sanitizeDni = (dni: string): string =>
 
 // ─── Helper: mapDbPatient ─────────────────────────────────────────────────────
 
-/**
- * Función centralizada que transforma una fila de PostgreSQL (snake_case)
- * al modelo camelCase que usa la UI.
- */
-const mapDbPatient = (p: DbPatientRow): Patient => ({
-  ...(p as unknown as Patient),
-  obraSocial: p.obra_social,
-  numeroAfiliado: p.numero_afiliado,
-  fechaNacimiento: p.fecha_nacimiento,
-  historiaClinica: p.historia_clinica_url ?? p.historia_clinica ?? null,
-  ultimaVisita: p.ultima_visita,
-  estado: p.estado ?? 'Activo',
-});
+const mapDbPatient = (p: DbPatientRow): Patient => {
+  let publicUrl = p.historia_clinica_url ?? p.historia_clinica ?? null;
+  if (publicUrl && !publicUrl.startsWith('http')) {
+    const { data } = supabase.storage.from('clinical-records').getPublicUrl(publicUrl);
+    publicUrl = data.publicUrl;
+  }
+
+  return {
+    ...(p as unknown as Patient),
+    obraSocial: p.obra_social,
+    numeroAfiliado: p.numero_afiliado,
+    fechaNacimiento: p.fecha_nacimiento,
+    historiaClinica: publicUrl,
+    ultimaVisita: p.ultima_visita,
+    estado: p.estado ?? 'Activo',
+  };
+};
 
 // ─── Constantes y Validaciones ───────────────────────────────────────────────
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -68,10 +72,10 @@ export class PatientService {
     if (statusFilter !== 'Todos') {
       query = query.eq('estado', statusFilter);
     } else {
-      // Si es "Todos", opcionalmente podríamos excluir a los 'Inactivo' por defecto
-      // Pero para mantener la funcionalidad original:
       query = query.neq('estado', 'Inactivo');
     }
+
+    query = query.is('deleted_at', null);
 
     const { data, error, count } = await query
       .order('created_at', { ascending: false })
@@ -89,13 +93,12 @@ export class PatientService {
     };
   }
 
-  /**
-   * Buscar pacientes por nombre o DNI.
-   */
   static async searchPatients(term: string): Promise<Patient[]> {
     const { data, error } = await supabase
       .from('patients')
       .select('*')
+      .is('deleted_at', null)
+      .neq('estado', 'Inactivo')
       .or(`nombre.ilike.%${term}%,dni.ilike.%${term}%`)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -328,20 +331,11 @@ export class PatientService {
     }
   }
 
-  /**
-   * Eliminar la historia clínica de un paciente (Storage + DB).
-   */
   static async deleteClinicalRecord(patientId: string, filePath: string): Promise<boolean> {
     if (!patientId) throw new Error('ID de paciente requerido');
 
-    if (filePath && !filePath.startsWith('http')) {
+    if (filePath) {
       await StorageService.deleteFile(filePath, 'clinical-records');
-    } else if (filePath && filePath.startsWith('http')) {
-      const publicUrlBase = supabase.storage
-        .from('clinical-records')
-        .getPublicUrl('').data.publicUrl;
-      const pathInBucket = filePath.substring(publicUrlBase.length);
-      await StorageService.deleteFile(pathInBucket, 'clinical-records');
     }
 
     const { error } = await supabase
@@ -353,42 +347,15 @@ export class PatientService {
     return true;
   }
 
-  /**
-   * Eliminar un paciente.
-   * IMPORTANTE: También limpia archivos huérfanos de la historia clínica en Supabase Storage
-   * para prevenir fugas de memoria o costos adicionales de almacenamiento.
-   */
   static async deletePatient(id: string): Promise<boolean> {
-    try {
-      // 1. Obtener la URL de la historia clínica antes de borrar el registro
-      const { data: patient } = await supabase
-        .from('patients')
-        .select('historia_clinica_url')
-        .eq('id', id)
-        .single();
-
-      if (patient?.historia_clinica_url) {
-        try {
-          let pathToDelete = patient.historia_clinica_url;
-          if (pathToDelete.startsWith('http')) {
-            const publicUrlBase = supabase.storage
-              .from('clinical-records')
-              .getPublicUrl('').data.publicUrl;
-            pathToDelete = pathToDelete.substring(publicUrlBase.length);
-          }
-          await StorageService.deleteFile(pathToDelete, 'clinical-records');
-        } catch (storageErr) {
-          console.warn('PatientService: No se pudo eliminar la historia clínica vinculada. Error:', storageErr);
-        }
-      }
-    } catch (err) {
-      console.warn('PatientService: Falló la búsqueda de la historia clínica antes de borrar.', err);
-    }
-
-    // 2. Borrar de la base de datos (PostgreSQL)
+    // Implementación de Soft Delete: Legal/Compliance.
+    // Marcamos el paciente como inactivo y seteamos deleted_at.
     const { error } = await supabase
       .from('patients')
-      .delete()
+      .update({
+        estado: 'Inactivo',
+        deleted_at: new Date().toISOString()
+      })
       .eq('id', id);
 
     if (error) throw error;

@@ -59,13 +59,15 @@ serve(async (req) => {
 
         if (!baseUrl || !EVOLUTION_KEY) throw new Error("Missing Evolution API configuration");
 
+        const logPromises: Promise<any>[] = [];
+
         /**
          * Optimiza la eficiencia guardando logs de forma asíncrona (best-effort).
          */
         const logFetch = (url: string, options: any, res: Response) => {
             // Intentamos clonar y procesar sin bloquear el flujo principal
-            res.clone().text().then(resText => {
-                supabase.from('debug_payloads').insert({
+            const p = res.clone().text().then(resText => {
+                return supabase.from('debug_payloads').insert({
                     function_name: 'whatsapp-manager-fetch-log',
                     payload: {
                         url,
@@ -74,8 +76,9 @@ serve(async (req) => {
                         status: res.status,
                         response: resText
                     }
-                }).then(() => { }).catch(e => console.error("Log insertion failed:", e.message));
+                }).catch(e => console.error("Log insertion failed:", e.message));
             }).catch(e => console.error("Response clone failed:", e.message));
+            logPromises.push(p);
         };
 
         const setWebhook = async (name: string) => {
@@ -114,6 +117,7 @@ serve(async (req) => {
         if (action === 'sync_webhook') {
             const res = await setWebhook(instanceName);
             const resData = await res.json().catch(() => ({}));
+            await Promise.allSettled(logPromises);
             return new Response(JSON.stringify({
                 status: res.ok ? 'success' : 'fail',
                 evolutionStatus: res.status,

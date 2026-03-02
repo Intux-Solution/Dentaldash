@@ -70,6 +70,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
 
     // Evita borrar el turno más de una vez al abrir el modal
     const freedRef = useRef(false);
+    const lastInitializedId = useRef<string | null>(null);
 
     // Obtener horarios disponibles (puede excluir el turno actual)
     const getAvailableSlots = useCallback(async (fecha: string, tipoTurno: string, excludeId?: string) => {
@@ -91,19 +92,25 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             setAvailableSlots(slots);
 
             // Clear selected hora if it's no longer available
-            if (selectedHora && !slots.includes(selectedHora)) {
-                setSelectedHora('');
-            }
+            setSelectedHora(prev => {
+                if (prev && !slots.includes(prev)) return '';
+                return prev;
+            });
         } catch (err) {
             setAvailableSlots([]);
         } finally {
             setLoadingAvailability(false);
         }
-    }, [watch('id'), selectedHora, open, services]);
+    }, [watch('id'), open, services, session]);
 
     // Inicializar formulario cuando se abre el modal
     useEffect(() => {
         if (open && turno) {
+            const idTurno = turno.id || turno.eventId || turno._id || '';
+
+            // Prevent re-initialization if the user is already editing this exact appointment
+            if (lastInitializedId.current === idTurno) return;
+            lastInitializedId.current = idTurno;
 
             const startDate = turno.start || turno.startTime;
             let fecha = '', hora = '';
@@ -144,8 +151,6 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
                 return m && m[1] ? m[1].trim() : '';
             })();
 
-            const idTurno = turno.id || turno.eventId || turno._id || '';
-
             reset({
                 id: idTurno,
                 dni: dniInicial,
@@ -185,6 +190,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
     useEffect(() => {
         if (!open) {
             freedRef.current = false;
+            lastInitializedId.current = null;
         }
     }, [open]);
 

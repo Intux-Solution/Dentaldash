@@ -99,13 +99,29 @@ export class AppointmentRepository {
         return data;
     }
 
-    static async updateAppointment(id: string, updates: any) {
+    static async getAppointmentById(id: string) {
         const { data, error } = await supabase
             .from('appointments')
-            .update(updates)
+            .select('*')
             .eq('id', id)
-            .select()
             .single();
+        if (error) throw error;
+        return data;
+    }
+
+    static async updateAppointment(id: string, updates: any) {
+        const { data, error } = await supabase.rpc('update_appointment_safe', {
+            p_appointment_id: id,
+            p_patient_id: updates.patient_id,
+            p_title: updates.title,
+            p_start_time: updates.start_time,
+            p_end_time: updates.end_time,
+            p_duration: updates.duration,
+            p_appointment_type: updates.appointment_type,
+            p_notes: updates.notes,
+            p_status: updates.status
+        });
+
         if (error) throw error;
         return data;
     }

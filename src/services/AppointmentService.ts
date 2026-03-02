@@ -167,6 +167,8 @@ ${data.notas || 'Sin notas adicionales'}
         try {
             const validatedData = UpdateAppointmentSchema.parse({ ...data, id });
 
+            const originalData = await AppointmentRepository.getAppointmentById(id);
+
             const startTime = new Date(validatedData.fechaHora);
             const endTime = addMinutes(startTime, validatedData.duracion || 30);
 
@@ -178,22 +180,26 @@ ${data.notas || 'Sin notas adicionales'}
             };
 
             const updates: Record<string, any> = {
+                patient_id: data.patient_id || originalData.patient_id,
                 title: `${validatedData.tipoTurnoNombre} - ${validatedData.nombre || 'Paciente'}`,
                 start_time: startTime.toISOString(),
                 end_time: endTime.toISOString(),
                 duration: validatedData.duracion,
                 appointment_type: validatedData.tipoTurnoNombre,
                 notes: validatedData.notas,
+                status: validatedData.status ? (statusMap[validatedData.status] || validatedData.status) : originalData.status
             };
 
-            if (validatedData.status) {
-                updates.status = statusMap[validatedData.status] || validatedData.status;
+            const rpcResult = await AppointmentRepository.updateAppointment(id, updates);
+
+            if (!rpcResult.success) {
+                throw new Error(rpcResult.error || "Error: El horario ya no está disponible.");
             }
 
-            const result = await AppointmentRepository.updateAppointment(id, updates);
+            const result = rpcResult.data;
 
             try {
-                if (result.google_event_id) {
+                if (result.google_event_id && session) {
                     const description = this.formatEventDescription(validatedData);
                     await GoogleCalendarService.updateEvent(result.google_event_id, {
                         ...updates,
@@ -202,6 +208,17 @@ ${data.notas || 'Sin notas adicionales'}
                     }, session);
                 }
             } catch (syncError: any) {
+                // Rollback DB to original state
+                await AppointmentRepository.updateAppointment(id, {
+                    patient_id: originalData.patient_id,
+                    title: originalData.title,
+                    start_time: originalData.start_time,
+                    end_time: originalData.end_time,
+                    duration: originalData.duration,
+                    appointment_type: originalData.appointment_type,
+                    notes: originalData.notes,
+                    status: originalData.status
+                });
                 throw new Error(`Fallo al actualizar en Google Calendar: ${syncError.message}`);
             }
 
