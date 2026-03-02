@@ -398,14 +398,15 @@ export class PatientService {
         }
       }
 
+      // V2: Optimizado vía RPC. Esto hace e SELECT DISTINCT en la BDD
+      // previniendo cuellos de botella de memoria al enviar miles de filas al cliente.
       const { data: patientData, error } = await supabase
-        .from('patients')
-        .select('obra_social');
+        .rpc('get_unique_insurances');
 
       if (error) throw error;
 
       const patientInsurances = (patientData ?? [])
-        .map((p) => p.obra_social)
+        .map((p: any) => p.obra_social)
         .filter((val): val is string => !!val && val.trim() !== '');
 
       const combined = [...new Set([...profileInsurances, ...patientInsurances])];

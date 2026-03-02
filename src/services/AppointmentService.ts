@@ -75,10 +75,7 @@ ${data.notas || 'Sin notas adicionales'}
 
     static async createAppointment(data: CreateAppointmentInput, session: Session | null = null): Promise<any> {
         try {
-            const validatedData = CreateAppointmentSchema.parse({
-                ...data,
-                patient_id: data.patient_id || '00000000-0000-0000-0000-000000000000',
-            });
+            const validatedData = CreateAppointmentSchema.parse(data);
 
             let patientId = data.patient_id;
             // Clean DNI strictly: keep only numbers

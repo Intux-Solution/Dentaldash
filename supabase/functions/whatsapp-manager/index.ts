@@ -144,6 +144,7 @@ serve(async (req) => {
                     await supabase.from('profiles').update({ whatsapp_status: 'connected' }).eq('id', tenant_id);
                 }
 
+                await Promise.allSettled(logPromises);
                 return new Response(JSON.stringify({ ...stateData, status: 'connected' }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
@@ -153,6 +154,7 @@ serve(async (req) => {
             const connectUrl = `${baseUrl}/instance/connect/${instanceName}`;
             const res = await fetch(connectUrl, { headers: { 'apikey': EVOLUTION_KEY } });
             const data = await res.json();
+            await Promise.allSettled(logPromises);
             return new Response(JSON.stringify(data), {
                 status: res.status,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -181,6 +183,7 @@ serve(async (req) => {
                 }).eq('id', tenant_id);
             }
 
+            await Promise.allSettled(logPromises);
             return new Response(JSON.stringify(data), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: response.status,
@@ -198,6 +201,7 @@ serve(async (req) => {
                 whatsapp_instance: null
             }).eq('id', tenant_id);
 
+            await Promise.allSettled(logPromises);
             return new Response(JSON.stringify({ status: 'ok' }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 200,
@@ -210,6 +214,7 @@ serve(async (req) => {
                 fetch(`${baseUrl}/webhook/instance/${instanceName}`, { headers: { 'apikey': EVOLUTION_KEY } })
             ]);
 
+            await Promise.allSettled(logPromises);
             return new Response(JSON.stringify({
                 instance: await instRes.json().catch(() => 'error'),
                 webhooks: await webRes.json().catch(() => 'error'),
