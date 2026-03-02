@@ -313,7 +313,7 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
             <div className="mt-2 -mx-6 px-6 py-4 border-t bg-white/80 backdrop-blur">
               <button
                 type="submit"
-                disabled={!isValid || isSubmitting}
+                disabled={!isValid || isSubmitting || !selectedFecha || !selectedHora || !selectedTipoTurnoId}
                 className="w-full bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (

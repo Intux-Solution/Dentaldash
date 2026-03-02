@@ -53,30 +53,7 @@ export const StorageService = {
         try {
             if (!path) return null;
 
-            // 1. Verificar si el archivo realmente existe antes de intentar firmarlo
-            // Esto evita el error 400 (Bad Request) que ensucia la consola
-            const fileName = path.split('/').pop();
-            const folderPath = path.substring(0, path.lastIndexOf('/')) || ''; // Si está en raiz, folder es ''
-
-            const { data: files, error: listError } = await supabase.storage
-                .from(bucket)
-                .list(folderPath, {
-                    search: fileName
-                });
-
-            if (listError) {
-                console.warn('Error checking file existence:', listError);
-                return null;
-            }
-
-            // Si la lista está vacía o el archivo exacto no está, retornamos null
-            const fileExists = files && files.find(f => f.name === fileName);
-            if (!fileExists) {
-                console.warn(`File not found in storage: ${path}`);
-                return null;
-            }
-
-            // 2. Si existe, procedemos a firmar
+            // Directamente firmar la URL, evitar .list() que puede fallar por eventual consistency o cache
             const { data, error } = await supabase.storage
                 .from(bucket)
                 .createSignedUrl(path, expiresIn);

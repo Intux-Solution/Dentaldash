@@ -34,7 +34,7 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
             numeroAfiliado: '',
             alergias: '',
             antecedentes: '',
-            tipoTurnoNombre: '',
+            tipoTurnoNombre: 'Temporal', // Temporary bypass for Zod validaton (requires min 1), overwritten before submit
             fechaHora: new Date().toISOString(), // Temporary bypass, overwritten before submit
             notas: '',
             status: 'Confirmado',
