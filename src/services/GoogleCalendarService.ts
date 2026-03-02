@@ -68,8 +68,19 @@ export class GoogleCalendarService {
      */
     static async fetchWithAuth(url: string, options: any = {}, session: any = null): Promise<Response> {
         let token = this.getProviderToken(session);
+
+        // Si el token es null (ej: F5 o sesión restaurada), intentamos refrescar proactivamente
+        if (!token && session) {
+            console.log("GoogleCalendarService: Token efímero no encontrado. Intentando refrescar...");
+            token = await this.refreshGoogleToken(session);
+        }
+
         if (!token) {
-            return new Response(null, { status: 401, statusText: 'No token available' });
+            console.error("GoogleCalendarService: No fue posible obtener un token. El usuario debe reautenticar.");
+            return new Response(
+                JSON.stringify({ error: { message: 'No token available. Please re-authenticate with Google.' } }),
+                { status: 401, statusText: 'No token available', headers: { 'Content-Type': 'application/json' } }
+            );
         }
 
         // Prepare headers

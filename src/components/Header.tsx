@@ -24,15 +24,16 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
     window.addEventListener('profile:updated', fetchUserData);
     fetchUserData();
 
+    const userId = session.user.id;
     const profileSubscription = supabase
-      .channel('header_profile_changes')
+      .channel(`header_profile_${userId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'profiles',
-          filter: `id=eq.${session.user.id}`
+          filter: `id=eq.${userId}`
         },
         () => {
           fetchUserData();
@@ -42,9 +43,13 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
 
     return () => {
       window.removeEventListener('profile:updated', fetchUserData);
-      supabase.removeChannel(profileSubscription);
+      // Small delay prevents "WebSocket is closed before the connection is established"
+      // if React unmounts immediately during StrictMode or rapid auth changes.
+      setTimeout(() => {
+        supabase.removeChannel(profileSubscription);
+      }, 500);
     };
-  }, [session]);
+  }, [session?.user?.id]);
 
   const fetchUserData = async () => {
     try {
