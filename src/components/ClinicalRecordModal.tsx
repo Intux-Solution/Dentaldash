@@ -13,6 +13,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
   const [signedUrl, setSignedUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [localRawUrl, setLocalRawUrl] = useState(null);
+  const [instantPreviewUrl, setInstantPreviewUrl] = useState(null);
 
   // Sincronizar prop patient con estado local al abrir o cambiar de paciente
   useEffect(() => {
@@ -26,6 +27,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
         patient.historia_clinica_url ||
         ""
       );
+      setInstantPreviewUrl(null); // Limpiar preview temporal al cambiar de paciente
     }
   }, [patient, open]);
 
@@ -67,10 +69,16 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
     }
 
     if (open) {
-      setSignedUrl(null);
-      fetchUrl();
+      if (!instantPreviewUrl) {
+        setSignedUrl(null);
+        fetchUrl();
+      }
     } else {
       setSignedUrl(null);
+      if (instantPreviewUrl) {
+        URL.revokeObjectURL(instantPreviewUrl);
+        setInstantPreviewUrl(null);
+      }
     }
 
     return () => { active = false; };
@@ -81,6 +89,11 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Visualizar inmediatamente para UX perfecta e inmune a tiempos de red
+    const objectUrl = URL.createObjectURL(file);
+    setInstantPreviewUrl(objectUrl);
+    setSignedUrl(objectUrl);
 
     try {
       setLoading(true);
@@ -106,6 +119,9 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
       window.dispatchEvent(new CustomEvent('patients:refresh'));
       e.target.value = '';
     } catch (err) {
+      // Revert if upload fails
+      setInstantPreviewUrl(null);
+      setSignedUrl(null);
       alert("Error al cambiar el archivo: " + err.message);
     } finally {
       setLoading(false);
