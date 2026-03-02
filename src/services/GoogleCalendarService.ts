@@ -62,6 +62,9 @@ export class GoogleCalendarService {
 
             if (error) {
                 console.error("[GoogleCalendarService] Edge function error:", error);
+                if (error.status === 400 || error.status === 401) {
+                    throw new Error("El usuario debe reautenticar (permisos revocados o token inválido)");
+                }
                 return null;
             }
 
@@ -95,7 +98,7 @@ export class GoogleCalendarService {
         if (!token) {
             console.error("[GoogleCalendarService] Fatal: No fue posible obtener un token. El usuario debe reautenticar.");
             return new Response(
-                JSON.stringify({ error: { message: 'No token available. Please re-authenticate with Google.' } }),
+                JSON.stringify({ error: { message: 'El usuario debe reautenticar (permisos revocados o token inválido)' } }),
                 { status: 401, statusText: 'No token available', headers: { 'Content-Type': 'application/json' } }
             );
         }
@@ -112,14 +115,22 @@ export class GoogleCalendarService {
         try {
             let response = await fetch(url, { ...options, headers });
 
-            // If 401 Unauthorized, try to refresh and retry
+            // If 401 Unauthorized, try to refresh and retry ONCE
             if (response.status === 401 && session) {
-                console.warn("Google API 401. Attempting token refresh...");
-                const newToken = await this.refreshGoogleToken(session);
+                console.warn("[GoogleCalendarService] Google API 401. Attempting token refresh...");
+                try {
+                    const newToken = await this.refreshGoogleToken(session);
 
-                if (newToken) {
-                    headers['Authorization'] = `Bearer ${newToken}`;
-                    response = await fetch(url, { ...options, headers });
+                    if (newToken) {
+                        headers['Authorization'] = `Bearer ${newToken}`;
+                        response = await fetch(url, { ...options, headers });
+                    }
+                } catch (refreshErr: any) {
+                    console.error("[GoogleCalendarService] Token refresh failed critically:", refreshErr);
+                    return new Response(
+                        JSON.stringify({ error: { message: refreshErr.message } }),
+                        { status: 401, statusText: 'Re-authentication required', headers: { 'Content-Type': 'application/json' } }
+                    );
                 }
             }
 
