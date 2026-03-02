@@ -104,7 +104,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
 
       setLocalRawUrl(newPath);
       window.dispatchEvent(new CustomEvent('patients:refresh'));
-      e.target.value = null;
+      e.target.value = '';
     } catch (err) {
       alert("Error al cambiar el archivo: " + err.message);
     } finally {

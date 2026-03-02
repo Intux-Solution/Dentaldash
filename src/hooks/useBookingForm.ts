@@ -8,7 +8,10 @@ import { message } from 'antd';
 import { CreateAppointmentSchema, CreateAppointmentPayload } from '../schemas/appointment.schema';
 import { useTurnos } from './useTurnos';
 
+import { useAuth } from '../context/AuthContext';
+
 export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn: () => void) => void) {
+    const { session } = useAuth();
     const { addTurno } = useTurnos();
 
     // Configured React Hook Form
@@ -68,13 +71,13 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
         const fetchConfig = async () => {
             const [days, servs] = await Promise.all([
                 AppointmentService.getActiveWorkingDays(),
-                AppointmentService.getServices()
+                AppointmentService.getServices(session)
             ]);
             setActiveWorkingDays(days);
             setServices(servs);
         };
         fetchConfig();
-    }, []);
+    }, [session]);
 
     // Exponer submit del form al contenedor para el botón del footer del modal
     const formRef = React.useRef<HTMLFormElement>(null);

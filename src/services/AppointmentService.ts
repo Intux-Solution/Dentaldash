@@ -256,6 +256,7 @@ ${data.notas || 'Sin notas adicionales'}
                     throw new Error(`Fallo al borrar el evento en Google Calendar: ${syncError.message}`);
                 }
             }
+            await AppointmentRepository.deleteAppointment(id);
             return true;
         } catch (error) {
             console.error('Error deleting appointment:', error);

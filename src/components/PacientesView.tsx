@@ -9,7 +9,7 @@ import { useAppStore } from '../store/useAppStore';
 
 export default function PacientesView() {
     const { patients, loading: patientsLoading, deletePatient } = usePatients();
-    const { onAddPatient, onViewPatient, onOpenRecord } = useModals();
+    const { openAddPatient, onViewPatient, onOpenRecord } = useModals();
 
     const searchTerm = useAppStore(state => state.searchTerm);
     const setSearchTerm = useAppStore(state => state.setSearchTerm);
@@ -81,7 +81,7 @@ export default function PacientesView() {
                             placeholder="Buscar paciente"
                         />
                         <button
-                            onClick={onAddPatient}
+                            onClick={openAddPatient}
                             disabled={patientsLoading || isSearching}
                             className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                         >

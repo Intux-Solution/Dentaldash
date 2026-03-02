@@ -6,8 +6,10 @@ import { PatientService } from '../services/PatientService';
 import { combineDateTimeToISO } from '../utils/helpers';
 import { message } from 'antd';
 import { UpdateAppointmentSchema, UpdateAppointmentPayload } from '../schemas/appointment.schema';
+import { useAuth } from '../context/AuthContext';
 
 export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void, onSaved?: (saved: any) => void, onDeleted?: (deleted: any) => void) {
+    const { session } = useAuth();
     const {
         register,
         handleSubmit,
@@ -57,13 +59,13 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
         const fetchConfig = async () => {
             const [days, servs] = await Promise.all([
                 AppointmentService.getActiveWorkingDays(),
-                AppointmentService.getServices()
+                AppointmentService.getServices(session)
             ]);
             setActiveWorkingDays(days);
             setServices(servs);
         };
         fetchConfig();
-    }, []);
+    }, [session]);
 
     // Evita borrar el turno más de una vez al abrir el modal
     const freedRef = useRef(false);

@@ -28,9 +28,10 @@ interface AuthedAppProps {
 export default function AuthedApp({ onLogout }: AuthedAppProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { session } = useAuth();
 
   // ─── Datos ────────────────────────────────────────────────────────────────
-  const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients();
+  const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
   const { turnos, refreshTurnos } = useTurnos(null, null);
   const { normalizedPatients } = useNormalizedPatients(patients);
 
