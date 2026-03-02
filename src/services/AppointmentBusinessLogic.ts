@@ -20,6 +20,16 @@ export class AppointmentBusinessLogic {
                 dayBounds.end.toISOString()
             );
 
+            let excludeGoogleEventId = null;
+            if (excludeId) {
+                try {
+                    const appToExclude = await AppointmentRepository.getAppointmentGoogleId(excludeId);
+                    if (appToExclude) excludeGoogleEventId = appToExclude.google_event_id;
+                } catch (e) {
+                    console.error("Error getting google event ID for excluded appointment", e);
+                }
+            }
+
             const googleEvents = await GoogleCalendarService.listEvents(dayBounds.start, dayBounds.end, session);
 
             const nowTime = new Date();
@@ -54,6 +64,7 @@ export class AppointmentBusinessLogic {
                     });
 
                     const isOccupiedGoogle = googleEvents.some((event: any) => {
+                        if (excludeGoogleEventId && event.id === excludeGoogleEventId) return false;
                         if (event.transparency === 'transparent') return false;
 
                         let eventStart, eventEnd;

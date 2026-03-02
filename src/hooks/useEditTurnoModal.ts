@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
+import { formatInTimeZone } from 'date-fns-tz';
 import { combineDateTimeToISO } from '../utils/helpers';
 import { message } from 'antd';
 import { UpdateAppointmentSchema, UpdateAppointmentPayload } from '../schemas/appointment.schema';
@@ -89,8 +90,8 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
 
             setAvailableSlots(slots);
 
-            // Clear selected hora if it's no longer available and not the initially loaded one
-            if (selectedHora && !slots.includes(selectedHora) && !open) {
+            // Clear selected hora if it's no longer available
+            if (selectedHora && !slots.includes(selectedHora)) {
                 setSelectedHora('');
             }
         } catch (err) {
@@ -109,8 +110,8 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             if (startDate) {
                 const d = new Date(startDate);
                 if (!isNaN(d.getTime())) {
-                    fecha = d.toISOString().split('T')[0];
-                    hora = d.toTimeString().slice(0, 5);
+                    fecha = formatInTimeZone(d, 'America/Argentina/Buenos_Aires', 'yyyy-MM-dd');
+                    hora = formatInTimeZone(d, 'America/Argentina/Buenos_Aires', 'HH:mm');
                 }
             }
 
