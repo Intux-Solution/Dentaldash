@@ -177,7 +177,10 @@ export function usePatients(
 
     // ── useMutation: eliminar ─────────────────────────────────────────────────
     const deleteMutation = useMutation<boolean, Error, string>({
-        mutationFn: (id) => PatientService.deletePatient(id),
+        mutationFn: (id) => {
+            if (!userId) throw new Error("No hay sesión activa para eliminar paciente");
+            return PatientService.deletePatient(id, userId);
+        },
         onSuccess: () => {
             invalidate();
         },

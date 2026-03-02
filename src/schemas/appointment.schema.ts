@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const CreateAppointmentSchema = z.object({
-    patient_id: z.string().uuid("El ID del paciente debe ser un UUID válido"),
+    patient_id: z.string().uuid("El ID del paciente debe ser un UUID válido").optional(),
     fechaHora: z.string().refine((val) => !isNaN(Date.parse(val)), {
         message: "La fecha y hora no son válidas",
     }),

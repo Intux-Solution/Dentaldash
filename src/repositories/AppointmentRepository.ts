@@ -56,11 +56,12 @@ export class AppointmentRepository {
         return [...new Set(data.map(item => item.day_of_week))].sort();
     }
 
-    static async findPatientByDni(dni: string) {
+    static async findPatientByDni(dni: string, userId: string) {
         const { data, error } = await supabase
             .from('patients')
             .select('id, dni, email')
             .eq('dni', dni)
+            .eq('user_id', userId)
             .maybeSingle();
 
         if (error) {
@@ -109,7 +110,17 @@ export class AppointmentRepository {
         return data;
     }
 
-    static async updateAppointment(id: string, updates: any) {
+    static async updateAppointment(id: string, updates: any, userId: string) {
+        // First verify ownership
+        const { data: ownCheck, error: ownCheckError } = await supabase
+            .from('appointments')
+            .select('id')
+            .eq('id', id)
+            .eq('user_id', userId)
+            .single();
+
+        if (ownCheckError || !ownCheck) throw new Error("Unauthorized to update this appointment.");
+
         const { data, error } = await supabase.rpc('update_appointment_safe', {
             p_appointment_id: id,
             p_patient_id: updates.patient_id,
@@ -126,11 +137,12 @@ export class AppointmentRepository {
         return data;
     }
 
-    static async updateGoogleEventId(id: string, googleEventId: string) {
+    static async updateGoogleEventId(id: string, googleEventId: string, userId: string) {
         const { error } = await supabase
             .from('appointments')
             .update({ google_event_id: googleEventId })
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', userId);
         if (error) throw error;
     }
 
@@ -159,11 +171,12 @@ export class AppointmentRepository {
         return data || [];
     }
 
-    static async deleteAppointment(id: string) {
+    static async deleteAppointment(id: string, userId: string) {
         const { error } = await supabase
             .from('appointments')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', userId);
         if (error) throw error;
         return true;
     }

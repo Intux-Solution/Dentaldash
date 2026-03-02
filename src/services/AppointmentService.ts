@@ -85,7 +85,7 @@ ${data.notas || 'Sin notas adicionales'}
             const cleanDni = validatedData.dni ? validatedData.dni.replace(/\D/g, '') : undefined;
 
             if (!patientId && cleanDni) {
-                const existingPatient = await AppointmentRepository.findPatientByDni(cleanDni);
+                const existingPatient = await AppointmentRepository.findPatientByDni(cleanDni, session?.user?.id ?? '');
 
                 if (existingPatient?.id) {
                     patientId = existingPatient.id;
@@ -148,11 +148,11 @@ ${data.notas || 'Sin notas adicionales'}
                 }, session);
 
                 if (googleEvent && googleEvent.id) {
-                    await AppointmentRepository.updateGoogleEventId(result.id, googleEvent.id);
+                    await AppointmentRepository.updateGoogleEventId(result.id, googleEvent.id, session?.user?.id ?? '');
                 }
             } catch (syncError: any) {
                 // We rollback the DB insert if Google fails to guarantee syncing consistency
-                await AppointmentRepository.deleteAppointment(result.id);
+                await AppointmentRepository.deleteAppointment(result.id, session?.user?.id ?? '');
                 throw new Error(`Fallo al sincronizar con Google Calendar: ${syncError.message}`);
             }
 
@@ -190,7 +190,7 @@ ${data.notas || 'Sin notas adicionales'}
                 status: validatedData.status ? (statusMap[validatedData.status] || validatedData.status) : originalData.status
             };
 
-            const rpcResult = await AppointmentRepository.updateAppointment(id, updates);
+            const rpcResult = await AppointmentRepository.updateAppointment(id, updates, session?.user?.id ?? '');
 
             if (!rpcResult.success) {
                 throw new Error(rpcResult.error || "Error: El horario ya no está disponible.");
@@ -218,7 +218,7 @@ ${data.notas || 'Sin notas adicionales'}
                     appointment_type: originalData.appointment_type,
                     notes: originalData.notes,
                     status: originalData.status
-                });
+                }, session?.user?.id ?? '');
                 throw new Error(`Fallo al actualizar en Google Calendar: ${syncError.message}`);
             }
 
@@ -250,11 +250,12 @@ ${data.notas || 'Sin notas adicionales'}
                     const googleEvent = await GoogleCalendarService.createEvent(eventData, session);
 
                     if (googleEvent && googleEvent.id) {
-                        await AppointmentRepository.updateGoogleEventId(appt.id, googleEvent.id);
+                        await AppointmentRepository.updateGoogleEventId(appt.id, googleEvent.id, session?.user?.id ?? '');
                     }
                 } catch (e: any) {
-                    // We throw instead of swallow to surface this up to the caller
-                    throw new Error(`Sincronización fallida para el turno ${appt.id}: ${e.message}`);
+                    // Log error but CONTINUE with the next appointment to prevent a domino effect block
+                    console.error(`Sincronización fallida para el turno ${appt.id}: ${e.message}`);
+                    continue;
                 }
             }
         } catch (error) {
@@ -273,7 +274,7 @@ ${data.notas || 'Sin notas adicionales'}
                     throw new Error(`Fallo al borrar el evento en Google Calendar: ${syncError.message}`);
                 }
             }
-            await AppointmentRepository.deleteAppointment(id);
+            await AppointmentRepository.deleteAppointment(id, session?.user?.id ?? '');
             return true;
         } catch (error) {
             console.error('Error deleting appointment:', error);

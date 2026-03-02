@@ -37,8 +37,7 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
             tipoTurnoNombre: 'Temporal', // Temporary bypass for Zod validaton (requires min 1), overwritten before submit
             fechaHora: new Date().toISOString(), // Temporary bypass, overwritten before submit
             notas: '',
-            status: 'Confirmado',
-            patient_id: '00000000-0000-0000-0000-000000000000'
+            status: 'Confirmado'
         },
         mode: 'onChange' // Triggers validation on change
     });
@@ -140,7 +139,7 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
             } else {
                 // Form states remains as user typed for new patient
                 setPatientId(null);
-                setValue('patient_id', '00000000-0000-0000-0000-000000000000');
+                setValue('patient_id', undefined);
                 setPatientFound(false);
                 setPatientNotice('Paciente nuevo: se creará automáticamente al confirmar.');
             }

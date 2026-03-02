@@ -8,7 +8,7 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
@@ -45,32 +45,37 @@ serve(async (req) => {
         })
         const docs = await splitter.createDocuments([text])
 
-        // 4. Generate Embeddings and Insert
+        // 4. Generate Embeddings (Batched) and Insert
         const configuration = new Configuration({ apiKey: OPENAI_API_KEY })
         const openai = new OpenAIApi(configuration)
 
-        for (const doc of docs) {
-            const embeddingResponse = await openai.createEmbedding({
-                model: "text-embedding-3-small",
-                input: doc.pageContent,
-            })
+        const inputs = docs.map((doc: any) => doc.pageContent)
 
-            const [{ embedding }] = embeddingResponse.data.data
+        const embeddingResponse = await openai.createEmbedding({
+            model: "text-embedding-3-small",
+            input: inputs,
+        })
 
-            await supabase.from('tenant_documents').insert({
-                content: doc.pageContent,
-                metadata: { source: file_path },
-                embedding: embedding,
-                tenant_id: tenant_id
-            })
-        }
+        const embeddings = embeddingResponse.data.data
+
+        // 5. Batch Insert to Supabase
+        const rowsToInsert = docs.map((doc: any, index: number) => ({
+            content: doc.pageContent,
+            metadata: { source: file_path },
+            embedding: embeddings[index].embedding,
+            tenant_id: tenant_id
+        }))
+
+        const { error: insertError } = await supabase.from('tenant_documents').insert(rowsToInsert)
+
+        if (insertError) throw insertError
 
         return new Response(JSON.stringify({ message: 'Success' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200,
         })
 
-    } catch (error) {
+    } catch (error: any) {
         return new Response(JSON.stringify({ error: error.message }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 500,

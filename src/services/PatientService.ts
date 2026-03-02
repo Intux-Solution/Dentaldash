@@ -310,6 +310,7 @@ export class PatientService {
         .from('patients')
         .update(updates)
         .eq('id', id)
+        .eq('user_id', userId)
         .select()
         .single();
 
@@ -331,8 +332,17 @@ export class PatientService {
     }
   }
 
-  static async deleteClinicalRecord(patientId: string, filePath: string): Promise<boolean> {
+  static async deleteClinicalRecord(patientId: string, filePath: string, userId: string): Promise<boolean> {
     if (!patientId) throw new Error('ID de paciente requerido');
+
+    // Security check before deleting bucket data
+    const { data: ownCheck, error: ownCheckError } = await supabase
+      .from('patients')
+      .select('id')
+      .eq('id', patientId)
+      .eq('user_id', userId)
+      .single();
+    if (ownCheckError || !ownCheck) throw new Error("Unauthorized to update this patient.");
 
     if (filePath) {
       await StorageService.deleteFile(filePath, 'clinical-records');
@@ -341,13 +351,14 @@ export class PatientService {
     const { error } = await supabase
       .from('patients')
       .update({ historia_clinica_url: null })
-      .eq('id', patientId);
+      .eq('id', patientId)
+      .eq('user_id', userId);
 
     if (error) throw error;
     return true;
   }
 
-  static async deletePatient(id: string): Promise<boolean> {
+  static async deletePatient(id: string, userId: string): Promise<boolean> {
     // Implementación de Soft Delete: Legal/Compliance.
     // Marcamos el paciente como inactivo y seteamos deleted_at.
     const { error } = await supabase
@@ -356,7 +367,8 @@ export class PatientService {
         estado: 'Inactivo',
         deleted_at: new Date().toISOString()
       })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
     if (error) throw error;
     return true;
