@@ -72,7 +72,6 @@ export default function LoginView({ onSuccess }) {
                             scopes: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.file',
                             queryParams: {
                               access_type: 'offline',
-                              prompt: 'consent',
                             },
                           },
                         });

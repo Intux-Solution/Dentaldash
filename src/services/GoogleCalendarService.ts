@@ -25,8 +25,26 @@ export class GoogleCalendarService {
      */
     static async refreshGoogleToken(session) {
         try {
-            const refreshToken = this.getRefreshToken(session);
-            if (!refreshToken) return null;
+            let refreshToken = this.getRefreshToken(session);
+
+            // Si el token no está en la sesión efímera (por ej. recarga F5), 
+            // lo buscamos en la base de datos (guardado previamente por AuthContext)
+            if (!refreshToken && session?.user?.id) {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('google_refresh_token')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (!error && data?.google_refresh_token) {
+                    refreshToken = data.google_refresh_token;
+                }
+            }
+
+            if (!refreshToken) {
+                console.warn("GoogleCalendarService: No refresh token available in session or DB.");
+                return null;
+            }
 
             const { data, error } = await supabase.functions.invoke('google-token-refresh', {
                 body: { refresh_token: refreshToken }
