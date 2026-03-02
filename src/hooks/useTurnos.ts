@@ -18,7 +18,7 @@ export function useTurnos(fromDate: string | null = null, toDate: string | null 
         isAdding,
         isUpdating,
         isDeleting
-    } = useAppointmentsMutations(fromDate, toDate);
+    } = useAppointmentsMutations(fromDate, toDate, session);
 
     return {
         turnos,

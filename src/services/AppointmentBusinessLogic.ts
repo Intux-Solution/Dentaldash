@@ -5,7 +5,7 @@ import { addMinutes, isAfter, isBefore } from 'date-fns';
 import { createLocalMidday, getDayBounds, formatTimeAR, isSlotWithinRange } from '../utils/dateUtils';
 
 export class AppointmentBusinessLogic {
-    static async getAvailableSlots(date: string, durationMinutes: number, excludeId: string | null = null) {
+    static async getAvailableSlots(date: string, durationMinutes: number, excludeId: string | null = null, session: any = null) {
         try {
             const [yStr, mStr, dStr] = date.split('-');
             const inputDate = createLocalMidday(yStr, mStr, dStr);
@@ -20,7 +20,7 @@ export class AppointmentBusinessLogic {
                 dayBounds.end.toISOString()
             );
 
-            const googleEvents = await GoogleCalendarService.listEvents(dayBounds.start, dayBounds.end);
+            const googleEvents = await GoogleCalendarService.listEvents(dayBounds.start, dayBounds.end, session);
 
             const nowTime = new Date();
             const minTimeForAppt = addMinutes(nowTime, 30);

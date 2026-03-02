@@ -33,8 +33,8 @@ export class AppointmentService {
         }
     }
 
-    static async getAvailableSlots(date: string, durationMinutes: number, excludeId: string | null = null) {
-        return await AppointmentBusinessLogic.getAvailableSlots(date, durationMinutes, excludeId);
+    static async getAvailableSlots(date: string, durationMinutes: number, excludeId: string | null = null, session: Session | null = null) {
+        return await AppointmentBusinessLogic.getAvailableSlots(date, durationMinutes, excludeId, session);
     }
 
     static async getServices(session: Session | null = null) {
@@ -73,7 +73,7 @@ ${data.notas || 'Sin notas adicionales'}
         `.trim();
     }
 
-    static async createAppointment(data: CreateAppointmentInput): Promise<any> {
+    static async createAppointment(data: CreateAppointmentInput, session: Session | null = null): Promise<any> {
         try {
             const validatedData = CreateAppointmentSchema.parse({
                 ...data,
@@ -145,7 +145,7 @@ ${data.notas || 'Sin notas adicionales'}
                     title: appointment.title,
                     patientEmail: data.email || null,
                     notes: description
-                });
+                }, session);
 
                 if (googleEvent && googleEvent.id) {
                     await AppointmentRepository.updateGoogleEventId(result.id, googleEvent.id);
@@ -163,7 +163,7 @@ ${data.notas || 'Sin notas adicionales'}
         }
     }
 
-    static async updateAppointment(id: string, data: any): Promise<any> {
+    static async updateAppointment(id: string, data: any, session: Session | null = null): Promise<any> {
         try {
             const validatedData = UpdateAppointmentSchema.parse({ ...data, id });
 
@@ -199,7 +199,7 @@ ${data.notas || 'Sin notas adicionales'}
                         ...updates,
                         patientEmail: validatedData.email,
                         notes: description
-                    });
+                    }, session);
                 }
             } catch (syncError: any) {
                 throw new Error(`Fallo al actualizar en Google Calendar: ${syncError.message}`);
@@ -246,12 +246,12 @@ ${data.notas || 'Sin notas adicionales'}
         }
     }
 
-    static async deleteAppointment(id: string): Promise<boolean> {
+    static async deleteAppointment(id: string, session: Session | null = null): Promise<boolean> {
         try {
             const appointment = await AppointmentRepository.getAppointmentGoogleId(id);
             if (appointment?.google_event_id) {
                 try {
-                    await GoogleCalendarService.deleteEvent(appointment.google_event_id);
+                    await GoogleCalendarService.deleteEvent(appointment.google_event_id, session);
                 } catch (syncError: any) {
                     throw new Error(`Fallo al borrar el evento en Google Calendar: ${syncError.message}`);
                 }

@@ -4,13 +4,13 @@ import { message } from 'antd';
 import { turnosQueryKey } from './useAppointmentsQuery';
 import { Appointment } from '../types/appointments';
 
-export function useAppointmentsMutations(fromDate: string | null = null, toDate: string | null = null) {
+export function useAppointmentsMutations(fromDate: string | null = null, toDate: string | null = null, session: any = null) {
     const queryClient = useQueryClient();
     const currentQueryKey = turnosQueryKey(fromDate, toDate);
 
     const addMutation = useMutation({
         mutationFn: async (data: CreateAppointmentInput) => {
-            return await AppointmentService.createAppointment(data);
+            return await AppointmentService.createAppointment(data, session);
         },
         onMutate: async (newAppointment) => {
             // Cancel any outgoing refetches so they don't overwrite optimistic update
@@ -54,7 +54,7 @@ export function useAppointmentsMutations(fromDate: string | null = null, toDate:
 
     const updateMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string, data: UpdateAppointmentInput }) => {
-            return await AppointmentService.updateAppointment(id, data);
+            return await AppointmentService.updateAppointment(id, data, session);
         },
         onMutate: async ({ id, data }) => {
             await queryClient.cancelQueries({ queryKey: currentQueryKey });
@@ -91,7 +91,7 @@ export function useAppointmentsMutations(fromDate: string | null = null, toDate:
 
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
-            return await AppointmentService.deleteAppointment(id);
+            return await AppointmentService.deleteAppointment(id, session);
         },
         onMutate: async (id) => {
             await queryClient.cancelQueries({ queryKey: currentQueryKey });
