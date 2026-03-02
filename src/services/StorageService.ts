@@ -53,16 +53,30 @@ export const StorageService = {
         try {
             if (!path) return null;
 
-            // Directamente firmar la URL, evitar .list() que puede fallar por eventual consistency o cache
-            const { data, error } = await supabase.storage
-                .from(bucket)
-                .createSignedUrl(path, expiresIn);
+            // Debido a "Eventual Consistency" en Supabase, el archivo puede no estar listo 
+            // instantáneamente para firmar tras la subida. Agregamos un retry mechanism.
+            let attempt = 0;
+            const maxAttempts = 3;
 
-            if (error) {
-                console.error('Error getting signed URL:', error);
-                return null;
+            while (attempt < maxAttempts) {
+                const { data, error } = await supabase.storage
+                    .from(bucket)
+                    .createSignedUrl(path, expiresIn);
+
+                if (!error && data?.signedUrl) {
+                    return data.signedUrl;
+                }
+
+                attempt++;
+                if (attempt < maxAttempts) {
+                    // Esperar (500ms, 1000ms, etc) antes de reintentar
+                    await new Promise(resolve => setTimeout(resolve, attempt * 500));
+                } else {
+                    console.error('Error getting signed URL after retries:', error);
+                    return null;
+                }
             }
-            return data.signedUrl;
+            return null;
         } catch (error) {
             // Ignore abort errors (component unmounted or rapid changes)
             if (error.message && (error.message.includes('aborted') || error.name === 'AbortError')) {
