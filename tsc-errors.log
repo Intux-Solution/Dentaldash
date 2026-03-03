@@ -1,0 +1,215 @@
+src/components/AddPatientModal.tsx(10,23): error TS7031: Binding element 'error' implicitly has an 'any' type.
+src/components/AddPatientModal.tsx(13,19): error TS7006: Parameter 'hasError' implicitly has an 'any' type.
+src/components/AddPatientModal.tsx(19,49): error TS7031: Binding element 'openFlag' implicitly has an 'any' type.
+src/components/AddPatientModal.tsx(19,59): error TS7031: Binding element 'onClose' implicitly has an 'any' type.
+src/components/AddPatientModal.tsx(19,68): error TS7031: Binding element 'onCreate' implicitly has an 'any' type.
+src/components/AddPatientModal.tsx(47,29): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/components/AddPatientModal.tsx(49,33): error TS2339: Property 'focus' does not exist on type 'never'.
+src/components/AddPatientModal.tsx(53,58): error TS2339: Property 'value' does not exist on type 'never'.
+src/components/AddPatientModal.tsx(55,33): error TS2339: Property 'focus' does not exist on type 'never'.
+src/components/AddPatientModal.tsx(67,27): error TS7006: Parameter 'validData' implicitly has an 'any' type.
+src/components/AddPatientModal.tsx(85,31): error TS18046: 'err' is of type 'unknown'.
+src/components/AddPatientModal.tsx(196,32): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/components/AddPatientModal.tsx(262,58): error TS2339: Property 'click' does not exist on type 'never'.
+src/components/AddPatientModal.tsx(279,64): error TS2339: Property 'name' does not exist on type 'never'.
+src/components/BookingModal.tsx(5,40): error TS7031: Binding element 'open' implicitly has an 'any' type.
+src/components/BookingModal.tsx(5,46): error TS7031: Binding element 'onClose' implicitly has an 'any' type.
+src/components/BookingModal.tsx(5,55): error TS7031: Binding element 'onSuccess' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(10,23): error TS7031: Binding element 'error' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(13,19): error TS7006: Parameter 'hasError' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(20,18): error TS7006: Parameter 'val' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(22,44): error TS7031: Binding element 'open' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(22,50): error TS7031: Binding element 'patient' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(22,59): error TS7031: Binding element 'onClose' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(22,68): error TS7031: Binding element 'onSaved' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(22,77): error TS7031: Binding element 'onBack' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(75,29): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(85,27): error TS7006: Parameter 'validData' implicitly has an 'any' type.
+src/components/EditPatientModal.tsx(95,61): error TS2339: Property 'name' does not exist on type 'never'.
+src/components/EditPatientModal.tsx(108,19): error TS18046: 'err' is of type 'unknown'.
+src/components/EditPatientModal.tsx(119,27): error TS2339: Property 'name' does not exist on type 'never'.
+src/components/EditPatientModal.tsx(249,32): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/components/EditTurnoModal.tsx(8,42): error TS7031: Binding element 'open' implicitly has an 'any' type.
+src/components/EditTurnoModal.tsx(8,48): error TS7031: Binding element 'turno' implicitly has an 'any' type.
+src/components/EditTurnoModal.tsx(8,55): error TS7031: Binding element 'onClose' implicitly has an 'any' type.
+src/components/EditTurnoModal.tsx(8,64): error TS7031: Binding element 'onSaved' implicitly has an 'any' type.
+src/components/EditTurnoModal.tsx(8,73): error TS7031: Binding element 'onDeleted' implicitly has an 'any' type.
+src/components/EditTurnoModal.tsx(8,84): error TS7031: Binding element 'onBack' implicitly has an 'any' type.
+src/components/Header.tsx(8,34): error TS7031: Binding element 'title' implicitly has an 'any' type.
+src/components/Header.tsx(8,41): error TS7031: Binding element 'setSidebarOpen' implicitly has an 'any' type.
+src/components/Header.tsx(8,57): error TS7031: Binding element 'onLogout' implicitly has an 'any' type.
+src/components/Header.tsx(91,9): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/InsuranceAutocomplete.tsx(8,49): error TS7031: Binding element 'value' implicitly has an 'any' type.
+src/components/InsuranceAutocomplete.tsx(8,56): error TS7031: Binding element 'onChange' implicitly has an 'any' type.
+src/components/InsuranceAutocomplete.tsx(8,66): error TS7031: Binding element 'disabled' implicitly has an 'any' type.
+src/components/InsuranceAutocomplete.tsx(8,76): error TS7031: Binding element 'placeholder' implicitly has an 'any' type.
+src/components/InsuranceAutocomplete.tsx(20,32): error TS2345: Argument of type 'string[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'string[]' is not assignable to type 'never[]'.
+    Type 'string' is not assignable to type 'never'.
+src/components/InsuranceAutocomplete.tsx(33,22): error TS2339: Property 'toLowerCase' does not exist on type 'never'.
+src/components/InsuranceAutocomplete.tsx(34,22): error TS2339: Property 'toLowerCase' does not exist on type 'never'.
+src/components/InsuranceAutocomplete.tsx(44,37): error TS7006: Parameter 'event' implicitly has an 'any' type.
+src/components/InsuranceAutocomplete.tsx(45,61): error TS2339: Property 'contains' does not exist on type 'never'.
+src/components/InsuranceAutocomplete.tsx(53,27): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/components/LoginView.tsx(8,37): error TS7031: Binding element 'onSuccess' implicitly has an 'any' type.
+src/components/LoginView.tsx(81,34): error TS18046: 'err' is of type 'unknown'.
+src/components/OdontogramView.tsx(92,80): error TS18047: 'patient' is possibly 'null'.
+src/components/OdontogramView.tsx(94,66): error TS18047: 'patient' is possibly 'null'.
+src/components/OdontogramView.tsx(198,53): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/OdontogramView.tsx(203,66): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/OdontogramView.tsx(247,97): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/OdontogramView.tsx(262,81): error TS2339: Property 'created_at' does not exist on type 'never'.
+src/components/OdontogramView.tsx(274,106): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/OdontogramView.tsx(284,64): error TS2339: Property 'tooth_number' does not exist on type 'never'.
+src/components/OdontogramView.tsx(286,91): error TS2339: Property 'tooth_number' does not exist on type 'never'.
+src/components/OdontogramView.tsx(289,112): error TS2339: Property 'procedure_type' does not exist on type 'never'.
+src/components/OdontogramView.tsx(291,133): error TS2339: Property 'description' does not exist on type 'never'.
+src/components/PatientProfileModal.tsx(8,47): error TS7031: Binding element 'open' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(8,53): error TS7031: Binding element 'patient' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(8,62): error TS7031: Binding element 'onClose' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(8,71): error TS7031: Binding element 'onEdit' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(8,79): error TS7031: Binding element 'onDelete' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(8,89): error TS7031: Binding element 'onMessage' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(8,100): error TS7031: Binding element 'onOpenRecord' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(22,20): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(39,21): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(39,24): error TS7006: Parameter 'fieldNames' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(62,27): error TS7006: Parameter 'estado' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(86,43): error TS18046: 'e' is of type 'unknown'.
+src/components/PatientProfileModal.tsx(90,28): error TS7031: Binding element 'Icon' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(90,34): error TS7031: Binding element 'label' implicitly has an 'any' type.
+src/components/PatientProfileModal.tsx(90,41): error TS7031: Binding element 'value' implicitly has an 'any' type.
+src/components/PatientTable.tsx(19,69): error TS2339: Property 'id' does not exist on type 'never'.
+src/components/PatientTable.tsx(147,89): error TS2339: Property 'nombre' does not exist on type 'never'.
+src/components/settings/FaqsTab.tsx(6,20): error TS7031: Binding element 'faq' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(6,25): error TS7031: Binding element 'onUpdate' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(6,35): error TS7031: Binding element 'onDelete' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(71,35): error TS7031: Binding element 'tenant' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(71,43): error TS7031: Binding element 'faqs' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(71,49): error TS7031: Binding element 'setFaqs' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(91,21): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(96,54): error TS18046: 'err' is of type 'unknown'.
+src/components/settings/FaqsTab.tsx(100,36): error TS7006: Parameter 'faqId' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(100,43): error TS7006: Parameter 'updates' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(104,21): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(104,38): error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(110,36): error TS7006: Parameter 'id' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(114,21): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(114,41): error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/components/settings/FaqsTab.tsx(117,55): error TS18046: 'err' is of type 'unknown'.
+src/components/settings/FaqsTab.tsx(148,27): error TS7006: Parameter 'faq' implicitly has an 'any' type.
+src/components/settings/InsurancesTab.tsx(4,41): error TS7031: Binding element 'profile' implicitly has an 'any' type.
+src/components/settings/InsurancesTab.tsx(4,50): error TS7031: Binding element 'handleProfileChange' implicitly has an 'any' type.
+src/components/settings/InsurancesTab.tsx(4,71): error TS7031: Binding element 'handleAutoSaveProfile' implicitly has an 'any' type.
+src/components/settings/InsurancesTab.tsx(15,33): error TS7006: Parameter 'index' implicitly has an 'any' type.
+src/components/settings/InsurancesTab.tsx(16,67): error TS7006: Parameter '_' implicitly has an 'any' type.
+src/components/settings/InsurancesTab.tsx(16,70): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+src/components/settings/InsurancesTab.tsx(27,59): error TS7006: Parameter 'ins' implicitly has an 'any' type.
+src/components/settings/InsurancesTab.tsx(27,64): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/components/settings/ProfileTab.tsx(23,34): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/components/settings/ServicesTab.tsx(4,39): error TS7031: Binding element 'profile' implicitly has an 'any' type.
+src/components/settings/ServicesTab.tsx(4,48): error TS7031: Binding element 'handleProfileChange' implicitly has an 'any' type.
+src/components/settings/ServicesTab.tsx(4,69): error TS7031: Binding element 'handleAutoSaveProfile' implicitly has an 'any' type.
+src/components/settings/ServicesTab.tsx(18,33): error TS7006: Parameter 'index' implicitly has an 'any' type.
+src/components/settings/ServicesTab.tsx(19,54): error TS7006: Parameter '_' implicitly has an 'any' type.
+src/components/settings/ServicesTab.tsx(19,57): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+src/components/settings/ServicesTab.tsx(32,48): error TS7006: Parameter 'service' implicitly has an 'any' type.
+src/components/settings/ServicesTab.tsx(32,57): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/components/SettingsView.tsx(18,24): error TS2345: Argument of type 'Session | null' is not assignable to parameter of type 'SetStateAction<null>'.
+  Type 'Session' is not assignable to type 'SetStateAction<null>'.
+    Type 'Session' provides no match for the signature '(prevState: null): null'.
+src/components/Sidebar.tsx(6,35): error TS7031: Binding element 'sidebarOpen' implicitly has an 'any' type.
+src/components/Sidebar.tsx(6,48): error TS7031: Binding element 'setSidebarOpen' implicitly has an 'any' type.
+src/components/Sidebar.tsx(6,64): error TS7031: Binding element 'onLogout' implicitly has an 'any' type.
+src/components/StatsCard.tsx(3,37): error TS7031: Binding element 'title' implicitly has an 'any' type.
+src/components/StatsCard.tsx(3,44): error TS7031: Binding element 'value' implicitly has an 'any' type.
+src/components/StatsCard.tsx(3,51): error TS7031: Binding element 'color' implicitly has an 'any' type.
+src/components/TurnoDetailsModal.tsx(5,45): error TS7031: Binding element 'open' implicitly has an 'any' type.
+src/components/TurnoDetailsModal.tsx(5,51): error TS7031: Binding element 'turno' implicitly has an 'any' type.
+src/components/TurnoDetailsModal.tsx(5,58): error TS7031: Binding element 'onClose' implicitly has an 'any' type.
+src/components/TurnoDetailsModal.tsx(5,67): error TS7031: Binding element 'onEdit' implicitly has an 'any' type.
+src/components/TurnoDetailsModal.tsx(5,75): error TS7031: Binding element 'onDelete' implicitly has an 'any' type.
+src/components/TurnoDetailsModal.tsx(13,27): error TS7006: Parameter 'dateTimeStr' implicitly has an 'any' type.
+src/components/TurnoDetailsModal.tsx(92,22): error TS2345: Argument of type 'Patient | null' is not assignable to parameter of type 'SetStateAction<null>'.
+  Type 'Patient' is not assignable to type 'SetStateAction<null>'.
+    Type 'Patient' provides no match for the signature '(prevState: null): null'.
+src/components/TurnoDetailsModal.tsx(110,19): error TS7006: Parameter 'v' implicitly has an 'any' type.
+src/components/TurnoDetailsModal.tsx(113,18): error TS2339: Property 'nombre' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(114,18): error TS2339: Property 'name' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(119,28): error TS2339: Property 'telefono' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(119,49): error TS2339: Property 'phone' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(120,28): error TS2339: Property 'email' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(122,33): error TS2339: Property 'obraSocial' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(122,56): error TS2339: Property 'insurance' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(123,37): error TS2339: Property 'numeroAfiliado' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(123,64): error TS2339: Property 'affiliateNumber' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(124,31): error TS2339: Property 'alergias' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(124,52): error TS2339: Property 'allergies' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(125,35): error TS2339: Property 'antecedentes' does not exist on type 'never'.
+src/components/TurnoDetailsModal.tsx(125,60): error TS2339: Property 'background' does not exist on type 'never'.
+src/hooks/useModals.tsx(48,38): error TS7006: Parameter 'patient' implicitly has an 'any' type.
+src/hooks/useModals.tsx(53,42): error TS7006: Parameter 'patient' implicitly has an 'any' type.
+src/hooks/useModals.tsx(65,37): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/hooks/useModals.tsx(73,50): error TS7006: Parameter 'patientData' implicitly has an 'any' type.
+src/hooks/useModals.tsx(78,14): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/hooks/useModals.tsx(100,36): error TS7006: Parameter 'turno' implicitly has an 'any' type.
+src/hooks/useModals.tsx(105,47): error TS7006: Parameter 'turno' implicitly has an 'any' type.
+src/hooks/useModals.tsx(134,39): error TS7006: Parameter 'deletedTurno' implicitly has an 'any' type.
+src/hooks/useModals.tsx(141,55): error TS7006: Parameter 'turno' implicitly has an 'any' type.
+src/hooks/useModals.tsx(148,13): error TS18046: 'err' is of type 'unknown'.
+src/hooks/useModals.tsx(152,45): error TS7006: Parameter 'updatedPatientData' implicitly has an 'any' type.
+src/hooks/useModals.tsx(160,23): error TS18046: 'err' is of type 'unknown'.
+src/hooks/useModals.tsx(164,47): error TS7006: Parameter 'patientData' implicitly has an 'any' type.
+src/hooks/useModals.tsx(172,23): error TS18046: 'err' is of type 'unknown'.
+src/hooks/useModals.tsx(181,53): error TS2339: Property 'id' does not exist on type 'never'.
+src/hooks/useModals.tsx(181,75): error TS2339: Property '_id' does not exist on type 'never'.
+src/hooks/useModals.tsx(184,45): error TS2700: Rest types may only be created from object types.
+src/hooks/useModals.tsx(187,74): error TS2339: Property 'historiaUrl' does not exist on type 'never'.
+src/hooks/useModals.tsx(196,38): error TS2339: Property 'id' does not exist on type 'never'.
+src/hooks/useModals.tsx(196,58): error TS2339: Property 'eventId' does not exist on type 'never'.
+src/hooks/useModals.tsx(196,83): error TS2339: Property '_id' does not exist on type 'never'.
+src/hooks/useNormalizedPatients.ts(4,25): error TS7006: Parameter 'raw' implicitly has an 'any' type.
+src/hooks/useNormalizedPatients.ts(27,39): error TS7006: Parameter 'patients' implicitly has an 'any' type.
+src/hooks/useNormalizedPatients.ts(31,23): error TS7006: Parameter 'obj' implicitly has an 'any' type.
+src/hooks/useNormalizedPatients.ts(31,28): error TS7006: Parameter 'fieldNames' implicitly has an 'any' type.
+src/hooks/useOdontogramView.ts(45,47): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/hooks/useOdontogramView.ts(46,49): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/hooks/useOdontogramView.ts(51,26): error TS2345: Argument of type '"Paciente no encontrado"' is not assignable to parameter of type 'SetStateAction<null>'.
+src/hooks/useOdontogramView.ts(55,24): error TS2345: Argument of type 'Patient' is not assignable to parameter of type 'SetStateAction<null>'.
+  Type 'Patient' provides no match for the signature '(prevState: null): null'.
+src/hooks/useOdontogramView.ts(57,24): error TS2345: Argument of type 'any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'.
+src/hooks/useOdontogramView.ts(60,22): error TS2345: Argument of type '"Error al cargar la informaci├│n."' is not assignable to parameter of type 'SetStateAction<null>'.
+src/hooks/useOdontogramView.ts(69,52): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/index.tsx(6,34): error TS2345: Argument of type 'HTMLElement | null' is not assignable to parameter of type 'Container'.
+  Type 'null' is not assignable to type 'Container'.
+src/services/AppointmentService.ts(126,35): error TS2538: Type 'undefined' cannot be used as an index type.
+src/services/EvolutionService.ts(4,22): error TS7006: Parameter 'patientId' implicitly has an 'any' type.
+src/services/EvolutionService.ts(18,22): error TS7031: Binding element 'patient_id' implicitly has an 'any' type.
+src/services/EvolutionService.ts(18,34): error TS7031: Binding element 'tooth_number' implicitly has an 'any' type.
+src/services/EvolutionService.ts(18,48): error TS7031: Binding element 'procedure_type' implicitly has an 'any' type.
+src/services/EvolutionService.ts(18,64): error TS7031: Binding element 'description' implicitly has an 'any' type.
+src/services/EvolutionService.ts(37,23): error TS7006: Parameter 'id' implicitly has an 'any' type.
+src/services/EvolutionService.ts(49,23): error TS7006: Parameter 'id' implicitly has an 'any' type.
+src/services/EvolutionService.ts(49,29): error TS7031: Binding element 'tooth_number' implicitly has an 'any' type.
+src/services/EvolutionService.ts(49,43): error TS7031: Binding element 'procedure_type' implicitly has an 'any' type.
+src/services/EvolutionService.ts(49,59): error TS7031: Binding element 'description' implicitly has an 'any' type.
+src/services/GoogleCalendarService.ts(4,5): error TS7034: Variable 'cachedToken' implicitly has type 'any' in some locations where its type cannot be determined.
+src/services/GoogleCalendarService.ts(11,29): error TS7006: Parameter 'session' implicitly has an 'any' type.
+src/services/GoogleCalendarService.ts(12,13): error TS7005: Variable 'cachedToken' implicitly has an 'any' type.
+src/services/GoogleCalendarService.ts(19,28): error TS7006: Parameter 'session' implicitly has an 'any' type.
+src/services/GoogleCalendarService.ts(26,37): error TS7006: Parameter 'session' implicitly has an 'any' type.
+src/services/PatientService.ts(28,5): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/services/PatientService.ts(184,9): error TS2783: 'patient_id' is specified more than once, so this usage will be overwritten.
+src/services/PatientService.ts(185,9): error TS2783: 'user_id' is specified more than once, so this usage will be overwritten.
+src/services/PatientService.ts(410,18): error TS7006: Parameter 'val' implicitly has an 'any' type.
+src/utils/helpers.ts(5,21): error TS7019: Rest parameter 'a' implicitly has an 'any[]' type.
+src/utils/helpers.ts(14,38): error TS7006: Parameter 'dateStr' implicitly has an 'any' type.
+src/utils/helpers.ts(14,47): error TS7006: Parameter 'timeStr' implicitly has an 'any' type.

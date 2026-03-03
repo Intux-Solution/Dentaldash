@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { FolderOpen, Upload, X, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { StorageService } from "../services/StorageService";
-import { PatientService } from "../services/PatientService";
 import { supabase } from "../config/supabaseClient";
 import ModalShell from "./ModalShell";
+import { Patient } from "../types/database.types";
+import { Session } from "@supabase/supabase-js";
+import { toast } from 'react-hot-toast';
 
 function isPdf(url = "") {
   if (typeof url !== "string") return false;
@@ -11,11 +13,18 @@ function isPdf(url = "") {
   return lowerUrl.includes(".pdf");
 }
 
-export default function ClinicalRecordModal({ open, patient, onClose, session }) {
-  const [signedUrl, setSignedUrl] = useState(null);
+export interface ClinicalRecordModalProps {
+  open: boolean;
+  patient: Patient | null | any; // Falling back to any if patient schema in use differs
+  onClose: () => void;
+  session: Session | null;
+}
+
+export default function ClinicalRecordModal({ open, patient, onClose, session }: ClinicalRecordModalProps) {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [localRawUrl, setLocalRawUrl] = useState(null);
-  const [instantPreviewUrl, setInstantPreviewUrl] = useState(null);
+  const [localRawUrl, setLocalRawUrl] = useState<string | null>(null);
+  const [instantPreviewUrl, setInstantPreviewUrl] = useState<string | null>(null);
 
   // Sincronizar prop patient con estado local al abrir o cambiar de paciente
   useEffect(() => {
@@ -38,32 +47,12 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
     let active = true;
 
     async function fetchUrl() {
-      if (!localRawUrl) {
-        if (active) setSignedUrl(null);
-        return;
-      }
-
-      const isPublicUrl = localRawUrl.startsWith("http://") || localRawUrl.startsWith("https://");
-      if (isPublicUrl) {
-        if (active) setSignedUrl(localRawUrl);
-        return;
-      }
-
-      const isLikelyPath = typeof localRawUrl === 'string' &&
-        localRawUrl.length > 5 &&
-        !localRawUrl.includes(' ') &&
-        !['Sin archivo', 'Sin historia clínica', 'Sin historia clinica', '-'].includes(localRawUrl);
-
-      if (!isLikelyPath) {
-        if (active) setSignedUrl(null);
-        return;
-      }
-
       try {
         if (active) setLoading(true);
-        const url = await StorageService.getSignedUrl(localRawUrl);
+        const url = await StorageService.getValidRecordUrl(localRawUrl as string);
         if (active) setSignedUrl(url);
       } catch (err) {
+        toast.error("Error al cargar el archivo de la historia clínica.");
         console.error("Error fetching signed URL:", err);
       } finally {
         if (active) setLoading(false);
@@ -88,8 +77,8 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
 
   if (!open || !patient) return null;
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files[0];
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
     // Visualizar inmediatamente para UX perfecta e inmune a tiempos de red
@@ -103,8 +92,11 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
       const userId = session?.user?.id;
       if (!userId) throw new Error("No hay sesión activa");
 
-      const newPath = await PatientService.uploadClinicalRecord(file, userId);
+      const newPath = await StorageService.uploadFile(file, 'clinical-records', userId, userId || null);
 
+      if (!newPath) {
+        throw new Error("No se pudo obtener la ruta del archivo subido");
+      }
       if (localRawUrl && !localRawUrl.startsWith('http')) {
         try {
           await StorageService.deleteFile(localRawUrl, 'clinical-records');
@@ -118,11 +110,17 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
       setLocalRawUrl(newPath);
       window.dispatchEvent(new CustomEvent('patients:refresh'));
       e.target.value = '';
-    } catch (err) {
+      toast.success("Archivo subido exitosamente");
+    } catch (err: any) {
       // Revert if upload fails
       setInstantPreviewUrl(null);
       setSignedUrl(null);
-      alert("Error al cambiar el archivo: " + err.message);
+      console.error("Upload error:", err);
+      if (err.message?.includes('violates row-level security policy')) {
+        toast.error("No tienes permisos para subir este archivo.");
+      } else {
+        toast.error("Error al subir el archivo: " + err.message);
+      }
     } finally {
       setLoading(false);
     }

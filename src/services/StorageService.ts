@@ -8,7 +8,7 @@ export const StorageService = {
      * @param {string} path - The path/filename
      * @returns {Promise<string|null>} The full path of the uploaded file
      */
-    async uploadFile(file, bucket = 'clinical-records', path, userId = null) {
+    async uploadFile(file: File, bucket = 'clinical-records', path: string, userId: string | null = null) {
         try {
             if (!file) return null;
 
@@ -49,7 +49,7 @@ export const StorageService = {
      * @param {number} expiresIn - Expiration time in seconds (default: 3600 - 1 hour)
      * @returns {Promise<string|null>} The signed URL
      */
-    async getSignedUrl(path, bucket = 'clinical-records', expiresIn = 3600) {
+    async getSignedUrl(path: string, bucket = 'clinical-records', expiresIn = 3600) {
         try {
             if (!path) return null;
 
@@ -77,7 +77,7 @@ export const StorageService = {
                 }
             }
             return null;
-        } catch (error) {
+        } catch (error: any) {
             // Ignore abort errors (component unmounted or rapid changes)
             if (error.message && (error.message.includes('aborted') || error.name === 'AbortError')) {
                 return null;
@@ -92,7 +92,7 @@ export const StorageService = {
      * @param {string} path - The path of the file to delete
      * @param {string} bucket - The bucket name (default: 'clinical-records')
      */
-    async deleteFile(path, bucket = 'clinical-records') {
+    async deleteFile(path: string, bucket = 'clinical-records') {
         try {
             if (!path) return;
             const { error } = await supabase.storage
@@ -104,5 +104,27 @@ export const StorageService = {
             console.error('Error deleting file from storage:', error);
             throw error;
         }
+    },
+
+    /**
+     * Valida la URL de un registro. Si es pública la devuelve, 
+     * si es un path válido solicita y devuelve una URL firmada.
+     * @param {string} rawUrl - La string cruda desde la base de datos
+     * @returns {Promise<string|null>} URL válida construida
+     */
+    async getValidRecordUrl(rawUrl: string): Promise<string | null> {
+        if (!rawUrl) return null;
+
+        const isPublicUrl = rawUrl.startsWith("http://") || rawUrl.startsWith("https://");
+        if (isPublicUrl) return rawUrl;
+
+        const isLikelyPath = typeof rawUrl === 'string' &&
+            rawUrl.length > 5 &&
+            !rawUrl.includes(' ') &&
+            !['Sin archivo', 'Sin historia clínica', 'Sin historia clinica', '-'].includes(rawUrl);
+
+        if (!isLikelyPath) return null;
+
+        return await this.getSignedUrl(rawUrl);
     }
 };

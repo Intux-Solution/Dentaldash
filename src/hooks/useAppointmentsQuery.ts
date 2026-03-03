@@ -53,12 +53,20 @@ export function useAppointmentsQuery(fromDate: string | null = null, toDate: str
     });
 
     useEffect(() => {
+        const userId = session?.user?.id;
+        if (!userId) return;
+
         // Suscripción al canal de realtime para la tabla appointments
         const channel = supabase
             .channel('appointments-realtime')
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'appointments' },
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'appointments',
+                    filter: `user_id=eq.${userId}`
+                },
                 (payload) => {
                     console.log('Cambio detectado vía Supabase Realtime:', payload);
                     // Invalidamos la query principal para forzar un refetch silencioso
@@ -71,7 +79,7 @@ export function useAppointmentsQuery(fromDate: string | null = null, toDate: str
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [queryClient]);
+    }, [queryClient, session]);
 
     const refreshTurnos = useCallback(() => {
         refetch();

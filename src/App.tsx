@@ -11,6 +11,7 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { Toaster } from 'react-hot-toast';
 
 // Instancia global de QueryClient, creada fuera del componente para evitar re-creaciones
 const queryClient = new QueryClient({
@@ -72,6 +73,7 @@ export default function App() {
     <ErrorBoundary fallbackMessage="Ha ocurrido un error inesperado al cargar la aplicación principal. Por favor, intenta de nuevo.">
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <Toaster position="top-right" />
           <AppContent />
         </AuthProvider>
       </QueryClientProvider>
