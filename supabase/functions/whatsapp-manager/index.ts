@@ -23,9 +23,19 @@ serve(async (req) => {
     const EVOLUTION_URL_RAW = Deno.env.get('EVOLUTION_API_URL')?.trim();
     const EVOLUTION_KEY = Deno.env.get('EVOLUTION_API_KEY')?.trim();
 
+    // ── Fail-fast env validation ──────────────────────────────────────────────
+    // Any missing critical variable returns a 500 immediately with a clear
+    // message that will show verbatim in the Supabase Edge Function logs.
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-        return new Response(JSON.stringify({ error: "Missing Supabase configuration" }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: "Missing Supabase configuration: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required." }), { status: 500, headers: corsHeaders });
     }
+    if (!EVOLUTION_URL_RAW) {
+        return new Response(JSON.stringify({ error: "Missing environment variable: EVOLUTION_API_URL is required but was not set." }), { status: 500, headers: corsHeaders });
+    }
+    if (!EVOLUTION_KEY) {
+        return new Response(JSON.stringify({ error: "Missing environment variable: EVOLUTION_API_KEY is required but was not set." }), { status: 500, headers: corsHeaders });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -54,10 +64,11 @@ serve(async (req) => {
         }
 
         const instanceName = `instance_${tenant_id.split('-')[0]}`
-        const baseUrl = sanitizeUrl(EVOLUTION_URL_RAW || "");
+        const baseUrl = sanitizeUrl(EVOLUTION_URL_RAW);
         const webhookUrl = `${SUPABASE_URL}/functions/v1/chat-webhook`;
 
-        if (!baseUrl || !EVOLUTION_KEY) throw new Error("Missing Evolution API configuration");
+        // baseUrl is guaranteed non-empty here (validated above), but keep the guard for safety
+        if (!baseUrl) throw new Error("EVOLUTION_API_URL resolved to an empty string after sanitization.");
 
         const logPromises: Promise<any>[] = [];
 

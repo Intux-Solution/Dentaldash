@@ -56,9 +56,11 @@ export function useAppointmentsQuery(fromDate: string | null = null, toDate: str
         const userId = session?.user?.id;
         if (!userId) return;
 
-        // Suscripción al canal de realtime para la tabla appointments
+        // Suscripción al canal de realtime para la tabla appointments.
+        // Dep: userId (string) — NOT the whole session object, to avoid
+        // tearing down the WebSocket on every silent JWT refresh.
         const channel = supabase
-            .channel('appointments-realtime')
+            .channel(`appointments-realtime-${userId}`)
             .on(
                 'postgres_changes',
                 {
@@ -79,7 +81,7 @@ export function useAppointmentsQuery(fromDate: string | null = null, toDate: str
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [queryClient, session]);
+    }, [queryClient, session?.user?.id]);
 
     const refreshTurnos = useCallback(() => {
         refetch();
