@@ -164,7 +164,7 @@ export class PatientService {
 
     const uploadedPath = await StorageService.uploadFile(file, 'clinical-records', filePath);
     if (!uploadedPath) throw new Error('No se pudo completar la subida del archivo');
-    
+
     return uploadedPath;
   }
 
@@ -237,23 +237,57 @@ export class PatientService {
         ultima_visita: new Date().toISOString(),
       };
 
-      const { data, error } = await supabase
-        .from('patients')
-        .insert([newPatient])
-        .select()
-        .single();
+      // — 4. Soft Delete Restoration Logic —
+      let existingPatient = null;
+      if (newPatient.dni) {
+        const { data: searchData, error: searchError } = await supabase
+          .from('patients')
+          .select('id')
+          .eq('dni', newPatient.dni)
+          .maybeSingle();
+
+        if (searchError && searchError.code !== 'PGRST116') {
+          throw searchError;
+        }
+        existingPatient = searchData;
+      }
+
+      let response;
+
+      if (existingPatient) {
+        // Restauración (Update)
+        response = await supabase
+          .from('patients')
+          .update({
+            ...newPatient,
+            estado: 'Activo',
+            deleted_at: null
+          })
+          .eq('id', existingPatient.id)
+          .select()
+          .single();
+      } else {
+        // Inserción (Nuevo paciente)
+        response = await supabase
+          .from('patients')
+          .insert([newPatient])
+          .select()
+          .single();
+      }
+
+      const { data, error } = response;
 
       if (error) throw error;
       return mapDbPatient(data);
 
     } catch (errorUnknown: unknown) {
-            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
+      const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
       // Rollback: Si subimos un archivo pero la DB falló, borramos el archivo
       if (historiaClinicaPath) {
         try {
           await StorageService.deleteFile(historiaClinicaPath, 'clinical-records');
         } catch (cleanupErrorUnknown: unknown) {
-            const cleanupError = cleanupErrorUnknown instanceof Error ? cleanupErrorUnknown : new Error(String(cleanupErrorUnknown) || "Ocurrió un error inesperado.");
+          const cleanupError = cleanupErrorUnknown instanceof Error ? cleanupErrorUnknown : new Error(String(cleanupErrorUnknown) || "Ocurrió un error inesperado.");
           console.error('CRITICAL: Failed to rollback file in storage', cleanupError);
         }
       }
@@ -321,7 +355,7 @@ export class PatientService {
       return mapDbPatient(data);
 
     } catch (errorUnknown: unknown) {
-            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
+      const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
       console.error('Error updating patient:', error);
       // Rollback en caso de fallo en DB tras subir archivo
       if (newlyUploadedPath) {
@@ -329,7 +363,7 @@ export class PatientService {
         try {
           await StorageService.deleteFile(newlyUploadedPath, 'clinical-records');
         } catch (cleanupErrorUnknown: unknown) {
-            const cleanupError = cleanupErrorUnknown instanceof Error ? cleanupErrorUnknown : new Error(String(cleanupErrorUnknown) || "Ocurrió un error inesperado.");
+          const cleanupError = cleanupErrorUnknown instanceof Error ? cleanupErrorUnknown : new Error(String(cleanupErrorUnknown) || "Ocurrió un error inesperado.");
           console.error('CRITICAL: Failed to rollback file in storage', cleanupError);
         }
       }
@@ -418,7 +452,7 @@ export class PatientService {
       return combined.sort((a, b) => a.localeCompare(b));
 
     } catch (errorUnknown: unknown) {
-            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
+      const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
       console.error('Error fetching unique insurances:', error);
       return [];
     }
