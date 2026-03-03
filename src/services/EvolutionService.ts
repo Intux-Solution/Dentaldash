@@ -1,7 +1,13 @@
 import { supabase } from '../config/supabaseClient';
 
+interface EvolutionEntry {
+    tooth_number?: string | number | null;
+    procedure_type?: string | null;
+    description?: string | null;
+}
+
 export const EvolutionService = {
-    async getHistory(patientId) {
+    async getHistory(patientId: string) {
         const { data, error } = await supabase
             .from('treatment_history')
             .select('*')
@@ -15,7 +21,7 @@ export const EvolutionService = {
         return data;
     },
 
-    async addEntry({ patient_id, tooth_number, procedure_type, description }) {
+    async addEntry({ patient_id, tooth_number, procedure_type, description }: EvolutionEntry & { patient_id: string }) {
         const { data, error } = await supabase
             .from('treatment_history')
             .insert([{
@@ -34,7 +40,7 @@ export const EvolutionService = {
         return data;
     },
 
-    async deleteEntry(id) {
+    async deleteEntry(id: string) {
         const { error } = await supabase
             .from('treatment_history')
             .delete()
@@ -46,7 +52,7 @@ export const EvolutionService = {
         }
     },
 
-    async updateEntry(id, { tooth_number, procedure_type, description }) {
+    async updateEntry(id: string, { tooth_number, procedure_type, description }: EvolutionEntry) {
         const { data, error } = await supabase
             .from('treatment_history')
             .update({

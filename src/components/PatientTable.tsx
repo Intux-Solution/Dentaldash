@@ -12,7 +12,7 @@ interface PatientTableProps {
 
 export default React.memo(function PatientTable({ patients, onView, onOpenRecord, onDelete, showActions = false }: PatientTableProps) {
   const navigate = useNavigate();
-  const [pendingDelete, setPendingDelete] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {

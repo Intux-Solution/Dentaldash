@@ -1,7 +1,7 @@
 // src/hooks/useNormalizedPatients.js
 import { useMemo } from 'react';
 
-function parseFechaToMs(raw) {
+function parseFechaToMs(raw: unknown) {
   if (!raw) return 0;
   if (raw instanceof Date) return raw.getTime();
   if (typeof raw === 'number') return raw;
@@ -24,11 +24,11 @@ function parseFechaToMs(raw) {
   return 0;
 }
 
-export function useNormalizedPatients(patients) {
+export function useNormalizedPatients(patients: any[]) {
   const normalizedPatients = useMemo(() => {
     const list = Array.isArray(patients) ? patients : [];
 
-    const getField = (obj, fieldNames, defaultValue = '') => {
+    const getField = (obj: any, fieldNames: string[], defaultValue = '') => {
       for (const fieldName of fieldNames) {
         let value = obj?.[fieldName] || obj?.fields?.[fieldName];
 

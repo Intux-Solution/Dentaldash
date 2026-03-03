@@ -7,19 +7,25 @@ import { AddPatientSchema } from '../schemas/patient.schema';
 import { message } from 'antd';
 
 // ─── Helpers visuales ─────────────────────────────────────────────────────────
-const FieldError = ({ error }) =>
+const FieldError = ({ error }: { error?: { message?: string } }) =>
   error ? <p className="mt-1 text-xs text-red-500">{error.message}</p> : null;
 
-const inputCls = (hasError) =>
+const inputCls = (hasError?: any) =>
   `w-full rounded-xl border px-3 py-2 placeholder:text-sm text-sm focus:outline-none focus:ring-0 focus:shadow-none ${hasError
     ? 'border-red-400 bg-red-50'
     : 'border-transparent bg-[#F5F5F5]'
   }`;
 
-export default function AddPatientModal({ open: openFlag, onClose, onCreate }) {
-  const fileInputRef = useRef(null);
-  const attachBtnRef = useRef(null);
-  const [historiaClinicaFile, setHistoriaClinicaFile] = useState(null);
+interface AddPatientModalProps {
+  open: boolean;
+  onClose?: () => void;
+  onCreate?: (data: any) => Promise<void>;
+}
+
+export default function AddPatientModal({ open: openFlag, onClose, onCreate }: AddPatientModalProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachBtnRef = useRef<HTMLButtonElement>(null);
+  const [historiaClinicaFile, setHistoriaClinicaFile] = useState<File | null>(null);
 
   const {
     register,
@@ -44,7 +50,7 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate }) {
   });
 
   // ─── Manejo de archivo (fuera del esquema Zod) ──────────────────────────
-  const handleFileChange = (e) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setHistoriaClinicaFile(e.target.files?.[0] || null);
     try { attachBtnRef.current?.focus({ preventScroll: true }); } catch { }
   };
@@ -64,7 +70,7 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate }) {
   };
 
   // ─── Submit ───────────────────────────────────────────────────────────────
-  const onSubmit = async (validData) => {
+  const onSubmit = async (validData: any) => {
     if (typeof onCreate !== 'function') {
       console.error('[AddPatientModal] onCreate prop is not a function');
       return;
@@ -81,7 +87,8 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate }) {
       handleClose();
       await onCreate(payload);
       message.success('Paciente creado correctamente');
-    } catch (err) {
+    } catch (errUnknown: unknown) {
+      const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
       message.error(`Error: ${err.message || 'No se pudo crear el paciente'}`);
     }
   };
@@ -192,8 +199,8 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate }) {
                 control={control}
                 render={({ field }) => (
                   <InsuranceAutocomplete
-                    value={field.value}
-                    onChange={(e) => field.onChange(e.target.value)}
+                    value={field.value || ''}
+                    onChange={(e: any) => field.onChange(e.target.value)}
                     disabled={isSubmitting}
                     placeholder="Seleccionar..."
                   />

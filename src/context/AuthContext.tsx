@@ -27,7 +27,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     .then(({ error }) => {
                         if (error) console.error('Error saving google refresh token:', error);
                     });
-            } catch (e) {
+            } catch (eUnknown: unknown) {
+            const e = eUnknown instanceof Error ? eUnknown : new Error(String(eUnknown) || "Ocurrió un error inesperado.");
                 // Ignore silent errors
             }
         }

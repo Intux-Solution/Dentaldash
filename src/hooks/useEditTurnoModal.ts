@@ -96,7 +96,8 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
                 if (prev && !slots.includes(prev)) return '';
                 return prev;
             });
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             setAvailableSlots([]);
         } finally {
             setLoadingAvailability(false);
@@ -217,7 +218,8 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             } else {
                 setPatientFound(false);
             }
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             setError('Error al consultar paciente.');
             setPatientFound(false);
         } finally {
@@ -290,7 +292,8 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             if (onSaved) onSaved(saved);
             message.success('Turno guardado con éxito');
             onClose();
-        } catch (err: any) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             const msg = err.message || 'Error al actualizar el turno. Intenta nuevamente.';
             setError(msg);
             message.error(msg);
@@ -305,7 +308,8 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             if (onDeleted) onDeleted(turno);
             message.success('Turno cancelado correctamente');
             onClose();
-        } catch (err: any) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             const msg = err.message || 'Error al cancelar el turno. Intenta nuevamente.';
             setError(msg);
             message.error(msg);

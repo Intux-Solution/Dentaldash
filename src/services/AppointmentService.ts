@@ -27,7 +27,8 @@ export class AppointmentService {
                 tipoTurnoNombre: app.appointment_type,
                 tipoTurno: app.appointment_type,
             }));
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error fetching appointments:', error);
             throw error;
         }
@@ -41,7 +42,8 @@ export class AppointmentService {
         if (!session?.user?.id) return [];
         try {
             return await AppointmentRepository.getServices(session.user.id);
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error fetching services:', error);
             return [];
         }
@@ -50,7 +52,8 @@ export class AppointmentService {
     static async getActiveWorkingDays() {
         try {
             return await AppointmentRepository.getActiveWorkingDays();
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error fetching working days:', error);
             return [1, 2, 3, 4, 5];
         }
@@ -123,7 +126,7 @@ ${data.notas || 'Sin notas adicionales'}
                 appointment_type: validatedData.tipoTurnoNombre,
                 patient_id: patientId,
                 notes: validatedData.notas,
-                status: statusMap[validatedData.status] || 'confirmed'
+                status: (validatedData.status ? statusMap[validatedData.status] : undefined) || 'confirmed'
             };
 
             const rpcResult = await AppointmentRepository.insertAppointmentRPC(appointment);
@@ -147,14 +150,16 @@ ${data.notas || 'Sin notas adicionales'}
                 if (googleEvent && googleEvent.id) {
                     await AppointmentRepository.updateGoogleEventId(result.id, googleEvent.id, session?.user?.id ?? '');
                 }
-            } catch (syncError: any) {
+            } catch (syncErrorUnknown: unknown) {
+            const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
                 // We rollback the DB insert if Google fails to guarantee syncing consistency
                 await AppointmentRepository.deleteAppointment(result.id, session?.user?.id ?? '');
                 throw new Error(`Fallo al sincronizar con Google Calendar: ${syncError.message}`);
             }
 
             return result;
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error creating appointment:', error);
             throw error;
         }
@@ -204,7 +209,8 @@ ${data.notas || 'Sin notas adicionales'}
                         notes: description
                     }, session);
                 }
-            } catch (syncError: any) {
+            } catch (syncErrorUnknown: unknown) {
+            const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
                 // Rollback DB to original state
                 await AppointmentRepository.updateAppointment(id, {
                     patient_id: originalData.patient_id,
@@ -220,7 +226,8 @@ ${data.notas || 'Sin notas adicionales'}
             }
 
             return result;
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error updating appointment:', error);
             throw error;
         }
@@ -249,13 +256,15 @@ ${data.notas || 'Sin notas adicionales'}
                     if (googleEvent && googleEvent.id) {
                         await AppointmentRepository.updateGoogleEventId(appt.id, googleEvent.id, session?.user?.id ?? '');
                     }
-                } catch (e: any) {
+                } catch (eUnknown: unknown) {
+            const e = eUnknown instanceof Error ? eUnknown : new Error(String(eUnknown) || "Ocurrió un error inesperado.");
                     // Log error but CONTINUE with the next appointment to prevent a domino effect block
                     console.error(`Sincronización fallida para el turno ${appt.id}: ${e.message}`);
                     continue;
                 }
             }
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error in syncPendingAppointments:', error);
             throw error;
         }
@@ -267,13 +276,15 @@ ${data.notas || 'Sin notas adicionales'}
             if (appointment?.google_event_id) {
                 try {
                     await GoogleCalendarService.deleteEvent(appointment.google_event_id, session);
-                } catch (syncError: any) {
+                } catch (syncErrorUnknown: unknown) {
+            const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
                     throw new Error(`Fallo al borrar el evento en Google Calendar: ${syncError.message}`);
                 }
             }
             await AppointmentRepository.deleteAppointment(id, session?.user?.id ?? '');
             return true;
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error deleting appointment:', error);
             throw error;
         }

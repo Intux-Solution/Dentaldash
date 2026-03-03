@@ -17,7 +17,7 @@ const mapDbPatient = (p: DbPatientRow): Patient => {
   let publicUrl = p.historia_clinica_url ?? p.historia_clinica ?? null;
   if (publicUrl && !publicUrl.startsWith('http')) {
     const { data } = supabase.storage.from('clinical-records').getPublicUrl(publicUrl);
-    publicUrl = data.publicUrl;
+    publicUrl = data.publicUrl ?? null;
   }
 
   return {
@@ -25,7 +25,7 @@ const mapDbPatient = (p: DbPatientRow): Patient => {
     obraSocial: p.obra_social,
     numeroAfiliado: p.numero_afiliado,
     fechaNacimiento: p.fecha_nacimiento,
-    historiaClinica: publicUrl,
+    historiaClinica: publicUrl ?? undefined,
     ultimaVisita: p.ultima_visita,
     estado: p.estado ?? 'Activo',
   };
@@ -159,15 +159,13 @@ export class PatientService {
     }
 
     const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
+    const fileName = `${crypto.randomUUID()}.${fileExt}`;
     const filePath = `${userId}/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('clinical-records')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-    return filePath;
+    const uploadedPath = await StorageService.uploadFile(file, 'clinical-records', filePath);
+    if (!uploadedPath) throw new Error('No se pudo completar la subida del archivo');
+    
+    return uploadedPath;
   }
 
   /**
@@ -180,14 +178,17 @@ export class PatientService {
   ): Promise<ClinicalRecord> {
     const { data, error } = await supabase
       .from('treatment_history')
-      .insert([{
-        patient_id: patientId,
-        user_id: userId,
-        ...record,
-        odontogram_state: record.odontogram_state
-          ? JSON.stringify(record.odontogram_state)
-          : null,
-      }])
+      .insert([(() => {
+        const { patient_id: _rp, user_id: _ru, odontogram_state, ...rest } = record as any;
+        return {
+          ...rest,
+          patient_id: patientId,
+          user_id: userId,
+          odontogram_state: odontogram_state
+            ? JSON.stringify(odontogram_state)
+            : null,
+        };
+      })()])
       .select()
       .single();
 
@@ -245,12 +246,14 @@ export class PatientService {
       if (error) throw error;
       return mapDbPatient(data);
 
-    } catch (error) {
+    } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
       // Rollback: Si subimos un archivo pero la DB falló, borramos el archivo
       if (historiaClinicaPath) {
         try {
           await StorageService.deleteFile(historiaClinicaPath, 'clinical-records');
-        } catch (cleanupError) {
+        } catch (cleanupErrorUnknown: unknown) {
+            const cleanupError = cleanupErrorUnknown instanceof Error ? cleanupErrorUnknown : new Error(String(cleanupErrorUnknown) || "Ocurrió un error inesperado.");
           console.error('CRITICAL: Failed to rollback file in storage', cleanupError);
         }
       }
@@ -317,14 +320,16 @@ export class PatientService {
       if (error) throw error;
       return mapDbPatient(data);
 
-    } catch (error) {
+    } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
       console.error('Error updating patient:', error);
       // Rollback en caso de fallo en DB tras subir archivo
       if (newlyUploadedPath) {
         console.warn('Rolling back newly uploaded file during update...');
         try {
           await StorageService.deleteFile(newlyUploadedPath, 'clinical-records');
-        } catch (cleanupError) {
+        } catch (cleanupErrorUnknown: unknown) {
+            const cleanupError = cleanupErrorUnknown instanceof Error ? cleanupErrorUnknown : new Error(String(cleanupErrorUnknown) || "Ocurrió un error inesperado.");
           console.error('CRITICAL: Failed to rollback file in storage', cleanupError);
         }
       }
@@ -407,12 +412,13 @@ export class PatientService {
 
       const patientInsurances = (patientData ?? [])
         .map((p: any) => p.obra_social)
-        .filter((val): val is string => !!val && val.trim() !== '');
+        .filter((val: unknown): val is string => typeof val === 'string' && val.trim() !== '');
 
       const combined = [...new Set([...profileInsurances, ...patientInsurances])];
       return combined.sort((a, b) => a.localeCompare(b));
 
-    } catch (error) {
+    } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
       console.error('Error fetching unique insurances:', error);
       return [];
     }

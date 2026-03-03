@@ -1,7 +1,7 @@
 import React from 'react';
 import { Briefcase, Trash2, Plus } from 'lucide-react';
 
-export default function ServicesTab({ profile, handleProfileChange, handleAutoSaveProfile }) {
+export default function ServicesTab({ profile, handleProfileChange, handleAutoSaveProfile }: { [key: string]: any }) {
     const handleAdd = async () => {
         const nameEl = document.getElementById('service-name') as HTMLInputElement;
         const durEl = document.getElementById('service-duration') as HTMLInputElement;
@@ -15,8 +15,8 @@ export default function ServicesTab({ profile, handleProfileChange, handleAutoSa
         }
     };
 
-    const handleRemove = async (index) => {
-        const newServices = profile.services.filter((_, idx) => idx !== index);
+    const handleRemove = async (index: number) => {
+        const newServices = profile.services.filter((_: any, idx: number) => idx !== index);
         handleProfileChange('services', newServices);
         await handleAutoSaveProfile({ services: newServices });
     };
@@ -29,7 +29,7 @@ export default function ServicesTab({ profile, handleProfileChange, handleAutoSa
             <p className="text-sm text-gray-500 mb-6">Configura los servicios que ofreces y su duración estimada para el cálculo de turnos.</p>
 
             <div className="space-y-4 mb-6">
-                {(profile.services || []).map((service, i) => (
+                {(profile.services || []).map((service: any, i: number) => (
                     <div key={i} className="flex items-center justify-between bg-gray-50 p-4 rounded-xl border border-gray-100">
                         <div className="flex items-center gap-4">
                             <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-600">

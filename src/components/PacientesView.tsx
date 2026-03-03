@@ -47,7 +47,8 @@ export default function PacientesView() {
             try {
                 const results = await PatientService.searchPatients(searchTerm);
                 setLocalPatients(results);
-            } catch (err) {
+            } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
                 console.error("Error searching patients:", err);
             } finally {
                 setIsSearching(false);

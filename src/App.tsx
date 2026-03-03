@@ -35,7 +35,8 @@ const RootRoute = () => {
     <AuthedApp onLogout={async () => {
       try {
         await supabase.auth.signOut();
-      } catch (err) {
+      } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
         console.error('Logout error:', err);
       } finally {
         queryClient.clear();

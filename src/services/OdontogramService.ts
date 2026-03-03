@@ -30,7 +30,8 @@ export const OdontogramService = {
             }
 
             return data;
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error fetching odontogram:', error);
             throw error;
         }
@@ -60,7 +61,8 @@ export const OdontogramService = {
 
             if (error) throw error;
             return data;
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error saving odontogram:', error);
             throw error;
         }

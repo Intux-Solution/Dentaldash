@@ -1,15 +1,21 @@
-// src/components/Header.jsx - UPDATED 2026-02-16 - FINAL VERSION
+// src/components/Header.tsx - UPDATED 2026-02-16 - FINAL VERSION
 import React, { useState, useEffect } from 'react';
 import { Settings, LogOut, User, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 
-export default function Header({ title, setSidebarOpen, onLogout }) {
+interface HeaderProps {
+  title: string;
+  setSidebarOpen: (open: boolean) => void;
+  onLogout: () => void;
+}
+
+export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps) {
   const navigate = useNavigate();
   const { session } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [userData, setUserData] = useState({
+  const [userData, setUserData] = useState<{ name: string; avatar: string | null; email: string; role: string }>({
     name: 'Usuario',
     avatar: null,
     email: '',
@@ -87,11 +93,12 @@ export default function Header({ title, setSidebarOpen, onLogout }) {
 
       setUserData({
         name: name || 'Usuario',
-        avatar: avatar,
-        email: user.email,
+        avatar: avatar ?? null,
+        email: user.email ?? '',
         role: 'Odontólogo'
       });
-    } catch (err) {
+    } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
       console.error('Error fetching header user data:', err);
     }
   };

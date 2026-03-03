@@ -5,7 +5,11 @@ import { Link } from "react-router-dom";
 import fondoLogin from "../imagenes/fondo-login-dentista.jpg";
 import { supabase } from "../config/supabaseClient";
 
-export default function LoginView({ onSuccess }) {
+interface LoginViewProps {
+  onSuccess?: () => void;
+}
+
+export default function LoginView({ onSuccess }: LoginViewProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -77,7 +81,8 @@ export default function LoginView({ onSuccess }) {
                           },
                         });
                         if (error) throw error;
-                      } catch (err) {
+                      } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
                         setError(err.message || 'Error al iniciar sesión con Google');
                         setLoading(false);
                       }

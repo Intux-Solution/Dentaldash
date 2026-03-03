@@ -3,7 +3,13 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { X, Home, Calendar, Users, Settings, LogOut } from 'lucide-react';
 
-export default function Sidebar({ sidebarOpen, setSidebarOpen, onLogout }) {
+interface SidebarProps {
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  onLogout: () => void;
+}
+
+export default function Sidebar({ sidebarOpen, setSidebarOpen, onLogout }: SidebarProps) {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (

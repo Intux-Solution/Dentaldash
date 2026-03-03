@@ -2,15 +2,23 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, Calendar, Clock, User, Phone, CreditCard, MapPin, FileText, Edit, Trash2, Loader, AlertCircle } from 'lucide-react';
 import { PatientService } from '../services/PatientService';
 
-export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDelete }) {
+interface TurnoDetailsModalProps {
+  open: boolean;
+  turno: any;
+  onClose?: () => void;
+  onEdit?: (turno: any) => void;
+  onDelete?: (turno: any) => void;
+}
+
+export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDelete }: TurnoDetailsModalProps) {
   if (!open || !turno) return null;
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [patientLoading, setPatientLoading] = useState(false);
   const [patientError, setPatientError] = useState('');
-  const [patient, setPatient] = useState(null);
+  const [patient, setPatient] = useState<any>(null);
 
-  const formatDateTime = (dateTimeStr) => {
+  const formatDateTime = (dateTimeStr: string | null | undefined) => {
     if (!dateTimeStr) return { date: 'Sin fecha', time: 'Sin hora' };
     const date = new Date(dateTimeStr);
     if (isNaN(date.getTime())) return { date: 'Fecha inválida', time: 'Hora inválida' };
@@ -91,7 +99,8 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
         if (!aborted) {
           setPatient(patientData);
         }
-      } catch (err) {
+      } catch (errUnknown: unknown) {
+      const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
         if (!aborted) {
           setPatientError('No se pudo obtener el paciente');
           setPatient(null);
@@ -107,7 +116,7 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
   }, [open, dni]);
 
   const display = useMemo(() => {
-    const safe = (v) => (v == null || v === '' ? null : String(v));
+    const safe = (v: any) => (v == null || v === '' ? null : String(v));
     return {
       name: safe(
         patient?.nombre ||

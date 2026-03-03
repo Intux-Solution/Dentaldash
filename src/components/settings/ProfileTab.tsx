@@ -20,7 +20,7 @@ export default function ProfileTab({ profile, handleProfileChange, handleAutoSav
                 <div className="flex flex-col items-center gap-4">
                     <div className="relative w-32 h-32 rounded-full bg-gray-50 border-2 border-gray-100 overflow-hidden group">
                         {(avatarPreview || googleAvatar) ? (
-                            <img src={avatarPreview || googleAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                            <img src={(avatarPreview || googleAvatar) ?? undefined} alt="Avatar" className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-300">
                                 <User size={48} />

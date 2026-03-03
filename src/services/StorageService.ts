@@ -8,35 +8,22 @@ export const StorageService = {
      * @param {string} path - The path/filename
      * @returns {Promise<string|null>} The full path of the uploaded file
      */
-    async uploadFile(file: File, bucket = 'clinical-records', path: string, userId: string | null = null) {
+    async uploadFile(file: File, bucket = 'clinical-records', path: string) {
         try {
             if (!file) return null;
-
-            // Ensure unique filename if only a folder or prefix is provided
-            // If 'path' is just a folder or patient ID, append filename
-            let finalPath = path;
-            if (!path) {
-                const fileExt = file.name.split('.').pop();
-                const fileName = `${crypto.randomUUID()}.${fileExt}`;
-                finalPath = fileName;
-            }
-
-            // SAFETY NET: Supabase RLS policies usually require the file to be within 
-            // a folder matching the user's ID to permit the INSERT operation.
-            if (bucket === 'clinical-records' && finalPath && !finalPath.includes('/') && userId) {
-                finalPath = `${userId}/${finalPath}`;
-            }
+            if (!path) throw new Error('Path is required to upload a file');
 
             const { data, error } = await supabase.storage
                 .from(bucket)
-                .upload(finalPath, file, {
+                .upload(path, file, {
                     cacheControl: '3600',
                     upsert: false
                 });
 
             if (error) throw error;
             return data.path;
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error uploading file:', error);
             throw error;
         }
@@ -77,7 +64,8 @@ export const StorageService = {
                 }
             }
             return null;
-        } catch (error: any) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             // Ignore abort errors (component unmounted or rapid changes)
             if (error.message && (error.message.includes('aborted') || error.name === 'AbortError')) {
                 return null;
@@ -100,7 +88,8 @@ export const StorageService = {
                 .remove([path]);
 
             if (error) throw error;
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error deleting file from storage:', error);
             throw error;
         }

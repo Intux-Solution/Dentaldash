@@ -373,7 +373,8 @@ export function useSettings(session: any = null) {
                 await supabase.from('profiles').update({ whatsapp_status: 'connected' }).eq('id', userId);
                 queryClient.invalidateQueries({ queryKey: ['settings', userId] });
             }
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             console.error('Connection check error:', err);
         }
     }, [profile.whatsapp_instance, userId, queryClient]);

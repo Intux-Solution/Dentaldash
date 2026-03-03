@@ -1,8 +1,8 @@
-// src/utils/helpers.js
+// src/utils/helpers.ts
 export const initials = (name = '') =>
-  name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
 
-export const cls = (...a) => a.filter(Boolean).join(' ');
+export const cls = (...a: (string | boolean | null | undefined)[]) => a.filter(Boolean).join(' ');
 
 // Accent-insensitive, case-insensitive normalization for search
 export const norm = (str = '') =>
@@ -11,7 +11,7 @@ export const norm = (str = '') =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 
-export const combineDateTimeToISO = (dateStr, timeStr) => {
+export const combineDateTimeToISO = (dateStr: string, timeStr: string): string | null => {
   if (!dateStr || !timeStr) return null;
   const [year, month, day] = dateStr.split('-').map(Number);
   const [hour, minute] = timeStr.split(':').map(Number);

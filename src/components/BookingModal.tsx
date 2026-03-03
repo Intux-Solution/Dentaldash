@@ -2,7 +2,13 @@ import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 import BookingForm from './BookingForm';
 
-export default function BookingModal({ open, onClose, onSuccess }) {
+interface BookingModalProps {
+  open: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
+}
+
+export default function BookingModal({ open, onClose, onSuccess }: BookingModalProps) {
   if (!open) return null;
 
   const handleSuccess = () => {
@@ -29,11 +35,11 @@ export default function BookingModal({ open, onClose, onSuccess }) {
     // El contenedor externo no debe scrollear: el scroll va dentro del modal
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Overlay */}
-      <div 
+      <div
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={onClose}
       ></div>
-      
+
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
@@ -45,7 +51,7 @@ export default function BookingModal({ open, onClose, onSuccess }) {
           >
             <X size={20} />
           </button>
-          
+
           {/* BookingForm content (scrollable) */}
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] w-full">
             <BookingForm onSuccess={handleSuccess} />

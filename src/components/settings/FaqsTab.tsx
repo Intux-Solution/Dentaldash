@@ -3,7 +3,7 @@ import { Plus, Trash2, Save, Pencil } from 'lucide-react';
 import { supabase } from '../../config/supabaseClient';
 import { message } from 'antd';
 
-const FaqItem = ({ faq, onUpdate, onDelete }) => {
+const FaqItem = ({ faq, onUpdate, onDelete }: { faq: any; onUpdate: (id: string, updates: any) => void; onDelete: (id: string) => void }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [question, setQuestion] = useState(faq.question);
     const [answer, setAnswer] = useState(faq.answer);
@@ -68,7 +68,7 @@ const FaqItem = ({ faq, onUpdate, onDelete }) => {
     );
 };
 
-export default function FaqsTab({ tenant, faqs, setFaqs }) {
+export default function FaqsTab({ tenant, faqs, setFaqs }: { tenant: any; faqs: any[]; setFaqs: React.Dispatch<React.SetStateAction<any[]>> }) {
     const tenantId = tenant?.user_id || tenant?.id;
 
     const handleAddFAQ = async () => {
@@ -92,28 +92,31 @@ export default function FaqsTab({ tenant, faqs, setFaqs }) {
             qEl.value = '';
             aEl.value = '';
             message.success('Pregunta agregada correctamente');
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             message.error('Error al agregar FAQ: ' + err.message);
         }
     };
 
-    const handleUpdateFAQ = async (faqId, updates) => {
+    const handleUpdateFAQ = async (faqId: string, updates: any) => {
         try {
             const { error } = await supabase.from('tenant_faqs').update(updates).eq('id', faqId);
             if (error) throw error;
             setFaqs(prev => prev.map(f => f.id === faqId ? { ...f, ...updates } : f));
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             console.error('Error updating FAQ:', err);
         }
     };
 
-    const handleDeleteFAQ = async (id) => {
+    const handleDeleteFAQ = async (id: string) => {
         try {
             const { error } = await supabase.from('tenant_faqs').delete().eq('id', id);
             if (error) throw error;
             setFaqs(prev => prev.filter(f => f.id !== id));
             message.success('FAQ eliminada');
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             message.error('Error al eliminar FAQ: ' + err.message);
         }
     };

@@ -1,5 +1,6 @@
 import React from 'react';
-import { useModals } from '../hooks/useModals';
+import { usePatientModals } from '../hooks/usePatientModals';
+import { useAppointmentModals } from '../hooks/useAppointmentModals';
 
 import PatientProfileModal from './PatientProfileModal';
 import EditPatientModal from './EditPatientModal';
@@ -11,11 +12,10 @@ import EditTurnoModal from './EditTurnoModal';
 
 /**
  * Raíz de todos los modales globales de la aplicación.
- * No recibe props — consume todo el estado y las acciones desde el contexto.
+ * No recibe props — consume el estado desde los contextos de modales especializados.
  */
 export default function ModalsRoot() {
   const {
-    // Paciente
     selectedPatient,
     showProfileModal,
     showEditModal,
@@ -28,7 +28,13 @@ export default function ModalsRoot() {
     onSavedPatient,
     onCreatedPatient,
     handleDeletePatient,
-    // Turno
+    closeAddPatient,
+    closeEditPatient,
+    closeRecordModal,
+    onOpenRecord,
+  } = usePatientModals();
+
+  const {
     selectedTurno,
     showBookingModal,
     showTurnoDetailsModal,
@@ -42,12 +48,7 @@ export default function ModalsRoot() {
     closeEditTurno,
     onTurnoSaved,
     onTurnoDeleted,
-    // Extra closers
-    closeAddPatient,
-    closeEditPatient,
-    closeRecordModal,
-    onOpenRecord,
-  } = useModals();
+  } = useAppointmentModals();
 
   return (
     <>

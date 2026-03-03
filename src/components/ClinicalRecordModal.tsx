@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FolderOpen, Upload, X, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { StorageService } from "../services/StorageService";
+import { PatientService } from "../services/PatientService";
 import { supabase } from "../config/supabaseClient";
 import ModalShell from "./ModalShell";
 import { Patient } from "../types/database.types";
@@ -51,7 +52,8 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
         if (active) setLoading(true);
         const url = await StorageService.getValidRecordUrl(localRawUrl as string);
         if (active) setSignedUrl(url);
-      } catch (err) {
+      } catch (errUnknown: unknown) {
+        const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
         toast.error("Error al cargar el archivo de la historia clínica.");
         console.error("Error fetching signed URL:", err);
       } finally {
@@ -92,7 +94,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       const userId = session?.user?.id;
       if (!userId) throw new Error("No hay sesión activa");
 
-      const newPath = await StorageService.uploadFile(file, 'clinical-records', userId, userId || null);
+      const newPath = await PatientService.uploadClinicalRecord(file, userId);
 
       if (!newPath) {
         throw new Error("No se pudo obtener la ruta del archivo subido");
@@ -100,7 +102,8 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       if (localRawUrl && !localRawUrl.startsWith('http')) {
         try {
           await StorageService.deleteFile(localRawUrl, 'clinical-records');
-        } catch (deleteErr) {
+        } catch (deleteErrUnknown: unknown) {
+          const deleteErr = deleteErrUnknown instanceof Error ? deleteErrUnknown : new Error(String(deleteErrUnknown) || "Ocurrió un error inesperado.");
           console.warn('Could not delete old clinical record file, proceeding anyway:', deleteErr);
         }
       }
@@ -111,7 +114,8 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       window.dispatchEvent(new CustomEvent('patients:refresh'));
       e.target.value = '';
       toast.success("Archivo subido exitosamente");
-    } catch (err: any) {
+    } catch (errUnknown: unknown) {
+      const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
       // Revert if upload fails
       setInstantPreviewUrl(null);
       setSignedUrl(null);

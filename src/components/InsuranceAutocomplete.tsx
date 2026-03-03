@@ -1,24 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Building2, Check, Search, X } from 'lucide-react';
-import { PatientService } from '../services/PatientService';
+import { InsuranceService } from '../services/InsuranceService';
+
+interface InsuranceAutocompleteProps {
+    value: string;
+    onChange: (e: any) => void;
+    disabled?: boolean;
+    placeholder?: string;
+}
 
 /**
  * Searchable Autocomplete for Insurance Providers
  */
-export default function InsuranceAutocomplete({ value, onChange, disabled, placeholder }) {
-    const [suggestions, setSuggestions] = useState([]);
-    const [filtered, setFiltered] = useState([]);
+export default function InsuranceAutocomplete({ value, onChange, disabled, placeholder }: InsuranceAutocompleteProps) {
+    const [suggestions, setSuggestions] = useState<string[]>([]);
+    const [filtered, setFiltered] = useState<string[]>([]);
     const [showDropdown, setShowDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
-    const dropdownRef = useRef(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const fetchInsurances = async () => {
             setLoading(true);
             try {
-                const list = await PatientService.getAllUniqueInsurances();
+                const list = await InsuranceService.getAllUniqueInsurances();
                 setSuggestions(list);
-            } catch (err) {
+            } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
                 console.error('Error fetching insurances for autocomplete:', err);
             } finally {
                 setLoading(false);
@@ -41,8 +49,8 @@ export default function InsuranceAutocomplete({ value, onChange, disabled, place
 
     // Click outside to close
     useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setShowDropdown(false);
             }
         };
@@ -50,7 +58,7 @@ export default function InsuranceAutocomplete({ value, onChange, disabled, place
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleSelect = (item) => {
+    const handleSelect = (item: string) => {
         onChange({ target: { name: 'obraSocial', value: item } });
         setShowDropdown(false);
     };

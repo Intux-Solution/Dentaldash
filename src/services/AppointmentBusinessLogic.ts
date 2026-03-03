@@ -25,7 +25,8 @@ export class AppointmentBusinessLogic {
                 try {
                     const appToExclude = await AppointmentRepository.getAppointmentGoogleId(excludeId);
                     if (appToExclude) excludeGoogleEventId = appToExclude.google_event_id;
-                } catch (e) {
+                } catch (eUnknown: unknown) {
+            const e = eUnknown instanceof Error ? eUnknown : new Error(String(eUnknown) || "Ocurrió un error inesperado.");
                     console.error("Error getting google event ID for excluded appointment", e);
                 }
             }
@@ -89,7 +90,8 @@ export class AppointmentBusinessLogic {
             }
 
             return Array.from(new Set(slots)).sort();
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error in Business Logic getting available slots:', error);
             return [];
         }

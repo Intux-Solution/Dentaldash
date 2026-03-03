@@ -5,7 +5,17 @@ import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stetho
 import { initials } from '../utils/helpers';
 import { message } from 'antd';
 
-export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage, onOpenRecord }) {
+interface PatientProfileModalProps {
+  open: boolean;
+  patient: any;
+  onClose: () => void;
+  onEdit?: (patient: any) => void;
+  onDelete?: (patient: any) => Promise<void>;
+  onMessage?: (patient: any) => void;
+  onOpenRecord?: (patient: any) => void;
+}
+
+export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage, onOpenRecord }: PatientProfileModalProps) {
   const navigate = useNavigate();
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -19,7 +29,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
   }, [open]);
 
   useEffect(() => {
-    const onKey = (e) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (showConfirm) {
           setShowConfirm(false);
@@ -36,7 +46,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
   if (!open || !patient) return null;
 
   // Helper para obtener campos con múltiples posibles nombres
-  const getField = (p, fieldNames, defaultValue = '-') => {
+  const getField = (p: any, fieldNames: string[], defaultValue = '-') => {
     if (!p) return defaultValue;
     for (const fieldName of fieldNames) {
       const value = p[fieldName] ?? p.fields?.[fieldName];
@@ -59,7 +69,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
   const notas = getField(patient, ['notas', 'Notas', 'notes', 'observaciones'], 'Sin notas');
 
   // Estado con colores
-  const getEstadoColor = (estado) => {
+  const getEstadoColor = (estado: string) => {
     const estadoLower = estado.toLowerCase();
     if (estadoLower.includes('activo')) return 'bg-green-100 text-green-800';
     if (estadoLower.includes('tratamiento')) return 'bg-blue-100 text-blue-800';
@@ -81,13 +91,14 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
       setShowConfirm(false);
       setDeleting(false);
       onClose?.();
-    } catch (e) {
+    } catch (eUnknown: unknown) {
+            const e = eUnknown instanceof Error ? eUnknown : new Error(String(eUnknown) || "Ocurrió un error inesperado.");
       setDeleting(false);
       message.error(`Error al eliminar: ${e.message || 'Intente nuevamente'}`);
     }
   }
 
-  const InfoRow = ({ icon: Icon, label, value, className = '' }) => (
+  const InfoRow = ({ icon: Icon, label, value, className = '' }: { icon: React.ElementType; label: string; value: React.ReactNode; className?: string }) => (
     <div className="flex items-start py-2 gap-3">
       <div className="flex items-center min-w-[120px] text-sm font-medium text-gray-600">
         <Icon size={16} className="mr-2 text-gray-500" />

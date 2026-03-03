@@ -143,7 +143,8 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
                 setPatientFound(false);
                 setPatientNotice('Paciente nuevo: se creará automáticamente al confirmar.');
             }
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             setPatientNotice('Error al buscar paciente');
             setPatientFound(false);
         } finally {
@@ -171,7 +172,8 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
             if (selectedHora && !slots.includes(selectedHora)) {
                 setSelectedHora('');
             }
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             setAvailableSlots([]);
         } finally {
             setLoadingAvailability(false);
@@ -247,7 +249,8 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
             setTimeout(() => {
                 if (onSuccess) onSuccess();
             }, 2000);
-        } catch (err: any) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             const msg = err.message || 'Error al crear el turno. Intenta nuevamente.';
             setError(msg);
             message.error(msg);

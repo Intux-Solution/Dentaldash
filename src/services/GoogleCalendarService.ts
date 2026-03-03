@@ -1,14 +1,14 @@
 import { supabase } from '../config/supabaseClient';
 
 // Module-level cache for the token (persists while the page is open)
-let cachedToken = null;
+let cachedToken: string | null = null;
 
 export class GoogleCalendarService {
 
     /**
      * Get the provider token from the current session or cache.
      */
-    static getProviderToken(session) {
+    static getProviderToken(session: any) {
         if (cachedToken) return cachedToken;
         return session?.provider_token;
     }
@@ -16,14 +16,14 @@ export class GoogleCalendarService {
     /**
      * Get the refresh token from the session.
      */
-    static getRefreshToken(session) {
+    static getRefreshToken(session: any) {
         return session?.provider_refresh_token;
     }
 
     /**
      * Refresh the Google Access Token using our Edge Function
      */
-    static async refreshGoogleToken(session) {
+    static async refreshGoogleToken(session: any) {
         console.log("[GoogleCalendarService] refreshGoogleToken called with session user ID:", session?.user?.id);
         try {
             let refreshToken = this.getRefreshToken(session);
@@ -75,7 +75,8 @@ export class GoogleCalendarService {
             }
 
             return null;
-        } catch (e) {
+        } catch (eUnknown: unknown) {
+            const e = eUnknown instanceof Error ? eUnknown : new Error(String(eUnknown) || "Ocurrió un error inesperado.");
             return null;
         }
     }
@@ -125,7 +126,8 @@ export class GoogleCalendarService {
                         headers['Authorization'] = `Bearer ${newToken}`;
                         response = await fetch(url, { ...options, headers });
                     }
-                } catch (refreshErr: any) {
+                } catch (refreshErrUnknown: unknown) {
+            const refreshErr = refreshErrUnknown instanceof Error ? refreshErrUnknown : new Error(String(refreshErrUnknown) || "Ocurrió un error inesperado.");
                     console.error("[GoogleCalendarService] Token refresh failed critically:", refreshErr);
                     return new Response(
                         JSON.stringify({ error: { message: refreshErr.message } }),
@@ -135,7 +137,8 @@ export class GoogleCalendarService {
             }
 
             return response;
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error("FetchWithAuth Network Error:", error);
             throw error;
         }
@@ -163,7 +166,8 @@ export class GoogleCalendarService {
 
             const data = await response.json();
             return data.items || [];
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error listing Google Calendar events:', error);
             return [];
         }
@@ -201,7 +205,8 @@ export class GoogleCalendarService {
 
             const data = await response.json();
             return data;
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error creating Google Calendar event:', error);
             return null;
         }
@@ -229,7 +234,8 @@ export class GoogleCalendarService {
 
             if (!response.ok) throw new Error('Failed to update Google Event');
             return await response.json();
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error updating Google Calendar event:', error);
             return null;
         }
@@ -245,7 +251,8 @@ export class GoogleCalendarService {
             await this.fetchWithAuth(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId}`, {
                 method: 'DELETE',
             }, session);
-        } catch (error) {
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error deleting Google Calendar event:', error);
         }
     }

@@ -14,7 +14,8 @@ try {
         VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
         VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY
     });
-} catch (error) {
+} catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
     console.error('⚠️ [Supabase] Entorno no configurado correctamente. Faltan variables o son inválidas según Zod:', error);
     // Providing a dummy fallback solely to prevent the app from instantly crashing on import,
     // though the DB connections will predictably fail and UI will know how to handle it gracefully.

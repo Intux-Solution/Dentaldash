@@ -5,7 +5,16 @@ import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loa
 import { message } from 'antd';
 import { useEditTurnoModal } from '../hooks/useEditTurnoModal';
 
-export default function EditTurnoModal({ open, turno, onClose, onSaved, onDeleted, onBack }) {
+interface EditTurnoModalProps {
+  open: boolean;
+  turno: any;
+  onClose: () => void;
+  onSaved?: (turno: any) => void;
+  onDeleted?: (turno: any) => void;
+  onBack?: () => void;
+}
+
+export default function EditTurnoModal({ open, turno, onClose, onSaved, onDeleted, onBack }: EditTurnoModalProps) {
   const {
     register,
     handleSubmit,

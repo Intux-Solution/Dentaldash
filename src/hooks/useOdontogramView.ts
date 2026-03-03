@@ -5,13 +5,13 @@ import { OdontogramService } from '../services/OdontogramService';
 import { EvolutionService } from '../services/EvolutionService';
 
 export function useOdontogramView(id: string | undefined) {
-    const [patient, setPatient] = useState(null);
-    const [odontogramData, setOdontogramData] = useState({});
-    const [history, setHistory] = useState([]);
+    const [patient, setPatient] = useState<any>(null);
+    const [odontogramData, setOdontogramData] = useState<any>({});
+    const [history, setHistory] = useState<any[]>([]);
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     // Formulario para nueva nota
     const [newNote, setNewNote] = useState({
@@ -22,7 +22,7 @@ export function useOdontogramView(id: string | undefined) {
     const [addingNote, setAddingNote] = useState(false);
 
     // Estado para edición inline
-    const [editingId, setEditingId] = useState(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState({
         tooth_number: '',
         procedure_type: '',
@@ -32,19 +32,19 @@ export function useOdontogramView(id: string | undefined) {
 
     useEffect(() => {
         if (id) {
-            loadInitialData();
+            loadInitialData(id);
         }
     }, [id]);
 
-    const loadInitialData = async () => {
+    const loadInitialData = async (patientId: string) => {
         try {
             setLoading(true);
             setError(null);
 
             const [pData, oData, hData] = await Promise.all([
-                PatientService.getPatientById(id),
-                OdontogramService.getOdontogram(id),
-                EvolutionService.getHistory(id)
+                PatientService.getPatientById(patientId),
+                OdontogramService.getOdontogram(patientId),
+                EvolutionService.getHistory(patientId)
             ]);
 
             if (!pData) {
@@ -55,7 +55,8 @@ export function useOdontogramView(id: string | undefined) {
             setPatient(pData);
             setOdontogramData(oData?.data || {});
             setHistory(hData || []);
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             console.error('Error loading data:', err);
             setError('Error al cargar la información.');
         } finally {
@@ -64,12 +65,14 @@ export function useOdontogramView(id: string | undefined) {
     };
 
     const handleSaveOdontogram = async () => {
+        if (!id) return;
         try {
             setSaving(true);
             await OdontogramService.saveOdontogram(id, odontogramData);
             window.dispatchEvent(new CustomEvent('patients:refresh'));
             message.success('Odontograma guardado correctamente');
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             console.error('Error saving:', err);
             message.error('Error al guardar el odontograma');
         } finally {
@@ -79,7 +82,7 @@ export function useOdontogramView(id: string | undefined) {
 
     const handleAddHistory = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newNote.procedure_type || !newNote.description) return;
+        if (!newNote.procedure_type || !newNote.description || !id) return;
 
         try {
             setAddingNote(true);
@@ -92,7 +95,8 @@ export function useOdontogramView(id: string | undefined) {
             setHistory([entry, ...history] as any);
             setNewNote({ tooth_number: '', procedure_type: '', description: '' });
             message.success('Registro añadido correctamente');
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             console.error('Error adding history:', err);
             message.error('Error al añadir registro');
         } finally {
@@ -107,7 +111,8 @@ export function useOdontogramView(id: string | undefined) {
             window.dispatchEvent(new CustomEvent('patients:refresh'));
             setHistory((prev: any[]) => prev.filter(h => h.id !== historyId) as any);
             message.success('Registro eliminado');
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             message.error('Error al eliminar');
         }
     };
@@ -142,7 +147,8 @@ export function useOdontogramView(id: string | undefined) {
             setEditingId(null);
             window.dispatchEvent(new CustomEvent('patients:refresh'));
             message.success('Cambios guardados con éxito');
-        } catch (err) {
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             console.error('Error updating history:', err);
             message.error('Error al guardar los cambios');
         } finally {

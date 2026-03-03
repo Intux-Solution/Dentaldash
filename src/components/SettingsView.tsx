@@ -10,7 +10,7 @@ import WhatsAppTab from './settings/WhatsAppTab';
 import FaqsTab from './settings/FaqsTab';
 
 export default function SettingsView() {
-    const [session, setSession] = useState(null);
+    const [session, setSession] = useState<import('@supabase/supabase-js').Session | null>(null);
     const [activeTab, setActiveTab] = useState('profile');
 
     useEffect(() => {

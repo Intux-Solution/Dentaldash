@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function StatsCard({ title, value, color }) {
+export default function StatsCard({ title, value, color }: { title: string; value: string | number; color: string }) {
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm border">
       <div className="flex justify-between items-start">

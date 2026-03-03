@@ -1,0 +1,161 @@
+import React, { createContext, useContext, useCallback, useMemo, useState } from 'react';
+import { usePatients } from './usePatients';
+import { useAuth } from '../context/AuthContext';
+
+const PatientModalsContext = createContext<any>(null);
+
+export function PatientModalsProvider({
+    children,
+    patients = [],
+    addPatient,
+    updatePatient,
+    refreshPatients,
+}: any) {
+    const { session } = useAuth();
+    const { deletePatient } = usePatients(session);
+
+    const [selectedPatient, setSelectedPatient] = useState<any>(null);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [showRecordModal, setShowRecordModal] = useState(false);
+
+    const closeProfile = useCallback(() => {
+        setShowProfileModal(false);
+        setSelectedPatient(null);
+    }, []);
+
+    const onViewPatient = useCallback((patient: any) => {
+        setSelectedPatient(patient);
+        setShowProfileModal(true);
+    }, []);
+
+    const onEditFromProfile = useCallback((patient: any) => {
+        setSelectedPatient(patient);
+        setShowProfileModal(false);
+        setShowEditModal(true);
+    }, []);
+
+    const openAddPatient = useCallback(() => setShowAddModal(true), []);
+    const closeAddPatient = useCallback(() => setShowAddModal(false), []);
+    const closeEditPatient = useCallback(() => setShowEditModal(false), []);
+
+    const closeRecordModal = useCallback(() => setShowRecordModal(false), []);
+
+    const onOpenRecord = useCallback((p: any) => {
+        const historiaUrl =
+            p?.historiaUrl || p?.historiaClinica || p?.historiaClinicaUrl || p?.odontogramaUrl || '';
+        setSelectedPatient({ ...p, historiaUrl });
+        setShowRecordModal(true);
+    }, []);
+
+    const handleDeletePatient = useCallback(async (patientData: any) => {
+        try {
+            const patient =
+                typeof patientData === 'string'
+                    ? patients.find(
+                        (p: any) =>
+                            p?.id === patientData ||
+                            p?._id === patientData ||
+                            p?.dni === patientData
+                    )
+                    : patientData;
+
+            if (!patient) throw new Error('No se pudo encontrar el paciente');
+
+            const id = patient?.id || patient?._id;
+            if (!id) throw new Error('No se pudo identificar el paciente (falta ID)');
+
+            await deletePatient(id);
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
+            throw err;
+        }
+    }, [patients, deletePatient]);
+
+    const onSavedPatient = useCallback(async (updatedPatientData: any) => {
+        try {
+            if (typeof updatePatient === 'function') await updatePatient(updatedPatientData);
+            if (typeof refreshPatients === 'function') refreshPatients();
+            window.dispatchEvent(new CustomEvent('patients:refresh'));
+            setShowEditModal(false);
+            setSelectedPatient(null);
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
+            alert(`Error: ${err.message || 'No se pudo actualizar el paciente'}`);
+        }
+    }, [updatePatient, refreshPatients]);
+
+    const onCreatedPatient = useCallback(async (patientData: any) => {
+        try {
+            const res = typeof addPatient === 'function' ? await addPatient(patientData) : null;
+            setShowAddModal(false);
+            if (typeof refreshPatients === 'function') refreshPatients();
+            window.dispatchEvent(new CustomEvent('patients:refresh'));
+            return res;
+        } catch (errUnknown: unknown) {
+            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
+            alert(`Error: ${err.message || 'No se pudo crear el paciente'}`);
+            throw err;
+        }
+    }, [addPatient, refreshPatients]);
+
+    React.useEffect(() => {
+        if (selectedPatient && Array.isArray(patients)) {
+            const updated = patients.find(
+                (p: any) => (p.id || p._id) === (selectedPatient.id || selectedPatient._id)
+            );
+            if (updated) {
+                const { historiaUrl: currentUrl, ...currentRest } = selectedPatient;
+                const { historiaUrl: newUrl, ...newRest } = updated;
+                if (JSON.stringify(currentRest) !== JSON.stringify(newRest)) {
+                    setSelectedPatient((prev: any) => ({ ...updated, historiaUrl: prev?.historiaUrl }));
+                }
+            }
+        }
+    }, [selectedPatient, patients]);
+
+    React.useEffect(() => {
+        const handleRefresh = () => { if (typeof refreshPatients === 'function') refreshPatients(); };
+        window.addEventListener('patients:refresh', handleRefresh);
+        return () => window.removeEventListener('patients:refresh', handleRefresh);
+    }, [refreshPatients]);
+
+    const value = useMemo(() => ({
+        selectedPatient,
+        showProfileModal,
+        showEditModal,
+        showAddModal,
+        showRecordModal,
+        session,
+        patientsLoading: false,
+        closeProfile,
+        onViewPatient,
+        onEditFromProfile,
+        openAddPatient,
+        closeAddPatient,
+        closeEditPatient,
+        onOpenRecord,
+        closeRecordModal,
+        onSavedPatient,
+        onCreatedPatient,
+        handleDeletePatient,
+    }), [
+        selectedPatient, showProfileModal, showEditModal, showAddModal, showRecordModal,
+        session, closeProfile, onViewPatient, onEditFromProfile, openAddPatient, closeAddPatient,
+        closeEditPatient, onOpenRecord, closeRecordModal, onSavedPatient, onCreatedPatient,
+        handleDeletePatient,
+    ]);
+
+    return (
+        <PatientModalsContext.Provider value={value}>
+            {children}
+        </PatientModalsContext.Provider>
+    );
+}
+
+export function usePatientModals() {
+    const ctx = useContext(PatientModalsContext);
+    if (!ctx) throw new Error('usePatientModals must be used within a PatientModalsProvider');
+    return ctx;
+}

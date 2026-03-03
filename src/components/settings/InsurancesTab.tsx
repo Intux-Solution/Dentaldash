@@ -1,7 +1,7 @@
 import React from 'react';
 import { CreditCard, X } from 'lucide-react';
 
-export default function InsurancesTab({ profile, handleProfileChange, handleAutoSaveProfile }) {
+export default function InsurancesTab({ profile, handleProfileChange, handleAutoSaveProfile }: { [key: string]: any }) {
     const handleAdd = async () => {
         const el = document.getElementById('ins-input') as HTMLInputElement;
         if (el?.value.trim()) {
@@ -12,8 +12,8 @@ export default function InsurancesTab({ profile, handleProfileChange, handleAuto
         }
     };
 
-    const handleRemove = async (index) => {
-        const newInsurances = profile.accepted_insurances.filter((_, idx) => idx !== index);
+    const handleRemove = async (index: number) => {
+        const newInsurances = profile.accepted_insurances.filter((_: any, idx: number) => idx !== index);
         handleProfileChange('accepted_insurances', newInsurances);
         await handleAutoSaveProfile({ accepted_insurances: newInsurances });
     };
@@ -24,7 +24,7 @@ export default function InsurancesTab({ profile, handleProfileChange, handleAuto
                 <CreditCard size={20} className="text-teal-600" /> Obras Sociales
             </h2>
             <div className="flex flex-wrap gap-2 mb-6">
-                {(profile.accepted_insurances || []).map((ins, i) => (
+                {(profile.accepted_insurances || []).map((ins: string, i: number) => (
                     <div key={i} className="flex items-center gap-2 bg-teal-50 text-teal-700 px-4 py-2 rounded-xl text-sm border border-teal-100 font-medium shadow-sm">
                         {ins}
                         <X

@@ -7,21 +7,29 @@ import { UpdatePatientSchema } from '../schemas/patient.schema';
 import { message } from 'antd';
 
 // ─── Helpers visuales ─────────────────────────────────────────────────────────
-const FieldError = ({ error }) =>
+const FieldError = ({ error }: { error?: { message?: string } }) =>
   error ? <p className="mt-1 text-xs text-red-500">{error.message}</p> : null;
 
-const inputCls = (hasError) =>
+const inputCls = (hasError?: any) =>
   `w-full rounded-xl border px-3 py-2 placeholder:text-sm text-sm focus:outline-none focus:ring-0 focus:shadow-none ${hasError
     ? 'border-red-400 bg-red-50'
     : 'border-transparent bg-[#F5F5F5]'
   }`;
 
 // ─── Helper: extraer string de campos que pueden ser arrays (legado de N8N) ───
-const safeStr = (val) => (Array.isArray(val) ? val[0] ?? '' : val ?? '');
+const safeStr = (val: any) => (Array.isArray(val) ? val[0] ?? '' : val ?? '');
 
-export default function EditPatientModal({ open, patient, onClose, onSaved, onBack }) {
+interface EditPatientModalProps {
+  open: boolean;
+  patient: any;
+  onClose?: () => void;
+  onSaved?: (data: any) => Promise<void>;
+  onBack?: () => void;
+}
+
+export default function EditPatientModal({ open, patient, onClose, onSaved, onBack }: EditPatientModalProps) {
   // Estado del archivo clínico (no entra en el esquema Zod)
-  const [historiaClinicaFile, setHistoriaClinicaFile] = useState(null);
+  const [historiaClinicaFile, setHistoriaClinicaFile] = useState<File | null>(null);
   const [shouldRemoveRecord, setShouldRemoveRecord] = useState(false);
   const [originalRecord, setOriginalRecord] = useState('');
 
@@ -72,7 +80,7 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
     }
   }, [open, patient, reset]);
 
-  const handleFileChange = (e) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setHistoriaClinicaFile(e.target.files?.[0] || null);
   };
 
@@ -82,7 +90,7 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
   };
 
   // ─── Submit ───────────────────────────────────────────────────────────────
-  const onSubmit = async (validData) => {
+  const onSubmit = async (validData: any) => {
     try {
       const payload = {
         ...patient,
@@ -104,7 +112,8 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
 
       message.success('Paciente actualizado correctamente');
       setTimeout(handleClose, 900);
-    } catch (err) {
+    } catch (errUnknown: unknown) {
+      const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
       const msg = err.message || 'Error actualizando el paciente';
       message.error(msg);
       // Re-throw para que react-hook-form capte el error (no oculta el form)
@@ -245,8 +254,8 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
                 control={control}
                 render={({ field }) => (
                   <InsuranceAutocomplete
-                    value={field.value}
-                    onChange={(e) => field.onChange(e.target.value)}
+                    value={field.value || ''}
+                    onChange={(e: any) => field.onChange(e.target.value)}
                     disabled={isSubmitting}
                     placeholder="Seleccionar..."
                   />
