@@ -84,14 +84,14 @@ export class AppointmentRepository {
     static async insertAppointmentRPC(appointment: any) {
         // Use the new atomic RPC to avoid overlapping concurrent bookings
         const { data, error } = await supabase.rpc('confirm_appointment_safe', {
-            p_patient_id: appointment.patient_id,
-            p_title: appointment.title,
-            p_start_time: appointment.start_time,
-            p_end_time: appointment.end_time,
-            p_duration: appointment.duration,
-            p_appointment_type: appointment.appointment_type,
-            p_notes: appointment.notes,
-            p_status: appointment.status
+            p_patient_id: appointment.patient_id ?? null,
+            p_title: appointment.title ?? null,
+            p_start_time: appointment.start_time ?? null,
+            p_end_time: appointment.end_time ?? null,
+            p_duration: appointment.duration ?? null,
+            p_appointment_type: appointment.appointment_type ?? null,
+            p_notes: appointment.notes ?? null,
+            p_status: appointment.status ?? null
         });
 
         if (error) throw error;
@@ -122,15 +122,15 @@ export class AppointmentRepository {
         if (ownCheckError || !ownCheck) throw new Error("Unauthorized to update this appointment.");
 
         const { data, error } = await supabase.rpc('update_appointment_safe', {
-            p_appointment_id: id,
-            p_patient_id: updates.patient_id,
-            p_title: updates.title,
-            p_start_time: updates.start_time,
-            p_end_time: updates.end_time,
-            p_duration: updates.duration,
-            p_appointment_type: updates.appointment_type,
-            p_notes: updates.notes,
-            p_status: updates.status
+            p_appointment_id: id ?? null,
+            p_patient_id: updates.patient_id ?? null,
+            p_title: updates.title ?? null,
+            p_start_time: updates.start_time ?? null,
+            p_end_time: updates.end_time ?? null,
+            p_duration: updates.duration ?? null,
+            p_appointment_type: updates.appointment_type ?? null,
+            p_notes: updates.notes ?? null,
+            p_status: updates.status ?? null
         });
 
         if (error) throw error;
