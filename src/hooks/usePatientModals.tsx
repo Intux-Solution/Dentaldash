@@ -105,12 +105,8 @@ export function PatientModalsProvider({
             const updated = patients.find(
                 (p: any) => (p.id || p._id) === (selectedPatient.id || selectedPatient._id)
             );
-            if (updated) {
-                const { historiaUrl: currentUrl, ...currentRest } = selectedPatient;
-                const { historiaUrl: newUrl, ...newRest } = updated;
-                if (JSON.stringify(currentRest) !== JSON.stringify(newRest)) {
-                    setSelectedPatient((prev: any) => ({ ...updated, historiaUrl: prev?.historiaUrl }));
-                }
+            if (updated && JSON.stringify(selectedPatient) !== JSON.stringify(updated)) {
+                setSelectedPatient(updated);
             }
         }
     }, [selectedPatient, patients]);
