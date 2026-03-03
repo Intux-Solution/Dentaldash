@@ -279,14 +279,14 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
                     tipoTurno: selectedTipoTurnoId,
                     timezone: 'America/Argentina/Buenos_Aires',
                     isNewPatient: !patientFound
-                });
+                }, session);
             } else {
                 // Update existing
                 saved = await AppointmentService.updateAppointment(data.id, {
                     ...data,
                     tipoTurno: selectedTipoTurnoId,
                     timezone: 'America/Argentina/Buenos_Aires'
-                });
+                }, session);
             }
 
             if (onSaved) onSaved(saved);
@@ -304,7 +304,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
         setDeleting(true);
         setError('');
         try {
-            await AppointmentService.deleteAppointment(watch('id'));
+            await AppointmentService.deleteAppointment(watch('id'), session);
             if (onDeleted) onDeleted(turno);
             message.success('Turno cancelado correctamente');
             onClose();
