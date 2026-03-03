@@ -141,7 +141,7 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
       <div className="flex min-h-full items-center justify-center p-4 overflow-hidden">
         <div className="relative bg-white rounded-2xl shadow-2xl border max-w-2xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden">
           {/* Header */}
-          <div className="sticky top-0 z-[1] bg-white/80 backdrop-blur border-b px-6 min-h-[120px] py-10 flex items-center relative">
+          <div className="sticky top-0 z-[1] bg-white/80 backdrop-blur border-b px-6 min-h-[120px] py-10 flex items-center">
             <button
               onClick={onClose}
               className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-100 text-gray-900 transition-colors"
