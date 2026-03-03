@@ -36,7 +36,7 @@ export default function PatientInfoFields({
                         type="text"
                         {...register('dni')}
                         placeholder="12.345.678"
-                        className={`text - sm w - full px - 3 py - 2 rounded - xl border ${errors.dni ? 'border-red-500' : 'border-transparent'} bg - [#F5F5F5] placeholder: text - sm focus: outline - none focus: ring - 0 focus: border - transparent`}
+                        className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.dni ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
                     />
                     {checkingPatient && (
                         <Loader className="absolute right-3 top-2 w-5 h-5 text-gray-400 animate-spin" />
@@ -62,7 +62,7 @@ export default function PatientInfoFields({
                         type="text"
                         {...register('nombre')}
                         placeholder="Juan Pérez"
-                        className={`text - sm w - full px - 3 py - 2 rounded - xl border ${errors.nombre ? 'border-red-500' : 'border-transparent'} bg - [#F5F5F5] placeholder: text - sm focus: outline - none focus: ring - 0 focus: border - transparent`}
+                        className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.nombre ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
                     />
                     {errors.nombre && <p className="text-red-500 text-xs mt-1">{errors.nombre?.message as string}</p>}
                 </div>
@@ -76,7 +76,7 @@ export default function PatientInfoFields({
                         type="tel"
                         {...register('telefono')}
                         placeholder="+54 381 123 4567"
-                        className={`text - sm w - full px - 3 py - 2 rounded - xl border ${errors.telefono ? 'border-red-500' : 'border-transparent'} bg - [#F5F5F5] placeholder: text - sm focus: outline - none focus: ring - 0 focus: border - transparent`}
+                        className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.telefono ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
                     />
                     {errors.telefono && <p className="text-red-500 text-xs mt-1">{errors.telefono?.message as string}</p>}
                 </div>
@@ -91,7 +91,7 @@ export default function PatientInfoFields({
                     type="email"
                     {...register('email')}
                     placeholder="paciente@correo.com"
-                    className={`text - sm w - full px - 3 py - 2 rounded - xl border ${errors.email ? 'border-red-500' : 'border-transparent'} bg - [#F5F5F5] placeholder: text - sm focus: outline - none focus: ring - 0 focus: border - transparent`}
+                    className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.email ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
                 />
                 {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email?.message as string}</p>}
             </div>
@@ -114,7 +114,7 @@ export default function PatientInfoFields({
                         type="text"
                         {...register('numeroAfiliado')}
                         placeholder="123456789"
-                        className={`text - sm w - full px - 3 py - 2 rounded - xl border ${errors.numeroAfiliado ? 'border-red-500' : 'border-transparent'} bg - [#F5F5F5] placeholder: text - sm focus: outline - none focus: ring - 0 focus: border - transparent`}
+                        className={`text-sm w-full px-3 py-2 rounded-xl border ${errors.numeroAfiliado ? 'border-red-500' : 'border-transparent'} bg-[#F5F5F5] placeholder:text-sm focus:outline-none focus:ring-0 focus:border-transparent`}
                     />
                 </div>
             </div>
