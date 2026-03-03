@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { FolderOpen, Upload, X, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { StorageService } from "../services/StorageService";
+import { PatientService } from "../services/PatientService";
+import { supabase } from "../config/supabaseClient";
 import ModalShell from "./ModalShell";
 
 function isPdf(url = "") {
@@ -98,7 +100,6 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
     try {
       setLoading(true);
 
-      const { PatientService } = await import('../services/PatientService');
       const userId = session?.user?.id;
       if (!userId) throw new Error("No hay sesión activa");
 
@@ -112,7 +113,6 @@ export default function ClinicalRecordModal({ open, patient, onClose, session })
         }
       }
 
-      const { supabase } = await import('../config/supabaseClient');
       await supabase.from('patients').update({ historia_clinica_url: newPath }).eq('id', patient.id);
 
       setLocalRawUrl(newPath);

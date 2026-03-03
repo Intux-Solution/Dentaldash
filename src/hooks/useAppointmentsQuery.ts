@@ -5,6 +5,7 @@ import { AppointmentService } from '../services/AppointmentService';
 import { parseLocalYMD, getDayBounds } from '../utils/dateUtils';
 import { addDays, isAfter } from 'date-fns';
 import { Appointment } from '../types/appointments';
+import { supabase } from '../config/supabaseClient';
 
 export const turnosQueryKey = (fromDate: string | null = null, toDate: string | null = null) => {
     return ['turnos', fromDate, toDate];
@@ -50,6 +51,27 @@ export function useAppointmentsQuery(fromDate: string | null = null, toDate: str
             return normalized.filter((ev: any) => (ev?.status || '').toLowerCase() !== 'cancelled' && (ev?.status || '').toLowerCase() !== 'canceled');
         },
     });
+
+    useEffect(() => {
+        // Suscripción al canal de realtime para la tabla appointments
+        const channel = supabase
+            .channel('appointments-realtime')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'appointments' },
+                (payload) => {
+                    console.log('Cambio detectado vía Supabase Realtime:', payload);
+                    // Invalidamos la query principal para forzar un refetch silencioso
+                    queryClient.invalidateQueries({ queryKey: ['turnos'] });
+                }
+            )
+            .subscribe();
+
+        // Limpieza de la suscripción al desmontar
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [queryClient]);
 
     const refreshTurnos = useCallback(() => {
         refetch();
