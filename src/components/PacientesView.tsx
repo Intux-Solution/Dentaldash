@@ -1,20 +1,35 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { norm } from '../utils/helpers';
 import SearchInput from './SearchInput';
 import PatientTable from './PatientTable';
 import { PatientService } from '../services/PatientService';
 import { usePatients } from '../hooks/usePatients';
 import { useModals } from '../hooks/useModals';
-import { useAppStore } from '../store/useAppStore';
 
 export default function PacientesView() {
     const { patients, loading: patientsLoading, deletePatient } = usePatients();
     const { openAddPatient, onViewPatient, onOpenRecord } = useModals();
 
-    const searchTerm = useAppStore(state => state.searchTerm);
-    const setSearchTerm = useAppStore(state => state.setSearchTerm);
-    const statusFilter = useAppStore(state => state.statusFilter);
-    const setStatusFilter = useAppStore(state => state.setStatusFilter);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const searchTerm = searchParams.get('q') || '';
+    const statusFilter = searchParams.get('status') || 'Todos';
+
+    const setSearchTerm = (term: string) => {
+        setSearchParams(prev => {
+            if (term) prev.set('q', term);
+            else prev.delete('q');
+            return prev;
+        }, { replace: true });
+    };
+
+    const setStatusFilter = (status: string) => {
+        setSearchParams(prev => {
+            if (status !== 'Todos') prev.set('status', status);
+            else prev.delete('status');
+            return prev;
+        }, { replace: true });
+    };
 
     const collator = useMemo(() => new Intl.Collator('es', { sensitivity: 'base' }), []);
 

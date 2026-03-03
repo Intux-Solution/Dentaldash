@@ -23,7 +23,6 @@ export default function AppRoutes() {
                 </Route>
 
                 {/* ── Rutas de utilidad / fallback ────────────────────────────── */}
-                <Route path="/update-password" element={<Navigate to="/" />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
         </Suspense>

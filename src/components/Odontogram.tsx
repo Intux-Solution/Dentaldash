@@ -1,6 +1,6 @@
 import React from 'react';
 import Tooth from './odontogram/Tooth';
-import { useOdontogram } from '../hooks/useOdontogram';
+import { useOdontogram, toggleToothZone } from '../hooks/useOdontogram';
 import { OdontogramData, SurfaceStatus } from '../schemas/odontogram.schema';
 
 const ADULT_UPPER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
@@ -25,42 +25,15 @@ const Odontogram: React.FC<OdontogramProps> = ({ data = {}, onChange, readOnly =
 
     // Conectar el hook visual con la capa de datos inyectada
     const {
-        data: odontogramData,
         selectedTool,
-        setSelectedTool,
-        handleZoneClick
-    } = useOdontogram(data, readOnly);
+        setSelectedTool
+    } = useOdontogram();
 
     // Si el usuario hace clicks, delegamos el onChange al padre enviando el nuevo diccionario.
     const handleAndPropagate = (toothNumber: number, zone: string) => {
-        handleZoneClick(toothNumber, zone);
-
-        // Emulamos el comportamiento asincrono de setState delegando los datos nuevos al padre
-        // usando useOdontogram internamente, calculamos la mutación inline:
-        if (onChange && !readOnly) {
-            const currentTooth = odontogramData[String(toothNumber)] || {};
-            let newToothData;
-
-            if (selectedTool === 'ausente') {
-                newToothData = currentTooth.all === 'ausente' ? {} : { all: 'ausente' };
-            } else {
-                if (currentTooth.all === 'ausente') {
-                    newToothData = { [zone === 'all' ? 'oclusal' : zone]: selectedTool };
-                } else {
-                    if (currentTooth[zone as keyof typeof currentTooth] === selectedTool) {
-                        const { [zone]: _, ...rest } = currentTooth as any;
-                        newToothData = rest;
-                    } else {
-                        newToothData = { ...currentTooth, [zone]: selectedTool };
-                    }
-                }
-            }
-
-            onChange({
-                ...odontogramData,
-                [String(toothNumber)]: newToothData
-            });
-        }
+        if (readOnly || !onChange) return;
+        const newData = toggleToothZone(data, toothNumber, zone, selectedTool);
+        onChange(newData);
     };
 
     const ToothRow = ({ numbers }: { numbers: number[] }) => (
@@ -69,7 +42,7 @@ const Odontogram: React.FC<OdontogramProps> = ({ data = {}, onChange, readOnly =
                 <Tooth
                     key={n}
                     number={n}
-                    data={odontogramData[String(n)] || {}}
+                    data={data[String(n)] || {}}
                     onZoneClick={handleAndPropagate}
                     disabled={readOnly}
                 />

@@ -1,46 +1,45 @@
 import { useState } from 'react';
 import { OdontogramData, ToothData, SurfaceStatus } from '../schemas/odontogram.schema';
 
-export function useOdontogram(initialData: OdontogramData = {}, readOnly: boolean = false) {
-    const [data, setData] = useState<OdontogramData>(initialData);
-    const [selectedTool, setSelectedTool] = useState<SurfaceStatus>('caries');
+export function toggleToothZone(
+    currentData: OdontogramData,
+    toothNumber: string | number,
+    zone: string,
+    tool: SurfaceStatus
+): OdontogramData {
+    const strNumber = String(toothNumber);
+    const currentTooth: ToothData = currentData[strNumber] || {};
+    let newToothData: ToothData;
 
-    const handleZoneClick = (toothNumber: string | number, zone: string) => {
-        if (readOnly) return;
-
-        const strNumber = String(toothNumber);
-        const currentTooth: ToothData = data[strNumber] || {};
-        let newToothData: ToothData;
-
-        if (selectedTool === 'ausente') {
-            // Toggle de ausencia: si ya estaba ausente, lo limpiamos
-            newToothData = currentTooth.all === 'ausente' ? {} : { all: 'ausente' };
+    if (tool === 'ausente') {
+        // Toggle de ausencia: si ya estaba ausente, lo limpiamos
+        newToothData = currentTooth.all === 'ausente' ? {} : { all: 'ausente' };
+    } else {
+        // Si el diente está marcado como ausente, cualquier click lo limpia primero para poder marcarlo
+        if (currentTooth.all === 'ausente') {
+            newToothData = { [zone === 'all' ? 'oclusal' : zone]: tool };
         } else {
-            // Si el diente está marcado como ausente, cualquier click lo limpia primero para poder marcarlo
-            if (currentTooth.all === 'ausente') {
-                newToothData = { [zone === 'all' ? 'oclusal' : zone]: selectedTool };
+            // Toque Inteligente: Si la zona ya tiene la herramienta actual, se limpia.
+            if (currentTooth[zone as keyof ToothData] === tool) {
+                const { [zone as keyof ToothData]: _, ...rest } = currentTooth;
+                newToothData = rest as ToothData;
             } else {
-                // Toque Inteligente: Si la zona ya tiene la herramienta actual, se limpia.
-                if (currentTooth[zone as keyof ToothData] === selectedTool) {
-                    const { [zone as keyof ToothData]: _, ...rest } = currentTooth;
-                    newToothData = rest as ToothData;
-                } else {
-                    newToothData = { ...currentTooth, [zone]: selectedTool } as ToothData;
-                }
+                newToothData = { ...currentTooth, [zone]: tool } as ToothData;
             }
         }
-
-        setData(prev => ({
-            ...prev,
-            [strNumber]: newToothData
-        }));
-    };
+    }
 
     return {
-        data,
-        setData,
+        ...currentData,
+        [strNumber]: newToothData
+    };
+}
+
+export function useOdontogram() {
+    const [selectedTool, setSelectedTool] = useState<SurfaceStatus>('caries');
+
+    return {
         selectedTool,
-        setSelectedTool,
-        handleZoneClick
+        setSelectedTool
     };
 }

@@ -15,6 +15,7 @@ export function useAppointmentsQuery(fromDate: string | null = null, toDate: str
 
     const { data: turnos = [], isLoading: loading, error, refetch } = useQuery({
         queryKey: turnosQueryKey(fromDate, toDate),
+        staleTime: 5000,
         queryFn: async () => {
             let fromISO, toISO;
             if (fromDate && toDate) {

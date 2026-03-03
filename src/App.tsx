@@ -37,8 +37,6 @@ const RootRoute = () => {
       } catch (err) {
         console.error('Logout error:', err);
       } finally {
-        localStorage.clear();
-        sessionStorage.clear();
         queryClient.clear();
       }
     }} />
