@@ -11,11 +11,10 @@ interface PatientProfileModalProps {
   onClose: () => void;
   onEdit?: (patient: any) => void;
   onDelete?: (patient: any) => Promise<void>;
-  onMessage?: (patient: any) => void;
   onOpenRecord?: (patient: any) => void;
 }
 
-export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onMessage, onOpenRecord }: PatientProfileModalProps) {
+export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onOpenRecord }: PatientProfileModalProps) {
   const navigate = useNavigate();
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -92,7 +91,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
       setDeleting(false);
       onClose?.();
     } catch (eUnknown: unknown) {
-            const e = eUnknown instanceof Error ? eUnknown : new Error(String(eUnknown) || "Ocurrió un error inesperado.");
+      const e = eUnknown instanceof Error ? eUnknown : new Error(String(eUnknown) || "Ocurrió un error inesperado.");
       setDeleting(false);
       message.error(`Error al eliminar: ${e.message || 'Intente nuevamente'}`);
     }
@@ -162,15 +161,6 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
       onClose={onClose}
       footer={(
         <div className="flex gap-3">
-          {onMessage && (
-            <button
-              type="button"
-              className="hidden sm:flex items-center justify-center h-12 px-6 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 text-base"
-              onClick={() => onMessage && onMessage(patient)}
-            >
-              Mensaje
-            </button>
-          )}
           <button
             type="button"
             className="flex-1 h-12 px-6 rounded-xl bg-red-600 text-white hover:bg-red-700 text-base font-semibold"
