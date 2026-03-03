@@ -236,16 +236,33 @@ export class PatientService {
       // — 4. Soft Delete Restoration Logic —
       let existingPatient = null;
       if (newPatient.dni) {
-        const { data: searchData, error: searchError } = await supabase
-          .from('patients')
-          .select('id')
-          .eq('dni', newPatient.dni)
-          .maybeSingle();
+        let attempt = 0;
+        let searchSuccess = false;
 
-        if (searchError && searchError.code !== 'PGRST116') {
-          throw searchError;
+        while (attempt < 3 && !searchSuccess) {
+          try {
+            const { data: searchData, error: searchError } = await supabase
+              .from('patients')
+              .select('id')
+              .eq('dni', newPatient.dni)
+              .maybeSingle();
+
+            if (searchError && searchError.code !== 'PGRST116') {
+              throw searchError;
+            }
+            existingPatient = searchData;
+            searchSuccess = true;
+          } catch (e: any) {
+            attempt++;
+            if (attempt >= 3) {
+              console.error(`Patient DNI search failed after 3 attempts`, e);
+              // Force throw to abort if network is truly down
+              throw new Error(`Error de red al buscar el paciente (Intento ${attempt}): ${e.message || JSON.stringify(e)}`);
+            }
+            // Wait 500ms before retrying network closures
+            await new Promise(res => setTimeout(res, 500));
+          }
         }
-        existingPatient = searchData;
       }
 
       let response;
@@ -276,8 +293,12 @@ export class PatientService {
       if (error) throw error;
       return mapDbPatient(data);
 
-    } catch (errorUnknown: unknown) {
-      const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
+    } catch (errorUnknown: any) {
+      const errorMessage = errorUnknown?.message
+        ? errorUnknown.message
+        : (typeof errorUnknown === 'object' ? JSON.stringify(errorUnknown) : String(errorUnknown));
+      const finalError = new Error(errorMessage || 'Ocurrió un error inesperado de red.');
+
       // Rollback: Si subimos un archivo pero la DB falló, borramos el archivo
       if (historiaClinicaPath) {
         try {
@@ -287,7 +308,7 @@ export class PatientService {
           console.error('CRITICAL: Failed to rollback file in storage', cleanupError);
         }
       }
-      throw error;
+      throw finalError;
     }
   }
 
