@@ -14,11 +14,7 @@ const sanitizeDni = (dni: string): string =>
 // ─── Helper: mapDbPatient ─────────────────────────────────────────────────────
 
 const mapDbPatient = (p: DbPatientRow): Patient => {
-  let publicUrl = p.historia_clinica_url ?? p.historia_clinica ?? null;
-  if (publicUrl && !publicUrl.startsWith('http')) {
-    const { data } = supabase.storage.from('clinical-records').getPublicUrl(publicUrl);
-    publicUrl = data.publicUrl ?? null;
-  }
+  const publicUrl = p.historia_clinica_url ?? p.historia_clinica ?? null;
 
   return {
     ...(p as unknown as Patient),
