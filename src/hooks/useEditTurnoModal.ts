@@ -152,6 +152,14 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
                 return m && m[1] ? m[1].trim() : '';
             })();
 
+            const parseStatus = (s: any): 'Pendiente' | 'Confirmado' | 'Completado' | 'Cancelado' => {
+                const lower = String(s || '').toLowerCase();
+                if (lower === 'pending' || lower === 'pendiente') return 'Pendiente';
+                if (lower === 'completed' || lower === 'completado') return 'Completado';
+                if (lower === 'cancelled' || lower === 'cancelado') return 'Cancelado';
+                return 'Confirmado';
+            };
+
             reset({
                 id: idTurno,
                 dni: dniInicial,
@@ -165,7 +173,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
                 notas: turno.description || turno.notas || '',
                 fechaHora: startDate || new Date().toISOString(),
                 tipoTurnoNombre: tipoTurno, // will be overwritten on submit
-                status: turno.status || turno.estado || 'Confirmado'
+                status: parseStatus(turno.status || turno.estado)
             });
 
             setSelectedFecha(fecha);

@@ -81,20 +81,6 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
                 </div>
               )}
 
-              {/* DEBUG: Render silent Zod validation errors */}
-              {Object.keys(errors).length > 0 && (
-                <div className="bg-orange-50 border border-orange-200 text-orange-800 px-4 py-3 rounded-lg text-sm">
-                  <strong>Errores de validación del formulario (Zod):</strong>
-                  <ul className="list-disc pl-5 mt-1">
-                    {Object.entries(errors).map(([key, err]) => (
-                      <li key={key}>
-                        <b>{key}</b>: {String(err?.message)}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
               {/* DNI */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
