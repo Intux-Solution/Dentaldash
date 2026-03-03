@@ -62,9 +62,13 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     }
 
     if (open) {
-      if (!instantPreviewUrl) {
-        setSignedUrl(null);
+      if (instantPreviewUrl) {
+        // If we are showing a local preview, DO NOT fetch from supabase
+        setSignedUrl(instantPreviewUrl);
+      } else if (localRawUrl && localRawUrl !== 'Sin archivo' && localRawUrl !== '-') {
         fetchUrl();
+      } else {
+        setSignedUrl(null);
       }
     } else {
       setSignedUrl(null);
@@ -99,9 +103,15 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       if (!newPath) {
         throw new Error("No se pudo obtener la ruta del archivo subido");
       }
-      if (localRawUrl && !localRawUrl.startsWith('http')) {
+
+      const oldUrl = localRawUrl;
+      // Immediately clear the old raw URL so the useEffect doesn't try to fetch it
+      // while we are deleting it or uploading the new one
+      setLocalRawUrl(null);
+
+      if (oldUrl && !oldUrl.startsWith('http') && oldUrl !== 'Sin archivo' && oldUrl !== '-') {
         try {
-          await StorageService.deleteFile(localRawUrl, 'clinical-records');
+          await StorageService.deleteFile(oldUrl, 'clinical-records');
         } catch (deleteErrUnknown: unknown) {
           const deleteErr = deleteErrUnknown instanceof Error ? deleteErrUnknown : new Error(String(deleteErrUnknown) || "Ocurrió un error inesperado.");
           console.warn('Could not delete old clinical record file, proceeding anyway:', deleteErr);
@@ -110,6 +120,8 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
 
       await supabase.from('patients').update({ historia_clinica_url: newPath }).eq('id', patient.id);
 
+      // Now set the new real path from the database. 
+      // The useEffect will trigger and fetch its signed URL silently in the background.
       setLocalRawUrl(newPath);
       window.dispatchEvent(new CustomEvent('patients:refresh'));
       e.target.value = '';
