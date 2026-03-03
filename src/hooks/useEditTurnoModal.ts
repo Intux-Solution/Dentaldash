@@ -255,6 +255,19 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
         }
     }, [selectedFecha, selectedTipoTurnoId, open, getAvailableSlots, watch('id')]);
 
+    // React-Hook-Form Synchronization
+    useEffect(() => {
+        if (selectedTipoTurnoId) {
+            setValue('tipoTurnoNombre', selectedTipoTurnoId, { shouldValidate: true });
+        }
+    }, [selectedTipoTurnoId, setValue]);
+
+    useEffect(() => {
+        if (selectedFecha && selectedHora) {
+            setValue('fechaHora', combineDateTimeToISO(selectedFecha || '', selectedHora || '') || '', { shouldValidate: true });
+        }
+    }, [selectedFecha, selectedHora, setValue]);
+
     const onSubmitForm = async (data: any) => {
         if (!selectedFecha || !selectedHora || !selectedTipoTurnoId) {
             message.error("Debes completar todos los campos del turno.");

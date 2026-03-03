@@ -296,7 +296,7 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
             <button
               type="submit"
               form="edit-turno-form"
-              disabled={!isValid || isSubmitting || deleting}
+              disabled={isSubmitting || deleting}
               className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
