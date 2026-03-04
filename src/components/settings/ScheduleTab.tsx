@@ -38,15 +38,15 @@ export default function ScheduleTab({ schedules, updateSchedule, addSchedule, de
                                             <div className="flex items-center gap-2">
                                                 <input
                                                     type="time"
-                                                    value={slot.start_time.slice(0, 5)}
-                                                    onChange={(e) => updateSchedule({ slotId: slot.id, updates: { start_time: e.target.value } })}
+                                                    defaultValue={slot.start_time.slice(0, 5)}
+                                                    onBlur={(e) => { if (e.target.value !== slot.start_time.slice(0, 5)) updateSchedule({ slotId: slot.id, updates: { start_time: e.target.value } }); }}
                                                     className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500"
                                                 />
                                                 <span className="text-gray-300">-</span>
                                                 <input
                                                     type="time"
-                                                    value={slot.end_time.slice(0, 5)}
-                                                    onChange={(e) => updateSchedule({ slotId: slot.id, updates: { end_time: e.target.value } })}
+                                                    defaultValue={slot.end_time.slice(0, 5)}
+                                                    onBlur={(e) => { if (e.target.value !== slot.end_time.slice(0, 5)) updateSchedule({ slotId: slot.id, updates: { end_time: e.target.value } }); }}
                                                     className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500"
                                                 />
                                                 <Trash2

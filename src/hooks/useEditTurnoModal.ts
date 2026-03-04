@@ -311,6 +311,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             }
 
             if (onSaved) onSaved(saved);
+            window.dispatchEvent(new Event('turnos:refresh'));
             message.success('Turno guardado con éxito');
             onClose();
         } catch (errUnknown: unknown) {
@@ -327,6 +328,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
         try {
             await AppointmentService.deleteAppointment(watch('id'), session);
             if (onDeleted) onDeleted(turno);
+            window.dispatchEvent(new Event('turnos:refresh'));
             message.success('Turno cancelado correctamente');
             onClose();
         } catch (errUnknown: unknown) {

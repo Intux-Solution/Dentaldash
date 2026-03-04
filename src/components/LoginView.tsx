@@ -76,13 +76,13 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
                             scopes: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.file',
                             queryParams: {
                               access_type: 'offline',
-                              prompt: 'consent',
+                              // prompt: 'consent',
                             },
                           },
                         });
                         if (error) throw error;
                       } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
+                        const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
                         setError(err.message || 'Error al iniciar sesión con Google');
                         setLoading(false);
                       }
