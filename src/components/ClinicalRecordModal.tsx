@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FolderOpen, Upload, X, AlertTriangle, Image as ImageIcon } from 'lucide-react';
+import { FolderOpen, Upload, X, AlertTriangle, Image as ImageIcon, FileText } from 'lucide-react';
 import { StorageService } from "../services/StorageService";
 import { PatientService } from "../services/PatientService";
 import { supabase } from "../config/supabaseClient";
@@ -12,6 +12,12 @@ function isPdf(url = "") {
   if (typeof url !== "string") return false;
   const lowerUrl = url.toLowerCase();
   return lowerUrl.includes(".pdf");
+}
+
+function isDoc(url = "") {
+  if (typeof url !== "string") return false;
+  const lowerUrl = url.toLowerCase();
+  return lowerUrl.includes(".doc");
 }
 
 export interface ClinicalRecordModalProps {
@@ -163,7 +169,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
           <label className="flex-1 h-12 flex items-center justify-center gap-2 px-4 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 cursor-pointer transition-all">
             <Upload size={18} />
             <span>{localRawUrl ? 'Modificar' : 'Adjuntar Nuevo'}</span>
-            <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
+            <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf,.doc,.docx" />
           </label>
 
           <button
@@ -193,6 +199,22 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
             <div className="flex flex-col items-center gap-3 text-amber-500">
               <AlertTriangle size={48} />
               <span className="text-sm font-bold uppercase tracking-wider text-center px-4">Error cargando archivo</span>
+            </div>
+          ) : isDoc(displayUrl) || isDoc(localRawUrl ?? "") ? (
+            <div className="flex flex-col items-center justify-center gap-4 p-6 flex-1">
+              <FileText size={64} strokeWidth={1} className="text-blue-500" />
+              <p className="text-sm text-gray-500 text-center font-medium">
+                Los archivos Word no se pueden previsualizar en el navegador.
+              </p>
+              <a
+                href={displayUrl ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm"
+              >
+                <FolderOpen size={18} />
+                Abrir documento
+              </a>
             </div>
           ) : isPdf(displayUrl) || (typeof localRawUrl === 'string' && localRawUrl.includes("drive.google.com")) ? (
             <div className="w-full h-full flex flex-col">
@@ -245,7 +267,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
         {/* Info or helper text if needed */}
         {!localRawUrl && (
           <p className="text-center text-sm text-gray-500 italic">
-            Sube un archivo (Imagen o PDF) para verlo aquí.
+            Sube un archivo (Imagen, PDF o Word) para verlo aquí.
           </p>
         )}
       </div>
