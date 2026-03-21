@@ -32,7 +32,9 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'image/jpeg',
-  'image/png'
+  'image/png',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 ];
 
 // ─── PatientService ───────────────────────────────────────────────────────────
@@ -151,7 +153,7 @@ export class PatientService {
       throw new Error(`El archivo excede el límite de 5MB.`);
     }
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      throw new Error(`Tipo de archivo no permitido. Solo se permiten PDF, JPEG y PNG.`);
+      throw new Error(`Tipo de archivo no permitido. Solo se permiten PDF, JPEG, PNG y Word.`);
     }
 
     const fileExt = file.name.split('.').pop();
