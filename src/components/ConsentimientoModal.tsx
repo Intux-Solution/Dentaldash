@@ -112,7 +112,13 @@ export default function ConsentimientoModal({ open, patient, onClose, session }:
         }
       }
 
-      await supabase.from('patients').update({ consentimiento_url: newPath }).eq('id', patient.id);
+      const { error: updateError } = await supabase
+        .from('patients')
+        .update({ consentimiento_url: newPath })
+        .eq('id', patient.id)
+        .eq('user_id', userId);
+
+      if (updateError) throw new Error(`Error al guardar en base de datos: ${updateError.message}`);
 
       setLocalRawUrl(newPath);
       window.dispatchEvent(new CustomEvent('patients:refresh'));
