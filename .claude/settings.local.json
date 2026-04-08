@@ -7,7 +7,9 @@
       "Bash(grep -E \"\\\\.\\(json|tsx|ts\\)$\")",
       "Bash(npx tsc:*)",
       "Bash(./node_modules/.bin/tsc --noEmit)",
-      "Bash(node_modules/.bin/tsc.cmd --noEmit)"
+      "Bash(node_modules/.bin/tsc.cmd --noEmit)",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__apply_migration"
     ]
   }
 }
