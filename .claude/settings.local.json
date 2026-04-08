@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where gh:*)",
+      "Read(//usr/local/bin/**)",
+      "Read(//c/Users/esteb/.local/bin/**)",
+      "Bash(grep -E \"\\\\.\\(json|tsx|ts\\)$\")"
+    ]
+  }
+}

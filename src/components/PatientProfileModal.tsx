@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ModalShell from './ModalShell';
-import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope } from 'lucide-react';
+import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope, ShieldCheck } from 'lucide-react';
 import { initials } from '../utils/helpers';
 import { message } from 'antd';
 
@@ -12,9 +12,10 @@ interface PatientProfileModalProps {
   onEdit?: (patient: any) => void;
   onDelete?: (patient: any) => Promise<void>;
   onOpenRecord?: (patient: any) => void;
+  onOpenConsent?: (patient: any) => void;
 }
 
-export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onOpenRecord }: PatientProfileModalProps) {
+export default function PatientProfileModal({ open, patient, onClose, onEdit, onDelete, onOpenRecord, onOpenConsent }: PatientProfileModalProps) {
   const navigate = useNavigate();
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -64,6 +65,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
   const alergias = getField(patient, ['alergias', 'alergia', 'Alergias', 'allergies'], 'Ninguna');
   const antecedentes = getField(patient, ['antecedentes', 'Antecedentes', 'medical_history'], 'Ninguno');
   const historiaClinicaUrl = getField(patient, ['historiaClinicaUrl', 'historia_clinica', 'Historia Clinica', 'historia_clinica_url', 'historiaClinica'], 'Sin archivo');
+  const consentimientoUrl = getField(patient, ['consentimientoUrl', 'consentimiento_url'], 'Sin archivo');
   const estado = getField(patient, ['estado', 'Estado', 'status'], 'Activo');
   const notas = getField(patient, ['notas', 'Notas', 'notes', 'observaciones'], 'Sin notas');
 
@@ -276,7 +278,26 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
             }
           />
 
-          {/* 8b. Odontograma */}
+          {/* 8b. Consentimiento */}
+          <InfoRow
+            icon={ShieldCheck}
+            label="Consentimiento"
+            value={
+              (() => {
+                const hasFile = consentimientoUrl && consentimientoUrl !== '-' && consentimientoUrl !== 'Sin archivo';
+                return (
+                  <button
+                    onClick={() => onOpenConsent && onOpenConsent(patient)}
+                    className={`${hasFile ? 'text-emerald-600 hover:text-emerald-700' : 'text-orange-600 hover:text-orange-700'} underline font-bold text-left`}
+                  >
+                    {hasFile ? 'Ver Consentimiento' : 'Agregar Consentimiento'}
+                  </button>
+                );
+              })()
+            }
+          />
+
+          {/* 8c. Odontograma */}
           <InfoRow
             icon={Activity}
             label="Odontograma"

@@ -30,10 +30,14 @@ export interface Patient {
     ultima_visita?: string;
     fecha_nacimiento?: string;
 
+    // ─── Consentimiento ───────────────────────────────────────────────────────
+    consentimiento_url?: string;
+
     // ─── camelCase (alias generados por mapDbPatient en el cliente) ───────────
     obraSocial?: string;
     numeroAfiliado?: string;
     historiaClinica?: string;
+    consentimientoUrl?: string;
     ultimaVisita?: string;
     fechaNacimiento?: string;
     fechaCreacion?: string;
@@ -90,6 +94,7 @@ export interface DbPatientRow {
     estado?: string;
     historia_clinica?: string | null;
     historia_clinica_url?: string | null;
+    consentimiento_url?: string | null;
     ultima_visita?: string;
     created_at?: string;
     [key: string]: any;

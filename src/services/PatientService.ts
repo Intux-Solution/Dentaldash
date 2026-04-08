@@ -22,6 +22,7 @@ const mapDbPatient = (p: DbPatientRow): Patient => {
     numeroAfiliado: p.numero_afiliado,
     fechaNacimiento: p.fecha_nacimiento,
     historiaClinica: publicUrl ?? undefined,
+    consentimientoUrl: p.consentimiento_url ?? undefined,
     ultimaVisita: p.ultima_visita,
     estado: p.estado ?? 'Activo',
   };
@@ -139,6 +140,31 @@ export class PatientService {
     }
 
     return data ? mapDbPatient(data) : null;
+  }
+
+  /**
+   * Subir un archivo de consentimiento informado al Storage.
+   * Ruta: consentimientos/{userId}/{uuid}.{ext}
+   * Retorna el PATH relativo dentro del bucket (no la URL pública).
+   */
+  static async uploadConsentimiento(file: File, userId: string): Promise<string> {
+    if (!userId) throw new Error('Authentication session missing or expired.');
+
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error(`El archivo excede el límite de 5MB.`);
+    }
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      throw new Error(`Tipo de archivo no permitido. Solo se permiten PDF, JPEG, PNG y Word.`);
+    }
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${crypto.randomUUID()}.${fileExt}`;
+    const filePath = `consentimientos/${userId}/${fileName}`;
+
+    const uploadedPath = await StorageService.uploadFile(file, 'clinical-records', filePath);
+    if (!uploadedPath) throw new Error('No se pudo completar la subida del archivo');
+
+    return uploadedPath;
   }
 
   /**

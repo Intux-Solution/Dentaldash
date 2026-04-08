@@ -19,6 +19,7 @@ export function PatientModalsProvider({
     const [showEditModal, setShowEditModal] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showRecordModal, setShowRecordModal] = useState(false);
+    const [showConsentModal, setShowConsentModal] = useState(false);
 
     const closeProfile = useCallback(() => {
         setShowProfileModal(false);
@@ -41,6 +42,13 @@ export function PatientModalsProvider({
     const closeEditPatient = useCallback(() => setShowEditModal(false), []);
 
     const closeRecordModal = useCallback(() => setShowRecordModal(false), []);
+
+    const closeConsentModal = useCallback(() => setShowConsentModal(false), []);
+
+    const onOpenConsent = useCallback((p: any) => {
+        setSelectedPatient(p);
+        setShowConsentModal(true);
+    }, []);
 
     const onOpenRecord = useCallback((p: any) => {
         const historiaUrl =
@@ -123,6 +131,7 @@ export function PatientModalsProvider({
         showEditModal,
         showAddModal,
         showRecordModal,
+        showConsentModal,
         session,
         patientsLoading: false,
         closeProfile,
@@ -133,14 +142,16 @@ export function PatientModalsProvider({
         closeEditPatient,
         onOpenRecord,
         closeRecordModal,
+        onOpenConsent,
+        closeConsentModal,
         onSavedPatient,
         onCreatedPatient,
         handleDeletePatient,
     }), [
         selectedPatient, showProfileModal, showEditModal, showAddModal, showRecordModal,
-        session, closeProfile, onViewPatient, onEditFromProfile, openAddPatient, closeAddPatient,
-        closeEditPatient, onOpenRecord, closeRecordModal, onSavedPatient, onCreatedPatient,
-        handleDeletePatient,
+        showConsentModal, session, closeProfile, onViewPatient, onEditFromProfile, openAddPatient,
+        closeAddPatient, closeEditPatient, onOpenRecord, closeRecordModal, onOpenConsent,
+        closeConsentModal, onSavedPatient, onCreatedPatient, handleDeletePatient,
     ]);
 
     return (

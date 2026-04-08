@@ -6,6 +6,7 @@ import PatientProfileModal from './PatientProfileModal';
 import EditPatientModal from './EditPatientModal';
 import AddPatientModal from './AddPatientModal';
 import ClinicalRecordModal from './ClinicalRecordModal';
+import ConsentimientoModal from './ConsentimientoModal';
 import BookingModal from './BookingModal';
 import TurnoDetailsModal from './TurnoDetailsModal';
 import EditTurnoModal from './EditTurnoModal';
@@ -21,6 +22,7 @@ export default function ModalsRoot() {
     showEditModal,
     showAddModal,
     showRecordModal,
+    showConsentModal,
     session,
     closeProfile,
     onEditFromProfile,
@@ -32,6 +34,8 @@ export default function ModalsRoot() {
     closeEditPatient,
     closeRecordModal,
     onOpenRecord,
+    onOpenConsent,
+    closeConsentModal,
   } = usePatientModals();
 
   const {
@@ -59,6 +63,7 @@ export default function ModalsRoot() {
         onEdit={onEditFromProfile}
         onDelete={handleDeletePatient}
         onOpenRecord={onOpenRecord}
+        onOpenConsent={onOpenConsent}
       />
 
       <EditPatientModal
@@ -82,6 +87,13 @@ export default function ModalsRoot() {
         open={showRecordModal}
         patient={selectedPatient}
         onClose={closeRecordModal}
+        session={session}
+      />
+
+      <ConsentimientoModal
+        open={showConsentModal}
+        patient={selectedPatient}
+        onClose={closeConsentModal}
         session={session}
       />
 
