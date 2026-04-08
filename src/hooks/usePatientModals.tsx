@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useCallback, useMemo, useState } from 'react';
+import React, { createContext, useContext, useCallback, useMemo, useState, useRef } from 'react';
 import { usePatients } from './usePatients';
 import { useAuth } from '../context/AuthContext';
+import { PatientService } from '../services/PatientService';
 
 const PatientModalsContext = createContext<any>(null);
 
@@ -119,8 +120,22 @@ export function PatientModalsProvider({
         }
     }, [selectedPatient, patients]);
 
+    const selectedPatientRef = useRef<any>(null);
     React.useEffect(() => {
-        const handleRefresh = () => { if (typeof refreshPatients === 'function') refreshPatients(); };
+        selectedPatientRef.current = selectedPatient;
+    }, [selectedPatient]);
+
+    React.useEffect(() => {
+        const handleRefresh = async () => {
+            if (typeof refreshPatients === 'function') refreshPatients();
+            const current = selectedPatientRef.current;
+            if (current?.id) {
+                try {
+                    const updated = await PatientService.getPatientById(current.id);
+                    if (updated) setSelectedPatient(updated);
+                } catch (_) {}
+            }
+        };
         window.addEventListener('patients:refresh', handleRefresh);
         return () => window.removeEventListener('patients:refresh', handleRefresh);
     }, [refreshPatients]);
