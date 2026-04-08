@@ -159,7 +159,7 @@ export class PatientService {
 
     const fileExt = file.name.split('.').pop();
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
-    const filePath = `consentimientos/${userId}/${fileName}`;
+    const filePath = `${userId}/consentimientos/${fileName}`;
 
     const uploadedPath = await StorageService.uploadFile(file, 'clinical-records', filePath);
     if (!uploadedPath) throw new Error('No se pudo completar la subida del archivo');
