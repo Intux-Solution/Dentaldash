@@ -6,7 +6,8 @@
 .pnp.js
 
 # supabase
-/supabase
+/supabase/.temp
+/supabase/.env
 Supabase.md
 
 # testing
@@ -38,3 +39,12 @@ build_err.txt
 /dist
 /dist-ssr
 /.vercel
+
+# IDE y Herramientas locales
+/.vscode
+.claude
+
+# Documentos locales y generados
+deploy.json
+Dentaldash.md
+/Manuales
