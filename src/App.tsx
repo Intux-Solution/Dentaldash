@@ -13,6 +13,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 import PricingView from './components/PricingView';
+import AdminApp from './components/AdminApp';
 import { Toaster } from 'react-hot-toast';
 
 // Instancia global de QueryClient, creada fuera del componente para evitar re-creaciones
@@ -27,24 +28,38 @@ const queryClient = new QueryClient({
 });
 
 const RootRoute = () => {
-  const { session } = useAuth();
+  const { session, profile, isLoading } = useAuth();
 
   if (!session) {
     return <LoginView onSuccess={() => { }} />;
   }
 
-  return (
-    <AuthedApp onLogout={async () => {
-      try {
-        await supabase.auth.signOut();
-      } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
-        console.error('Logout error:', err);
-      } finally {
-        queryClient.clear();
-      }
-    }} />
-  );
+  // Esperar a que el perfil cargue para saber el rol
+  if (isLoading || !profile) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 text-teal-600 font-medium font-sans">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mr-2" />
+        Cargando...
+      </div>
+    );
+  }
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (errUnknown: unknown) {
+      const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
+      console.error('Logout error:', err);
+    } finally {
+      queryClient.clear();
+    }
+  };
+
+  if (profile.role === 'admin') {
+    return <AdminApp onLogout={handleLogout} />;
+  }
+
+  return <AuthedApp onLogout={handleLogout} />;
 };
 
 const globalRouter = createBrowserRouter([
@@ -58,17 +73,6 @@ const globalRouter = createBrowserRouter([
 ]);
 
 const AppContent = () => {
-  const { isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gray-50 text-teal-600 font-medium font-sans">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mr-2" />
-        Cargando sesión...
-      </div>
-    );
-  }
-
   return <RouterProvider router={globalRouter} />;
 };
 
