@@ -108,6 +108,9 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
 
             <div className="mt-8 pt-6 border-t border-gray-100">
               <div className="flex flex-col items-center gap-2">
+                <Link to="/" className="text-xs text-gray-400 hover:text-teal-600 transition-colors mb-1">
+                  ← Volver al inicio
+                </Link>
                 <div className="flex gap-4 text-xs font-medium text-gray-400">
                   <Link to="/privacy" className="hover:text-teal-600 transition-colors">Política de Privacidad</Link>
                   <span>&bull;</span>

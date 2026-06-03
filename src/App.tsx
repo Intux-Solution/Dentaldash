@@ -13,6 +13,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 import PricingView from './components/PricingView';
+import LandingPage from './components/LandingPage';
 import AdminApp from './components/AdminApp';
 import { Toaster } from 'react-hot-toast';
 
@@ -26,6 +27,21 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Muestra la landing si no hay sesión, o la app si la hay
+const HomeRoute = () => {
+  const { session, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 text-teal-600 font-medium font-sans">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mr-2" />
+        Cargando...
+      </div>
+    );
+  }
+  if (session) return <RootRoute />;
+  return <LandingPage />;
+};
 
 const RootRoute = () => {
   const { session, profile, isLoading } = useAuth();
@@ -63,13 +79,12 @@ const RootRoute = () => {
 };
 
 const globalRouter = createBrowserRouter([
+  { path: '/', element: <HomeRoute /> },
+  { path: '/login', element: <RootRoute /> },
   { path: '/privacy', element: <PrivacyPolicy /> },
   { path: '/terms', element: <TermsOfService /> },
   { path: '/pricing', element: <PricingView /> },
-  {
-    path: '/*',
-    element: <RootRoute />
-  }
+  { path: '/*', element: <RootRoute /> },
 ]);
 
 const AppContent = () => {

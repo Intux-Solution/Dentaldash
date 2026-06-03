@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, ArrowLeft } from 'lucide-react';
 import { fetchPublicPlans, createCheckout, SubscriptionPlan } from '../services/SubscriptionService';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 export default function PricingView() {
@@ -21,7 +21,7 @@ export default function PricingView() {
 
   const handleContrat = async (plan: SubscriptionPlan) => {
     if (!session) {
-      navigate('/', { state: { redirect: '/pricing' } });
+      navigate('/login', { state: { redirect: '/pricing' } });
       return;
     }
     if (plan.price_monthly === 0) {
@@ -43,6 +43,13 @@ export default function PricingView() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-teal-50 to-white">
+      {/* Nav mínimo */}
+      <div className="max-w-4xl mx-auto px-6 pt-6">
+        <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-teal-600 transition-colors">
+          <ArrowLeft size={15} />
+          Volver al inicio
+        </Link>
+      </div>
       {/* Hero */}
       <div className="max-w-4xl mx-auto px-6 pt-16 pb-12 text-center">
         <div className="inline-flex items-center gap-2 bg-teal-100 text-teal-700 text-xs font-semibold px-3 py-1 rounded-full mb-4 uppercase tracking-wide">
