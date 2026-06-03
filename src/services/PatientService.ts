@@ -14,7 +14,7 @@ const sanitizeDni = (dni: string): string =>
 // ─── Helper: mapDbPatient ─────────────────────────────────────────────────────
 
 const mapDbPatient = (p: DbPatientRow): Patient => {
-  const publicUrl = p.historia_clinica_url ?? p.historia_clinica ?? null;
+  const publicUrl = p.historia_clinica_url ?? null;
 
   return {
     ...(p as unknown as Patient),

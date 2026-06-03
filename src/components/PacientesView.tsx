@@ -4,12 +4,15 @@ import { norm } from '../utils/helpers';
 import SearchInput from './SearchInput';
 import PatientTable from './PatientTable';
 import { PatientService } from '../services/PatientService';
+import { ExportService } from '../services/ExportService';
 import { usePatients } from '../hooks/usePatients';
 import { useModals } from '../hooks/useModals';
+import { useSubscription } from '../context/SubscriptionContext';
 
 export default function PacientesView() {
     const { patients, loading: patientsLoading, deletePatient } = usePatients();
     const { openAddPatient, onViewPatient, onOpenRecord } = useModals();
+    const { canUse } = useSubscription();
 
     const [searchParams, setSearchParams] = useSearchParams();
     const searchTerm = searchParams.get('q') || '';
@@ -96,6 +99,15 @@ export default function PacientesView() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                             placeholder="Buscar paciente"
                         />
+                        {canUse('export_data') && (
+                            <button
+                                onClick={() => ExportService.exportPatientsCSV(filteredPacientes)}
+                                disabled={patientsLoading || filteredPacientes.length === 0}
+                                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed border border-gray-200"
+                            >
+                                Exportar CSV
+                            </button>
+                        )}
                         <button
                             onClick={openAddPatient}
                             disabled={patientsLoading || isSearching}

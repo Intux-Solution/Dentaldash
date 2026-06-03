@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ModalShell from './ModalShell';
-import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope, ShieldCheck } from 'lucide-react';
-import { initials } from '../utils/helpers';
+import { User, Hash, Phone, Building2, FileText, AlertTriangle, Activity, Stethoscope, ShieldCheck, Calendar } from 'lucide-react';
+import { initials, calculateAge } from '../utils/helpers';
 import { message } from 'antd';
 
 interface PatientProfileModalProps {
@@ -64,9 +64,11 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
   const numeroAfiliado = getField(patient, ['numeroAfiliado', 'Numero Afiliado', 'Número Afiliado', 'numero_afiliado']);
   const alergias = getField(patient, ['alergias', 'alergia', 'Alergias', 'allergies'], 'Ninguna');
   const antecedentes = getField(patient, ['antecedentes', 'Antecedentes', 'medical_history'], 'Ninguno');
-  const historiaClinicaUrl = getField(patient, ['historiaClinicaUrl', 'historia_clinica', 'Historia Clinica', 'historia_clinica_url', 'historiaClinica'], 'Sin archivo');
+  const historiaClinicaUrl = getField(patient, ['historiaClinicaUrl', 'historia_clinica_url', 'historiaClinica'], 'Sin archivo');
   const consentimientoUrl = getField(patient, ['consentimientoUrl', 'consentimiento_url'], 'Sin archivo');
   const estado = getField(patient, ['estado', 'Estado', 'status'], 'Activo');
+  const fechaNacimiento = getField(patient, ['fechaNacimiento', 'fecha_nacimiento'], '');
+  const edad = calculateAge(fechaNacimiento || null);
   const notas = getField(patient, ['notas', 'Notas', 'notes', 'observaciones'], 'Sin notas');
 
   // Estado con colores
@@ -213,6 +215,15 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
             label="DNI"
             value={dni}
           />
+
+          {/* 2b. Fecha de nacimiento / Edad */}
+          {fechaNacimiento && (
+            <InfoRow
+              icon={Calendar}
+              label="Edad"
+              value={edad !== null ? `${edad} años (${fechaNacimiento})` : fechaNacimiento}
+            />
+          )}
 
           {/* 3. Teléfono */}
           <InfoRow

@@ -74,7 +74,6 @@ export interface PatientPayload {
     notas?: string;
     estado?: string;
     historiaClinicaFile?: File;
-    historiaClinica?: string | null;
     historia_clinica_url?: string | null;
 }
 
@@ -92,7 +91,6 @@ export interface DbPatientRow {
     antecedentes?: string;
     notas?: string;
     estado?: string;
-    historia_clinica?: string | null;
     historia_clinica_url?: string | null;
     consentimiento_url?: string | null;
     ultima_visita?: string;

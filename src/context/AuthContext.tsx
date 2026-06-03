@@ -6,15 +6,17 @@ interface Profile {
     id: string;
     full_name: string | null;
     role: 'dentist' | 'admin';
+    business_name: string | null;
 }
 
 interface AuthContextType {
     session: Session | null;
     profile: Profile | null;
     isLoading: boolean;
+    reloadProfile: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({ session: null, profile: null, isLoading: true });
+const AuthContext = createContext<AuthContextType>({ session: null, profile: null, isLoading: true, reloadProfile: async () => {} });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
@@ -28,7 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Cargar perfil con rol
             const { data: profileData } = await supabase
                 .from('profiles')
-                .select('id, full_name, role')
+                .select('id, full_name, role, business_name')
                 .eq('id', currentSession.user.id)
                 .single();
             setProfile(profileData ?? null);
@@ -65,8 +67,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => subscription.unsubscribe();
     }, []);
 
+    const reloadProfile = async () => {
+        if (!session?.user?.id) return;
+        const { data: profileData } = await supabase
+            .from('profiles')
+            .select('id, full_name, role, business_name')
+            .eq('id', session.user.id)
+            .single();
+        setProfile(profileData ?? null);
+    };
+
     return (
-        <AuthContext.Provider value={{ session, profile, isLoading }}>
+        <AuthContext.Provider value={{ session, profile, isLoading, reloadProfile }}>
             {children}
         </AuthContext.Provider>
     );

@@ -62,7 +62,7 @@ export function useNormalizedPatients(patients: any[]) {
           alergias: getField(p, ['alergias', 'alergia', 'Alergia', 'allergies'], 'Ninguna'),
           antecedentes: getField(p, ['antecedentes', 'Antecedentes', 'medicalHistory'], 'Ninguno'),
           notas: getField(p, ['notas', 'Notas', 'notes']),
-          historiaClinicaUrl: getField(p, ['historiaClinicaUrl', 'historia_clinica', 'Historia Clinica', 'historiaClinica', 'historia_clinica_url']),
+          historiaClinicaUrl: getField(p, ['historiaClinicaUrl', 'historia_clinica_url', 'historiaClinica']),
           fechaCreacion: getField(
             p,
             ['fechaCreacion', 'Fecha Creacion', 'createdAt', 'createdTime'],

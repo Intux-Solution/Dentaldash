@@ -151,10 +151,9 @@ ${data.notas || 'Sin notas adicionales'}
                     await AppointmentRepository.updateGoogleEventId(result.id, googleEvent.id, session?.user?.id ?? '');
                 }
             } catch (syncErrorUnknown: unknown) {
-            const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
-                // We rollback the DB insert if Google fails to guarantee syncing consistency
-                await AppointmentRepository.deleteAppointment(result.id, session?.user?.id ?? '');
-                throw new Error(`Fallo al sincronizar con Google Calendar: ${syncError.message}`);
+                const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
+                // El turno se guarda igual aunque GCal falle. syncPendingAppointments lo reintentará.
+                console.warn(`[AppointmentService] Turno ${result.id} guardado sin sincronizar con Google Calendar: ${syncError.message}`);
             }
 
             return result;

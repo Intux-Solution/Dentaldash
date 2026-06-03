@@ -8,7 +8,6 @@
 # supabase
 /supabase/.temp
 /supabase/.env
-Supabase.md
 
 # testing
 /coverage
@@ -44,10 +43,13 @@ build_err.txt
 /.vscode
 .claude
 
-# Documentos locales y generados
-deploy.json
-Dentaldash.md
-/Manuales
-
 # Scripts de setup con datos sensibles
 supabase/seed_admin.sql
+
+# Documentos internos (no publicos)
+Dentaldash.md
+Supabase.md
+MEJORA.md
+PLAN.md
+/Manuales
+deploy.json

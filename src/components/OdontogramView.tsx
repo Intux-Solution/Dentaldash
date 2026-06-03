@@ -12,7 +12,8 @@ import {
     Calendar,
     Hash,
     Edit2,
-    X
+    X,
+    Eye
 } from 'lucide-react';
 import { message } from 'antd';
 import { PatientService } from '../services/PatientService';
@@ -46,6 +47,8 @@ export default function OdontogramView() {
         handleCancelEdit,
         handleSaveEdit
     } = useOdontogramView(id);
+
+    const [previewSnapshot, setPreviewSnapshot] = useState<{ data: any; date: string } | null>(null);
 
     if (loading) {
         return (
@@ -277,6 +280,15 @@ export default function OdontogramView() {
                                                             >
                                                                 <Trash2 size={14} />
                                                             </button>
+                                                            {entry.odontogram_state && (
+                                                                <button
+                                                                    onClick={() => setPreviewSnapshot({ data: entry.odontogram_state, date: entry.created_at })}
+                                                                    className="p-1 text-gray-300 hover:text-blue-500 transition-all rounded hover:bg-blue-50"
+                                                                    title="Ver odontograma en esta fecha"
+                                                                >
+                                                                    <Eye size={14} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -299,6 +311,33 @@ export default function OdontogramView() {
                     </div>
                 </div>
             </main>
+
+            {/* Modal: snapshot del odontograma en una fecha pasada */}
+            {previewSnapshot && (
+                <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setPreviewSnapshot(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b">
+                            <div>
+                                <h2 className="text-base font-bold text-gray-900">Odontograma histórico</h2>
+                                <p className="text-sm text-gray-500 mt-0.5">
+                                    {new Date(previewSnapshot.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })} — solo lectura
+                                </p>
+                            </div>
+                            <button onClick={() => setPreviewSnapshot(null)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                                <X size={20} className="text-gray-500" />
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-x-auto">
+                            <ErrorBoundary fallbackMessage="Error al renderizar el odontograma histórico.">
+                                <Odontogram data={previewSnapshot.data} onChange={() => {}} />
+                            </ErrorBoundary>
+                        </div>
+                        <div className="px-6 py-3 bg-blue-50 border-t text-xs text-blue-600 text-center">
+                            Esta es una vista de solo lectura. Los cambios actuales no se ven afectados.
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

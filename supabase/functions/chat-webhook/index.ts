@@ -23,6 +23,24 @@ const sanitizePhone = (jid: string) => {
     return phone;
 };
 
+// ─── Rate Limiting ───────────────────────────────────────────────────────────
+// Map<jid, { count, windowStart }>  (module-level, persiste dentro del mismo isolate)
+const rateLimitMap = new Map<string, { count: number; windowStart: number }>();
+const RATE_LIMIT_MAX = 10;          // máx mensajes por ventana
+const RATE_LIMIT_WINDOW_MS = 60_000; // ventana de 1 minuto
+
+function isRateLimited(jid: string): boolean {
+    const now = Date.now();
+    const entry = rateLimitMap.get(jid);
+    if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+        rateLimitMap.set(jid, { count: 1, windowStart: now });
+        return false;
+    }
+    entry.count += 1;
+    return entry.count > RATE_LIMIT_MAX;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Tool definitions for Function Calling
 const toolsDefinition = [
     {
@@ -59,6 +77,15 @@ const toolsDefinition = [
 
 serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+    // ── Validación de secreto de webhook (opcional, si WEBHOOK_SECRET está configurado) ──
+    const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET')?.trim();
+    if (WEBHOOK_SECRET) {
+        const providedSecret = req.headers.get('x-webhook-secret');
+        if (providedSecret !== WEBHOOK_SECRET) {
+            return new Response('Unauthorized', { status: 401 });
+        }
+    }
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')?.trim();
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim();
@@ -125,6 +152,11 @@ serve(async (req) => {
         }
 
         if (messageObj?.key?.fromMe) return new Response('Skip self', { status: 200 });
+
+        if (remoteJid && isRateLimited(remoteJid)) {
+            console.warn(`[rate-limit] JID ${remoteJid} superó el límite. Ignorando.`);
+            return new Response('Rate limit exceeded', { status: 429 });
+        }
 
         const EVOLUTION_URL_RAW = Deno.env.get('EVOLUTION_API_URL')?.trim();
         const EVOLUTION_KEY = Deno.env.get('EVOLUTION_API_KEY')?.trim();

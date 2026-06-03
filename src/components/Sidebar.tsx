@@ -3,6 +3,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { X, Home, Calendar, Users, Settings, LogOut, ShieldCheck, CreditCard } from 'lucide-react';
 import { useSubscription } from '../context/SubscriptionContext';
+import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -13,6 +14,7 @@ interface SidebarProps {
 export default function Sidebar({ sidebarOpen, setSidebarOpen, onLogout }: SidebarProps) {
   const closeSidebar = () => setSidebarOpen(false);
   const { isAdmin, isExpired, subscription } = useSubscription();
+  const { profile } = useAuth();
 
   const subDotColor =
     subscription?.status === 'active' || subscription?.status === 'free'
@@ -42,7 +44,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, onLogout }: Sideb
               <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white text-lg">
                 🦷
               </div>
-              <span className="text-lg font-semibold text-gray-900">Consultorio</span>
+              <span className="text-lg font-semibold text-gray-900">{profile?.business_name || 'Consultorio'}</span>
             </div>
 
             {/* Close button (mobile) */}
@@ -176,7 +178,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, onLogout }: Sideb
         {/* Footer */}
         <div className="p-4 border-t border-gray-100">
           <div className="text-center">
-            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">Dental Dash v1.0.0</p>
+            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">Dental Dash v{__APP_VERSION__}</p>
           </div>
         </div>
       </div>

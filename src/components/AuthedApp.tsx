@@ -14,6 +14,7 @@ import { AppointmentModalsProvider } from '../hooks/useAppointmentModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
 import { useAuth } from '../context/AuthContext';
 import SubscriptionBanner from './SubscriptionBanner';
+import OnboardingWizard from './OnboardingWizard';
 
 const titleByPath = (pathname: string) => {
   if (pathname.startsWith('/pacientes')) return 'Pacientes';
@@ -28,7 +29,8 @@ interface AuthedAppProps {
 export default function AuthedApp({ onLogout }: AuthedAppProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { session } = useAuth();
+  const { session, profile, isLoading: authLoading } = useAuth();
+  const showOnboarding = !authLoading && profile !== null && !profile.business_name;
 
   // ─── Datos ────────────────────────────────────────────────────────────────
   const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
@@ -38,6 +40,7 @@ export default function AuthedApp({ onLogout }: AuthedAppProps) {
   const headerTitle = titleByPath(location.pathname);
 
   return (
+    <>
     <PatientModalsProvider
       patients={normalizedPatients}
       addPatient={addPatient}
@@ -79,5 +82,8 @@ export default function AuthedApp({ onLogout }: AuthedAppProps) {
         </div>
       </AppointmentModalsProvider>
     </PatientModalsProvider>
+
+    {showOnboarding && <OnboardingWizard />}
+    </>
   );
 }
