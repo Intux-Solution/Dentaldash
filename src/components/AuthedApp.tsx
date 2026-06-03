@@ -13,6 +13,7 @@ import { PatientModalsProvider } from '../hooks/usePatientModals';
 import { AppointmentModalsProvider } from '../hooks/useAppointmentModals';
 import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
 import { useAuth } from '../context/AuthContext';
+import SubscriptionBanner from './SubscriptionBanner';
 
 const titleByPath = (pathname: string) => {
   if (pathname.startsWith('/pacientes')) return 'Pacientes';
@@ -53,6 +54,7 @@ export default function AuthedApp({ onLogout }: AuthedAppProps) {
 
           <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
             <Header title={headerTitle} setSidebarOpen={setSidebarOpen} onLogout={onLogout} />
+            <SubscriptionBanner />
 
             {error && (
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 mx-4 mt-4 rounded">

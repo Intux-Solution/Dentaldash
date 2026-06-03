@@ -2,17 +2,17 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
 
-/**
- * Guarda de ruta privada.
- * Si no existe sesión → redirige a "/" conservando la ruta de origen en `state.from`.
- * Si hay sesión → renderiza el filho via <Outlet />.
- */
+// Rutas a las que siempre se permite acceso independientemente del estado de suscripción
+const SUBSCRIPTION_EXEMPT = ['/suscripcion', '/suscripcion/exito', '/suscripcion/error'];
+
 export default function ProtectedRoute() {
     const location = useLocation();
-    const { session, isLoading } = useAuth();
+    const { session, isLoading: authLoading } = useAuth();
+    const { isAdmin, isExpired, isLoading: subLoading, subscription } = useSubscription();
 
-    if (isLoading) {
+    if (authLoading || subLoading) {
         return (
             <div className="flex h-screen items-center justify-center bg-gray-50 text-teal-600 font-medium font-sans">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mr-2" />
@@ -22,13 +22,22 @@ export default function ProtectedRoute() {
     }
 
     if (!session) {
-        return (
-            <Navigate
-                to="/"
-                state={{ from: location }}
-                replace
-            />
-        );
+        return <Navigate to="/" state={{ from: location }} replace />;
+    }
+
+    // El admin siempre tiene acceso
+    if (isAdmin) return <Outlet />;
+
+    // Si la suscripción está vencida o cancelada, redirigir a pricing
+    // excepto en las rutas de suscripción para no crear un loop
+    const isExempt = SUBSCRIPTION_EXEMPT.some((path) => location.pathname.startsWith(path));
+    const isBlocked =
+        !isExempt &&
+        subscription !== null &&
+        (isExpired || subscription?.status === 'cancelled');
+
+    if (isBlocked) {
+        return <Navigate to="/suscripcion" replace />;
     }
 
     return <Outlet />;

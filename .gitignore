@@ -48,3 +48,6 @@ build_err.txt
 deploy.json
 Dentaldash.md
 /Manuales
+
+# Scripts de setup con datos sensibles
+supabase/seed_admin.sql

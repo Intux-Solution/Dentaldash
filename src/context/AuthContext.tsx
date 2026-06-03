@@ -2,24 +2,38 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../config/supabaseClient';
 
+interface Profile {
+    id: string;
+    full_name: string | null;
+    role: 'dentist' | 'admin';
+}
+
 interface AuthContextType {
     session: Session | null;
+    profile: Profile | null;
     isLoading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType>({ session: null, isLoading: true });
+const AuthContext = createContext<AuthContextType>({ session: null, profile: null, isLoading: true });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
+    const [profile, setProfile] = useState<Profile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     const handleSession = async (currentSession: Session | null) => {
         setSession(currentSession);
-        setIsLoading(false);
 
-        if (currentSession?.provider_refresh_token && currentSession.user) {
-            try {
-                // Background update, no need to await or block UI
+        if (currentSession?.user) {
+            // Cargar perfil con rol
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('id, full_name, role')
+                .eq('id', currentSession.user.id)
+                .single();
+            setProfile(profileData ?? null);
+
+            if (currentSession.provider_refresh_token) {
                 supabase
                     .from('profiles')
                     .update({ google_refresh_token: currentSession.provider_refresh_token })
@@ -27,11 +41,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     .then(({ error }) => {
                         if (error) console.error('Error saving google refresh token:', error);
                     });
-            } catch (eUnknown: unknown) {
-            const e = eUnknown instanceof Error ? eUnknown : new Error(String(eUnknown) || "Ocurrió un error inesperado.");
-                // Ignore silent errors
             }
+        } else {
+            setProfile(null);
         }
+
+        setIsLoading(false);
     };
 
     useEffect(() => {
@@ -51,7 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     return (
-        <AuthContext.Provider value={{ session, isLoading }}>
+        <AuthContext.Provider value={{ session, profile, isLoading }}>
             {children}
         </AuthContext.Provider>
     );

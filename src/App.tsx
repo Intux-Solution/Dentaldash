@@ -11,6 +11,8 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SubscriptionProvider } from './context/SubscriptionContext';
+import PricingView from './components/PricingView';
 import { Toaster } from 'react-hot-toast';
 
 // Instancia global de QueryClient, creada fuera del componente para evitar re-creaciones
@@ -48,6 +50,7 @@ const RootRoute = () => {
 const globalRouter = createBrowserRouter([
   { path: '/privacy', element: <PrivacyPolicy /> },
   { path: '/terms', element: <TermsOfService /> },
+  { path: '/pricing', element: <PricingView /> },
   {
     path: '/*',
     element: <RootRoute />
@@ -74,8 +77,10 @@ export default function App() {
     <ErrorBoundary fallbackMessage="Ha ocurrido un error inesperado al cargar la aplicación principal. Por favor, intenta de nuevo.">
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <Toaster position="top-right" />
-          <AppContent />
+          <SubscriptionProvider>
+            <Toaster position="top-right" />
+            <AppContent />
+          </SubscriptionProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
