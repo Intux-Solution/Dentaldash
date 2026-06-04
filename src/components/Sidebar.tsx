@@ -40,11 +40,9 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, onLogout }: Sideb
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-4 border-b border-gray-200 min-h-[90px]">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white text-lg">
-                🦷
-              </div>
-              <span className="text-lg font-semibold text-gray-900">{profile?.business_name || 'Consultorio'}</span>
+            <div className="flex flex-col gap-0.5">
+              <img src="/Logo%20dentaldash.png" alt="DentalDash" className="h-7 w-auto" />
+              <span className="text-xs text-gray-400 font-medium truncate max-w-[160px]">{profile?.business_name || 'Consultorio'}</span>
             </div>
 
             {/* Close button (mobile) */}

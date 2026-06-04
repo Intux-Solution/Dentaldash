@@ -93,9 +93,8 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
       <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 px-6 py-12">
 
         {/* Logo mobile */}
-        <div className="flex lg:hidden items-center gap-2.5 mb-10">
-          <span className="text-3xl">🦷</span>
-          <span className="text-2xl font-bold text-gray-800 tracking-tight">DentalDash</span>
+        <div className="flex lg:hidden items-center mb-10">
+          <img src="/Logo%20dentaldash.png" alt="DentalDash" className="h-10 w-auto" />
         </div>
 
         <div className="w-full max-w-sm">
