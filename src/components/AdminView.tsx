@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { AdminService } from '../services/AdminService';
-import { Users, CreditCard, LayoutList, CheckCircle, XCircle, AlertTriangle, Clock, RefreshCw, Loader2 } from 'lucide-react';
+import { Users, CreditCard, LayoutList, CheckCircle, RefreshCw, Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import PlanFormModal from './PlanFormModal';
 
 type Tab = 'usuarios' | 'planes' | 'pagos';
 
@@ -20,6 +21,8 @@ export default function AdminView() {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<any | null>(null);
 
   const loadTab = useCallback(async (t: Tab) => {
     setLoading(true);
@@ -63,6 +66,30 @@ export default function AdminView() {
       await AdminService.cancelSubscription(userId);
       toast.success(`Suscripción de ${name} cancelada`);
       loadTab('usuarios');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCreatePlan = () => {
+    setEditingPlan(null);
+    setPlanModalOpen(true);
+  };
+
+  const handleEditPlan = (plan: any) => {
+    setEditingPlan(plan);
+    setPlanModalOpen(true);
+  };
+
+  const handleDeletePlan = async (planId: string, planName: string) => {
+    if (!confirm(`¿Eliminar permanentemente el plan "${planName}"? Esta acción no se puede deshacer.`)) return;
+    setActionLoading(planId + '_delete');
+    try {
+      await AdminService.deletePlan(planId);
+      toast.success(`Plan "${planName}" eliminado`);
+      loadTab('planes');
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -198,50 +225,84 @@ export default function AdminView() {
 
           {/* ── PLANES ── */}
           {tab === 'planes' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {plans.map((plan: any) => (
-                <div key={plan.id} className={`rounded-xl border p-5 bg-white ${plan.is_active ? 'border-gray-200' : 'border-dashed border-gray-300 opacity-60'}`}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-gray-800">{plan.name}</h3>
-                      <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
+            <div>
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={handleCreatePlan}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition-colors"
+                >
+                  <Plus size={16} />
+                  Nuevo Plan
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {plans.map((plan: any) => (
+                  <div key={plan.id} className={`rounded-xl border p-5 bg-white ${plan.is_active ? 'border-gray-200' : 'border-dashed border-gray-300 opacity-60'}`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-semibold text-gray-800">{plan.name}</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
+                      </div>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${plan.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {plan.is_active ? 'Activo' : 'Inactivo'}
+                      </span>
                     </div>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${plan.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {plan.is_active ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </div>
-                  <p className="text-2xl font-bold text-gray-900 mb-1">
-                    ${Number(plan.price_monthly).toLocaleString('es-AR')}
-                    <span className="text-sm font-normal text-gray-400"> /mes</span>
-                  </p>
-                  {plan.price_yearly && (
-                    <p className="text-xs text-teal-600 mb-3">
-                      ${Number(plan.price_yearly).toLocaleString('es-AR')} /año
+                    <p className="text-2xl font-bold text-gray-900 mb-1">
+                      ${Number(plan.price_monthly).toLocaleString('es-AR')}
+                      <span className="text-sm font-normal text-gray-400"> /mes</span>
                     </p>
-                  )}
-                  <ul className="space-y-1 mb-4">
-                    {(plan.features as string[]).map((f: string, i: number) => (
-                      <li key={i} className="text-xs text-gray-500 flex items-center gap-1.5">
-                        <CheckCircle size={11} className="text-teal-400 shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => handleTogglePlan(plan.id, plan.is_active)}
-                    disabled={actionLoading === plan.id}
-                    className={`w-full text-sm py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                      plan.is_active
-                        ? 'bg-red-50 hover:bg-red-100 text-red-600'
-                        : 'bg-teal-50 hover:bg-teal-100 text-teal-700'
-                    }`}
-                  >
-                    {actionLoading === plan.id
-                      ? <Loader2 size={14} className="animate-spin mx-auto" />
-                      : plan.is_active ? 'Desactivar plan' : 'Activar plan'}
-                  </button>
-                </div>
-              ))}
+                    {plan.price_yearly && (
+                      <p className="text-xs text-teal-600 mb-3">
+                        ${Number(plan.price_yearly).toLocaleString('es-AR')} /año
+                      </p>
+                    )}
+                    <ul className="space-y-1 mb-4">
+                      {(plan.features as string[]).map((f: string, i: number) => (
+                        <li key={i} className="text-xs text-gray-500 flex items-center gap-1.5">
+                          <CheckCircle size={11} className="text-teal-400 shrink-0" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleTogglePlan(plan.id, plan.is_active)}
+                        disabled={!!actionLoading}
+                        className={`flex-1 text-sm py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                          plan.is_active
+                            ? 'bg-red-50 hover:bg-red-100 text-red-600'
+                            : 'bg-teal-50 hover:bg-teal-100 text-teal-700'
+                        }`}
+                      >
+                        {actionLoading === plan.id
+                          ? <Loader2 size={14} className="animate-spin mx-auto" />
+                          : plan.is_active ? 'Desactivar' : 'Activar'}
+                      </button>
+                      <button
+                        onClick={() => handleEditPlan(plan)}
+                        disabled={!!actionLoading}
+                        title="Editar plan"
+                        className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-600 transition-colors disabled:opacity-50"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeletePlan(plan.id, plan.name)}
+                        disabled={!!actionLoading}
+                        title="Eliminar plan"
+                        className="p-2 rounded-lg bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                      >
+                        {actionLoading === plan.id + '_delete'
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <Trash2 size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {plans.length === 0 && (
+                  <p className="col-span-3 text-center text-gray-400 py-10">No hay planes</p>
+                )}
+              </div>
             </div>
           )}
 
@@ -281,6 +342,12 @@ export default function AdminView() {
           )}
         </>
       )}
+      <PlanFormModal
+        open={planModalOpen}
+        plan={editingPlan}
+        onClose={() => { setPlanModalOpen(false); setEditingPlan(null); }}
+        onSaved={() => loadTab('planes')}
+      />
     </div>
   );
 }

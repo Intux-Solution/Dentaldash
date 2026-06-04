@@ -334,6 +334,65 @@ serve(async (req) => {
       return json(data);
     }
 
+    // ── update_plan ─────────────────────────────────────────────────────────
+    if (action === "update_plan") {
+      const { plan_id, name, description, price_monthly, price_yearly, features, sort_order } = body;
+      if (!plan_id) {
+        return new Response(
+          JSON.stringify({ error: "Missing plan_id." }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (name !== undefined) updates.name = name;
+      if (description !== undefined) updates.description = description;
+      if (price_monthly !== undefined) updates.price_monthly = price_monthly;
+      if (price_yearly !== undefined) updates.price_yearly = price_yearly;
+      if (features !== undefined) updates.features = features;
+      if (sort_order !== undefined) updates.sort_order = sort_order;
+
+      const { error } = await supabase
+        .from("subscription_plans")
+        .update(updates)
+        .eq("id", plan_id);
+
+      if (error) throw error;
+      return json({ ok: true });
+    }
+
+    // ── delete_plan ─────────────────────────────────────────────────────────
+    if (action === "delete_plan") {
+      const { plan_id } = body;
+      if (!plan_id) {
+        return new Response(
+          JSON.stringify({ error: "Missing plan_id." }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const { count } = await supabase
+        .from("subscriptions")
+        .select("id", { count: "exact", head: true })
+        .eq("plan_id", plan_id)
+        .in("status", ["active", "trial", "past_due"]);
+
+      if (count && count > 0) {
+        return new Response(
+          JSON.stringify({ error: `No se puede eliminar: ${count} suscripción(es) activa(s) usan este plan. Desactivalo primero.` }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const { error } = await supabase
+        .from("subscription_plans")
+        .delete()
+        .eq("id", plan_id);
+
+      if (error) throw error;
+      return json({ ok: true });
+    }
+
     return new Response(
       JSON.stringify({ error: `Unknown action: ${action}` }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }

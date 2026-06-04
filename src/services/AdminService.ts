@@ -38,6 +38,12 @@ export const AdminService = {
   createPlan: (data: { name: string; description?: string; price_monthly: number; price_yearly?: number; features?: string[]; sort_order?: number }) =>
     callAdminApi('create_plan', data),
 
+  updatePlan: (planId: string, data: { name?: string; description?: string | null; price_monthly?: number; price_yearly?: number | null; features?: string[]; sort_order?: number }) =>
+    callAdminApi('update_plan', { plan_id: planId, ...data }),
+
+  deletePlan: (planId: string) =>
+    callAdminApi('delete_plan', { plan_id: planId }),
+
   togglePlan: (planId: string, isActive: boolean) =>
     callAdminApi('toggle_plan', { plan_id: planId, is_active: isActive }),
 
