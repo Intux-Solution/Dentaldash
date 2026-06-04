@@ -12,8 +12,6 @@ import TermsOfService from './components/TermsOfService';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SubscriptionProvider } from './context/SubscriptionContext';
-import PricingView from './components/PricingView';
-import LandingPage from './components/LandingPage';
 import AdminApp from './components/AdminApp';
 import { Toaster } from 'react-hot-toast';
 
@@ -40,7 +38,7 @@ const HomeRoute = () => {
     );
   }
   if (session) return <RootRoute />;
-  return <LandingPage />;
+  return <LoginView />;
 };
 
 const RootRoute = () => {
@@ -83,7 +81,6 @@ const globalRouter = createBrowserRouter([
   { path: '/login', element: <RootRoute /> },
   { path: '/privacy', element: <PrivacyPolicy /> },
   { path: '/terms', element: <TermsOfService /> },
-  { path: '/pricing', element: <PricingView /> },
   { path: '/*', element: <RootRoute /> },
 ]);
 
