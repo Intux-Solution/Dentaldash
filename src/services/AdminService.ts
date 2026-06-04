@@ -35,10 +35,10 @@ export const AdminService = {
   updatePlanPrice: (planId: string, priceMonthly?: number, priceYearly?: number) =>
     callAdminApi('update_plan_price', { plan_id: planId, price_monthly: priceMonthly, price_yearly: priceYearly }),
 
-  createPlan: (data: { name: string; description?: string; price_monthly: number; price_yearly?: number; features?: string[]; sort_order?: number }) =>
+  createPlan: (data: { name: string; description?: string; price_monthly: number; price_yearly?: number; features?: string[]; feature_keys?: string[]; sort_order?: number }) =>
     callAdminApi('create_plan', data),
 
-  updatePlan: (planId: string, data: { name?: string; description?: string | null; price_monthly?: number; price_yearly?: number | null; features?: string[]; sort_order?: number }) =>
+  updatePlan: (planId: string, data: { name?: string; description?: string | null; price_monthly?: number; price_yearly?: number | null; features?: string[]; feature_keys?: string[]; sort_order?: number }) =>
     callAdminApi('update_plan', { plan_id: planId, ...data }),
 
   deletePlan: (planId: string) =>

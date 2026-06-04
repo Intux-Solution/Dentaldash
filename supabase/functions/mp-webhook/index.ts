@@ -1,39 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
 
-// Feature keys que se habilitan segun el plan
-const PLAN_FEATURES: Record<string, string[]> = {
-  Trial: [
-    "appointments",
-    "odontogram",
-    "clinical_records",
-    "consent_forms",
-  ],
-  Basico: [
-    "appointments",
-    "odontogram",
-    "clinical_records",
-    "consent_forms",
-    "patients_unlimited",
-    "insurance_management",
-    "services_config",
-    "export_data",
-  ],
-  Pro: [
-    "appointments",
-    "odontogram",
-    "clinical_records",
-    "consent_forms",
-    "patients_unlimited",
-    "insurance_management",
-    "services_config",
-    "export_data",
-    "whatsapp_bot",
-    "google_calendar",
-    "faqs_config",
-  ],
-};
-
 // Todas las feature keys posibles
 const ALL_FEATURES = [
   "appointments",
@@ -205,11 +172,11 @@ serve(async (req) => {
     if (internalStatus === "active") {
       const { data: plan } = await supabase
         .from("subscription_plans")
-        .select("name")
+        .select("name, feature_keys")
         .eq("id", planId)
         .single();
 
-      const enabledFeatures = PLAN_FEATURES[plan?.name ?? ""] ?? [];
+      const enabledFeatures: string[] = (plan as any)?.feature_keys ?? [];
 
       const permissionsUpsert = ALL_FEATURES.map((key) => ({
         user_id: userId,

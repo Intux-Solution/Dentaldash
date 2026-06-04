@@ -21,15 +21,6 @@ const ALL_FEATURES = [
   "faqs_config",
 ];
 
-const PLAN_FEATURES: Record<string, string[]> = {
-  Trial: ["appointments", "odontogram", "clinical_records", "consent_forms"],
-  Basico: [
-    "appointments", "odontogram", "clinical_records", "consent_forms",
-    "patients_unlimited", "insurance_management", "services_config", "export_data",
-  ],
-  Pro: [...ALL_FEATURES],
-};
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -126,7 +117,7 @@ serve(async (req) => {
 
       const { data: plan } = await supabase
         .from("subscription_plans")
-        .select("name")
+        .select("name, feature_keys")
         .eq("id", plan_id)
         .single();
 
@@ -139,9 +130,9 @@ serve(async (req) => {
 
       if (error) throw error;
 
-      // Actualizar feature_permissions segun el nuevo plan
-      if (plan?.name) {
-        const enabledFeatures = PLAN_FEATURES[plan.name] ?? [];
+      // Actualizar feature_permissions segun el nuevo plan (lee feature_keys de la DB)
+      if (plan) {
+        const enabledFeatures: string[] = (plan as any).feature_keys ?? [];
         const perms = ALL_FEATURES.map((key) => ({
           user_id: target_user_id,
           feature_key: key,
@@ -202,7 +193,7 @@ serve(async (req) => {
 
     // ── create_plan ─────────────────────────────────────────────────────────
     if (action === "create_plan") {
-      const { name, description, price_monthly, price_yearly, features, sort_order } = body;
+      const { name, description, price_monthly, price_yearly, features, feature_keys, sort_order } = body;
       if (!name || price_monthly === undefined) {
         return new Response(
           JSON.stringify({ error: "Missing name or price_monthly." }),
@@ -218,6 +209,7 @@ serve(async (req) => {
           price_monthly,
           price_yearly: price_yearly ?? null,
           features: features ?? [],
+          feature_keys: feature_keys ?? [],
           sort_order: sort_order ?? 0,
         })
         .select()
@@ -336,7 +328,7 @@ serve(async (req) => {
 
     // ── update_plan ─────────────────────────────────────────────────────────
     if (action === "update_plan") {
-      const { plan_id, name, description, price_monthly, price_yearly, features, sort_order } = body;
+      const { plan_id, name, description, price_monthly, price_yearly, features, feature_keys, sort_order } = body;
       if (!plan_id) {
         return new Response(
           JSON.stringify({ error: "Missing plan_id." }),
@@ -350,6 +342,7 @@ serve(async (req) => {
       if (price_monthly !== undefined) updates.price_monthly = price_monthly;
       if (price_yearly !== undefined) updates.price_yearly = price_yearly;
       if (features !== undefined) updates.features = features;
+      if (feature_keys !== undefined) updates.feature_keys = feature_keys;
       if (sort_order !== undefined) updates.sort_order = sort_order;
 
       const { error } = await supabase

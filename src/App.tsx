@@ -13,6 +13,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 import AdminApp from './components/AdminApp';
+import PublicBookingView from './components/PublicBookingView';
 import { Toaster } from 'react-hot-toast';
 
 // Instancia global de QueryClient, creada fuera del componente para evitar re-creaciones
@@ -81,6 +82,7 @@ const globalRouter = createBrowserRouter([
   { path: '/login', element: <RootRoute /> },
   { path: '/privacy', element: <PrivacyPolicy /> },
   { path: '/terms', element: <TermsOfService /> },
+  { path: '/agendar/:slug', element: <PublicBookingView /> },
   { path: '/*', element: <RootRoute /> },
 ]);
 

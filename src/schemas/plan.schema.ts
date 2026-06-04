@@ -6,6 +6,7 @@ export const PlanFormSchema = z.object({
   price_monthly: z.coerce.number().min(0, 'El precio mensual debe ser ≥ 0'),
   price_yearly: z.coerce.number().min(0).optional().nullable(),
   features: z.array(z.string()).default([]),
+  feature_keys: z.array(z.string()).default([]),
   sort_order: z.coerce.number().int().min(0).default(0),
 });
 

@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { Camera, User, Save } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Camera, User, Save, Link, Copy, Check } from 'lucide-react';
 import { ProfileData } from './useSettings';
 
 interface ProfileTabProps {
@@ -13,6 +13,30 @@ interface ProfileTabProps {
 
 export default function ProfileTab({ profile, handleProfileChange, handleAutoSaveProfile, avatarPreview, googleAvatar, handleAvatarChange }: ProfileTabProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [copied, setCopied] = useState(false);
+    const [slugError, setSlugError] = useState('');
+
+    const bookingUrl = profile?.booking_slug
+        ? `${window.location.origin}/agendar/${profile.booking_slug}`
+        : null;
+
+    const handleCopyLink = () => {
+        if (!bookingUrl) return;
+        navigator.clipboard.writeText(bookingUrl).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    const handleSaveSlug = () => {
+        const slug = (profile?.booking_slug ?? '').trim().toLowerCase();
+        if (slug && !/^[a-z0-9-]+$/.test(slug)) {
+            setSlugError('Solo letras minúsculas, números y guiones (-)');
+            return;
+        }
+        setSlugError('');
+        handleAutoSaveProfile({ booking_slug: slug || null });
+    };
 
     return (
         <div className="p-8">
@@ -84,6 +108,54 @@ export default function ProfileTab({ profile, handleProfileChange, handleAutoSav
                             </button>
                         </div>
                         <p className="text-xs text-gray-500">Este número será entregado por el asistente virtual cuando el paciente requiera contactar a un humano.</p>
+                    </div>
+
+                    {/* Link de reservas */}
+                    <div className="space-y-3 pt-2 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                            <Link size={15} className="text-teal-600" />
+                            <label className="block text-sm font-semibold text-gray-700">Link de reservas para pacientes</label>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                            Compartí este link con tus pacientes para que puedan agendar un turno sin necesidad de llamar.
+                        </p>
+                        <div className="flex gap-2">
+                            <div className="flex-1 flex items-center border border-gray-200 rounded-xl overflow-hidden">
+                                <span className="px-3 py-2.5 text-xs text-gray-400 bg-gray-50 border-r border-gray-200 whitespace-nowrap">
+                                    {window.location.origin}/agendar/
+                                </span>
+                                <input
+                                    type="text"
+                                    value={profile?.booking_slug ?? ''}
+                                    onChange={(e) => {
+                                        setSlugError('');
+                                        handleProfileChange('booking_slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
+                                    }}
+                                    placeholder="mi-consultorio"
+                                    className="flex-1 px-3 py-2.5 text-sm focus:outline-none bg-white"
+                                />
+                            </div>
+                            <button
+                                onClick={handleSaveSlug}
+                                className="px-4 py-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-all flex items-center justify-center"
+                                title="Guardar slug"
+                            >
+                                <Save size={18} />
+                            </button>
+                        </div>
+                        {slugError && <p className="text-xs text-red-500">{slugError}</p>}
+                        {bookingUrl && (
+                            <div className="flex items-center gap-2 bg-teal-50 rounded-xl px-4 py-2.5">
+                                <span className="flex-1 text-sm text-teal-700 font-medium truncate">{bookingUrl}</span>
+                                <button
+                                    onClick={handleCopyLink}
+                                    className="flex items-center gap-1.5 text-xs text-teal-600 hover:text-teal-800 font-medium transition-colors shrink-0"
+                                >
+                                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                                    {copied ? 'Copiado' : 'Copiar'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

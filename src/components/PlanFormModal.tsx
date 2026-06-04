@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react';
 import ModalShell from './ModalShell';
 import { PlanFormSchema, type PlanFormData } from '../schemas/plan.schema';
 import { AdminService } from '../services/AdminService';
+import { ALL_FEATURE_KEYS } from '../config/featureKeys';
 import toast from 'react-hot-toast';
 
 const FieldError = ({ error }: { error?: { message?: string } }) =>
@@ -34,7 +35,7 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
     formState: { errors, isSubmitting },
   } = useForm<PlanFormData>({
     resolver: zodResolver(PlanFormSchema),
-    defaultValues: { name: '', description: '', price_monthly: 0, price_yearly: undefined, features: [], sort_order: 0 },
+    defaultValues: { name: '', description: '', price_monthly: 0, price_yearly: undefined, features: [], feature_keys: [], sort_order: 0 },
   });
 
   useEffect(() => {
@@ -46,10 +47,11 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
           price_monthly: plan.price_monthly ?? 0,
           price_yearly: plan.price_yearly ?? undefined,
           features: plan.features ?? [],
+          feature_keys: plan.feature_keys ?? [],
           sort_order: plan.sort_order ?? 0,
         });
       } else {
-        reset({ name: '', description: '', price_monthly: 0, price_yearly: undefined, features: [], sort_order: 0 });
+        reset({ name: '', description: '', price_monthly: 0, price_yearly: undefined, features: [], feature_keys: [], sort_order: 0 });
       }
     }
   }, [open, plan, reset]);
@@ -183,6 +185,38 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
             )}
           />
           <FieldError error={errors.features} />
+        </div>
+
+        {/* Permisos de funcionalidad */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Permisos de funcionalidad</label>
+          <Controller
+            name="feature_keys"
+            control={control}
+            render={({ field }) => (
+              <div className="grid grid-cols-1 gap-2 bg-gray-50 rounded-xl p-3">
+                {ALL_FEATURE_KEYS.map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded text-teal-600 accent-teal-600"
+                      checked={field.value.includes(key)}
+                      disabled={isSubmitting}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          field.onChange([...field.value, key]);
+                        } else {
+                          field.onChange(field.value.filter((k: string) => k !== key));
+                        }
+                      }}
+                    />
+                    <span className="text-sm text-gray-700">{label}</span>
+                    <span className="text-xs text-gray-400 font-mono ml-auto">{key}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          />
         </div>
 
         {/* Orden */}

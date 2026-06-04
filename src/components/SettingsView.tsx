@@ -1,17 +1,30 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-21 (Refactored)
 import React, { useState, useEffect } from 'react';
+import { Lock } from 'lucide-react';
 import { supabase } from '../config/supabaseClient';
 import { useSettings } from './settings/useSettings';
+import { useSubscription } from '../context/SubscriptionContext';
 import ProfileTab from './settings/ProfileTab';
 import InsurancesTab from './settings/InsurancesTab';
 import ServicesTab from './settings/ServicesTab';
 import ScheduleTab from './settings/ScheduleTab';
 import WhatsAppTab from './settings/WhatsAppTab';
 import FaqsTab from './settings/FaqsTab';
+import UpgradePrompt from './UpgradePrompt';
+
+const TAB_FEATURE_MAP: Record<string, string | null> = {
+    profile: null,
+    insurances: 'insurance_management',
+    services: 'services_config',
+    schedule: null,
+    whatsapp: 'whatsapp_bot',
+    faqs: 'faqs_config',
+};
 
 export default function SettingsView() {
     const [session, setSession] = useState<import('@supabase/supabase-js').Session | null>(null);
     const [activeTab, setActiveTab] = useState('profile');
+    const { canUse } = useSubscription();
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -39,12 +52,28 @@ export default function SettingsView() {
             </div>
 
             <div className="flex border-b mb-6 border-gray-100 overflow-x-auto">
-                <button onClick={() => setActiveTab('profile')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'profile' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'profile' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Perfil</button>
-                <button onClick={() => setActiveTab('insurances')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'insurances' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'insurances' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Obras Sociales</button>
-                <button onClick={() => setActiveTab('services')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'services' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'services' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Servicios</button>
-                <button onClick={() => setActiveTab('schedule')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'schedule' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'schedule' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Horarios</button>
-                <button onClick={() => setActiveTab('whatsapp')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'whatsapp' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'whatsapp' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}WhatsApp</button>
-                <button onClick={() => setActiveTab('faqs')} className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative ${activeTab === 'faqs' ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}>{activeTab === 'faqs' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}Preguntas Frecuentes</button>
+                {([
+                    { key: 'profile', label: 'Perfil' },
+                    { key: 'insurances', label: 'Obras Sociales' },
+                    { key: 'services', label: 'Servicios' },
+                    { key: 'schedule', label: 'Horarios' },
+                    { key: 'whatsapp', label: 'WhatsApp' },
+                    { key: 'faqs', label: 'Preguntas Frecuentes' },
+                ] as { key: string; label: string }[]).map(({ key, label }) => {
+                    const featureKey = TAB_FEATURE_MAP[key];
+                    const locked = featureKey !== null && !canUse(featureKey);
+                    return (
+                        <button
+                            key={key}
+                            onClick={() => setActiveTab(key)}
+                            className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative flex items-center gap-1.5 ${activeTab === key ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            {activeTab === key && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}
+                            {label}
+                            {locked && <Lock size={12} className="text-gray-400" />}
+                        </button>
+                    );
+                })}
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -60,19 +89,15 @@ export default function SettingsView() {
                 )}
 
                 {activeTab === 'insurances' && (
-                    <InsurancesTab
-                        profile={profile}
-                        handleProfileChange={handleProfileChange}
-                        handleAutoSaveProfile={handleAutoSaveProfile}
-                    />
+                    canUse('insurance_management')
+                        ? <InsurancesTab profile={profile} handleProfileChange={handleProfileChange} handleAutoSaveProfile={handleAutoSaveProfile} />
+                        : <UpgradePrompt feature="Gestión de Obras Sociales" />
                 )}
 
                 {activeTab === 'services' && (
-                    <ServicesTab
-                        profile={profile}
-                        handleProfileChange={handleProfileChange}
-                        handleAutoSaveProfile={handleAutoSaveProfile}
-                    />
+                    canUse('services_config')
+                        ? <ServicesTab profile={profile} handleProfileChange={handleProfileChange} handleAutoSaveProfile={handleAutoSaveProfile} />
+                        : <UpgradePrompt feature="Configuración de Servicios" />
                 )}
 
                 {activeTab === 'schedule' && (
@@ -85,23 +110,15 @@ export default function SettingsView() {
                 )}
 
                 {activeTab === 'whatsapp' && (
-                    <WhatsAppTab
-                        profile={profile}
-                        instanceStatus={instanceStatus}
-                        pollingActive={pollingActive}
-                        qrCodeData={qrCodeData}
-                        saving={saving}
-                        handleConnectWhatsApp={handleConnectWhatsApp}
-                        handleDisconnectWhatsApp={handleDisconnectWhatsApp}
-                    />
+                    canUse('whatsapp_bot')
+                        ? <WhatsAppTab profile={profile} instanceStatus={instanceStatus} pollingActive={pollingActive} qrCodeData={qrCodeData} saving={saving} handleConnectWhatsApp={handleConnectWhatsApp} handleDisconnectWhatsApp={handleDisconnectWhatsApp} />
+                        : <UpgradePrompt feature="Bot de WhatsApp" />
                 )}
 
                 {activeTab === 'faqs' && (
-                    <FaqsTab
-                        tenant={tenant}
-                        faqs={faqs}
-                        setFaqs={setFaqs}
-                    />
+                    canUse('faqs_config')
+                        ? <FaqsTab tenant={tenant} faqs={faqs} setFaqs={setFaqs} />
+                        : <UpgradePrompt feature="Preguntas Frecuentes" />
                 )}
             </div>
         </div>

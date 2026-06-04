@@ -17,6 +17,7 @@ export interface ProfileData {
     system_prompt: string;
     apikey_evolution: string;
     notification_phone: string;
+    booking_slug: string | null;
     [key: string]: any;
 }
 
@@ -91,6 +92,7 @@ export function useSettings(session: any = null) {
                     system_prompt: profileData.system_prompt || '',
                     apikey_evolution: profileData.apikey_evolution || '',
                     notification_phone: profileData.notification_phone || '',
+                    booking_slug: profileData.booking_slug || null,
                 };
                 setInstanceStatus(mergedProfile.whatsapp_status);
 
@@ -116,6 +118,7 @@ export function useSettings(session: any = null) {
                     system_prompt: '',
                     apikey_evolution: '',
                     notification_phone: '',
+                    booking_slug: null,
                 };
             }
 
