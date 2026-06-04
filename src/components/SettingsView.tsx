@@ -1,9 +1,9 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-21 (Refactored)
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Lock } from 'lucide-react';
-import { supabase } from '../config/supabaseClient';
 import { useSettings } from './settings/useSettings';
 import { useSubscription } from '../context/SubscriptionContext';
+import { useAuth } from '../context/AuthContext';
 import ProfileTab from './settings/ProfileTab';
 import InsurancesTab from './settings/InsurancesTab';
 import ServicesTab from './settings/ServicesTab';
@@ -22,15 +22,9 @@ const TAB_FEATURE_MAP: Record<string, string | null> = {
 };
 
 export default function SettingsView() {
-    const [session, setSession] = useState<import('@supabase/supabase-js').Session | null>(null);
     const [activeTab, setActiveTab] = useState('profile');
     const { canUse } = useSubscription();
-
-    useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-        });
-    }, []);
+    const { session } = useAuth();
 
     const {
         profile, tenant, schedules, faqs, loading, saving,

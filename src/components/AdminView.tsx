@@ -208,6 +208,7 @@ export default function AdminView() {
                         </td>
                         <td className="px-4 py-3 text-gray-600">
                           {sub?.subscription_plans?.name
+                            ?? plans.find((p: any) => p.id === sub?.plan_id)?.name
                             ?? (sub?.status === 'free' ? 'Acceso Gratuito'
                               : sub?.status === 'trial' ? 'Trial'
                               : sub?.status ? sub.status
