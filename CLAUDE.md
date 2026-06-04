@@ -59,6 +59,15 @@ src/
 │   ├── ErrorBoundary.tsx           # Error boundary global
 │   ├── PrivacyPolicy.tsx           # Pagina publica: política de privacidad
 │   ├── TermsOfService.tsx          # Pagina publica: términos de servicio
+│   ├── PublicBookingView.tsx       # Pagina publica: formulario de reservas para pacientes (/agendar/:slug)
+│   ├── UpgradePrompt.tsx           # Pantalla de bloqueo con boton "Ver planes" (usado en Settings tabs)
+│   ├── SubscriptionView.tsx        # Vista de estado de suscripcion del usuario (/suscripcion)
+│   ├── SubscriptionBanner.tsx      # Banner contextual en AuthedApp (trial countdown, past_due, etc.)
+│   ├── PricingView.tsx             # Vista de planes y precios (/pricing)
+│   ├── CheckoutResultView.tsx      # Pagina de resultado de pago (/suscripcion/exito y /error)
+│   ├── AdminApp.tsx                # Shell de la app para admins (header + AdminView)
+│   ├── AdminView.tsx               # Panel de admin: tabs Usuarios, Planes, Pagos
+│   └── PlanFormModal.tsx           # Modal para crear/editar planes (incluye feature_keys checkboxes)
 │   ├── form/
 │   │   ├── PatientInfoFields.tsx   # Campos de datos del paciente (reutilizables)
 │   │   └── TimeSlotGrid.tsx        # Grilla de horarios disponibles
@@ -95,26 +104,34 @@ src/
 │   ├── GoogleCalendarService.ts    # Integración Google Calendar
 │   ├── InsuranceService.ts         # Listado de obras sociales
 │   ├── StorageService.ts           # Supabase Storage (upload/delete)
+│   ├── SubscriptionService.ts      # Fetch de suscripcion y feature_permissions del usuario
+│   ├── AdminService.ts             # Llamadas a la Edge Function admin-api
+│   ├── PublicBookingService.ts     # Llamadas a la Edge Function public-booking (sin auth)
 │   └── AppointmentService.test.ts  # Tests (vitest)
 ├── repositories/
 │   └── AppointmentRepository.ts   # Acceso a datos de appointments (Supabase)
 ├── schemas/
 │   ├── patient.schema.ts           # Validacion Zod para pacientes
 │   ├── appointment.schema.ts       # Validacion Zod para turnos
-│   └── odontogram.schema.ts        # Validacion Zod para odontograma
+│   ├── odontogram.schema.ts        # Validacion Zod para odontograma
+│   ├── plan.schema.ts              # Validacion Zod para formulario de planes (incluye feature_keys)
+│   └── publicBooking.schema.ts     # Validacion Zod para el formulario publico de reservas
 ├── types/
 │   ├── database.types.ts           # Interfaces: Patient, ClinicalRecord, etc.
 │   └── appointments.ts             # Tipos de appointments
 ├── config/
 │   ├── supabaseClient.ts           # Instancia de Supabase client
-│   └── appointments.ts             # Configuracion de tipos de turno
+│   ├── appointments.ts             # Configuracion de tipos de turno
+│   └── featureKeys.ts              # Lista de los 11 feature keys con labels (fuente de verdad frontend)
 ├── context/
-│   └── AuthContext.tsx             # Context de sesion (session, isLoading)
+│   ├── AuthContext.tsx             # Context de sesion (session, isLoading, profile)
+│   └── SubscriptionContext.tsx     # Context de suscripcion (subscription, permissions, canUse, isAdmin)
 ├── store/
 │   └── useAppStore.ts              # Zustand: estado global UI (search, filters)
 ├── router/
 │   ├── AppRoutes.tsx               # Definicion de rutas privadas (lazy loading)
-│   └── ProtectedRoute.tsx          # Guard de rutas autenticadas
+│   ├── ProtectedRoute.tsx          # Guard de rutas autenticadas (verifica sesion + suscripcion)
+│   └── AdminRoute.tsx              # Guard de rutas admin (verifica profile.role === 'admin')
 └── utils/
     ├── dateUtils.ts                # Utilidades de fechas
     └── helpers.ts                  # Helpers genericos
@@ -131,8 +148,14 @@ src/
 | `/pacientes` | PacientesView | Privado |
 | `/configuracion` | SettingsView | Privado |
 | `/pacientes/:id/odontograma` | OdontogramView | Privado |
+| `/suscripcion` | SubscriptionView | Privado (exempt de guard de suscripcion) |
+| `/suscripcion/exito` | CheckoutResultView | Privado |
+| `/suscripcion/error` | CheckoutResultView | Privado |
+| `/pricing` | PricingView | Privado (exempt de guard) |
+| `/admin` | AdminView | Solo admin (`profile.role === 'admin'`) |
 | `/privacy` | PrivacyPolicy | Publico |
 | `/terms` | TermsOfService | Publico |
+| `/agendar/:slug` | PublicBookingView | Publico (sin auth) |
 | `/*` | Redirect a `/` | - |
 
 ---
@@ -156,7 +179,7 @@ Estados: `pending`, `confirmed`, `completed`, `cancelled`.
 ### `public.profiles`
 Perfil del dentista (1:1 con `auth.users`). Incluye configuracion de WhatsApp, servicios, obras sociales aceptadas, sistema de FAQs y tokens de integraciones.
 
-Columnas clave: `id`, `full_name`, `avatar_url`, `accepted_insurances[]`, `services (jsonb)`, `contact_phone`, `business_name`, `whatsapp_instance`, `whatsapp_status`, `system_prompt`, `apikey_evolution`, `notification_phone`, `google_refresh_token`.
+Columnas clave: `id`, `full_name`, `avatar_url`, `accepted_insurances[]`, `services (jsonb)`, `contact_phone`, `business_name`, `whatsapp_instance`, `whatsapp_status`, `system_prompt`, `apikey_evolution`, `notification_phone`, `google_refresh_token`, `role` (dentist | admin), `booking_slug` (UNIQUE, para el link publico de reservas).
 
 ### `public.schedules`
 Horarios laborales por día de la semana. Relacion `user_id` -> dentista.
@@ -186,6 +209,29 @@ Columnas: `id`, `tenant_id`, `question`, `answer`.
 ### `public.debug_payloads`
 Logs de debugging de Edge Functions. **Sin RLS** - solo para uso interno.
 
+### `public.subscription_plans`
+Planes de suscripcion disponibles. **Sin RLS** (lectura publica, escritura solo service role).
+
+Columnas: `id`, `name`, `description`, `price_monthly`, `price_yearly`, `currency` (default 'ARS'), `features` (jsonb, etiquetas de display), `feature_keys` (text[], claves de funcionalidades habilitadas), `is_active`, `sort_order`.
+
+Planes actuales: **Trial** (gratis, 14 dias), **Basico**, **Asistente IA** (todas las features).
+
+### `public.subscriptions`
+Suscripcion activa por usuario (1:1 con `auth.users`). RLS: usuario ve solo su fila.
+
+Columnas: `id`, `user_id` (UNIQUE), `plan_id`, `status` (trial | active | past_due | cancelled | free), `mercadopago_sub_id`, `mercadopago_payer_id`, `trial_ends_at`, `current_period_start`, `current_period_end`, `cancelled_at`.
+
+### `public.feature_permissions`
+Permisos de funcionalidades por usuario (11 feature keys posibles). RLS: usuario ve solo sus filas. UNIQUE en (user_id, feature_key).
+
+Feature keys: `appointments`, `odontogram`, `clinical_records`, `consent_forms`, `patients_unlimited`, `insurance_management`, `services_config`, `export_data`, `whatsapp_bot`, `google_calendar`, `faqs_config`.
+
+### `public.admin_users`
+Tabla de usuarios admin. **Sin RLS** (solo service role). Un registro por admin.
+
+### `public.payment_events`
+Log de eventos de MercadoPago. **Sin RLS** - auditoria.
+
 ---
 
 ## Edge Functions (Supabase Deno)
@@ -214,6 +260,20 @@ Variables de entorno: `OPENAI_API_KEY`, `GEMINI_API_KEY`, `EVOLUTION_API_URL`, `
 
 ### `cleanup-orphaned-files`
 Limpieza programada de archivos huerfanos en Supabase Storage. Elimina archivos en `clinical-records` que no esten referenciados por ningun paciente y sean mayores a N dias (default: 30).
+
+### `admin-api`
+Panel de administracion (requiere JWT + estar en `admin_users`). Acciones: `list_users`, `update_user_plan`, `update_user_permission`, `update_plan_price`, `create_plan`, `update_plan`, `delete_plan`, `toggle_plan`, `cancel_subscription`, `grant_free_access`, `list_plans`, `list_payment_events`.
+
+Al asignar un plan a un usuario, lee `plan.feature_keys` de la DB y hace upsert en `feature_permissions`.
+
+### `mp-webhook`
+Recibe webhooks de MercadoPago (publico, sin JWT). Verifica firma HMAC si hay `MP_WEBHOOK_SECRET`. Al activar una suscripcion, lee `plan.feature_keys` de la DB (NO hardcodeado) y actualiza `feature_permissions` del usuario.
+
+### `create-checkout`
+Crea un preapproval de MercadoPago para una suscripcion recurrente. Requiere JWT.
+
+### `public-booking`
+Endpoint publico (sin JWT) para el formulario de reservas de pacientes. Acciones: `resolve_slug` (slug → user_id), `get_profile`, `get_working_days`, `get_slots`, `create_appointment`. Usa service role para bypassear RLS. Llama al RPC `confirm_public_appointment_safe`.
 
 ---
 
@@ -281,6 +341,55 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 
 ---
 
+## Sistema de Suscripciones y Feature Gating
+
+### Flujo de acceso
+1. Al registrarse, un trigger Postgres crea automaticamente una `subscriptions` row (status=trial, 14 dias) y 11 `feature_permissions` rows con los defaults del plan Trial.
+2. `SubscriptionContext.tsx` carga la suscripcion y permisos al iniciar sesion. Expone `canUse(featureKey)`.
+3. `ProtectedRoute.tsx` bloquea todas las rutas privadas si la suscripcion esta vencida/cancelada (redirige a `/suscripcion`). Admins y usuarios `free` siempre pasan.
+4. `canUse()` retorna `true` si: es admin, es `free`, o tiene la `feature_permission` con `enabled=true`.
+
+### Feature gating en Settings
+`SettingsView.tsx` usa `canUse()` para mostrar `UpgradePrompt` en lugar del contenido de tabs bloqueados:
+- `insurances` tab → `insurance_management`
+- `services` tab → `services_config`
+- `whatsapp` tab → `whatsapp_bot`
+- `faqs` tab → `faqs_config`
+- `profile` y `schedule` → siempre accesibles
+
+### Roles
+- `profile.role = 'dentist'` → renderiza `AuthedApp` (app normal)
+- `profile.role = 'admin'` → renderiza `AdminApp` (panel de admin simplificado)
+
+### Admin Panel (`/admin`)
+`AdminView.tsx` con 3 tabs: Usuarios, Planes, Pagos. Permite: asignar planes, otorgar acceso gratuito, cancelar suscripciones, crear/editar/eliminar planes con feature_keys configurables via checkboxes.
+
+### Configurar features de un plan
+Los `feature_keys` de cada plan se guardan en `subscription_plans.feature_keys text[]`. El admin los edita desde `PlanFormModal` (checkboxes). Las Edge Functions `admin-api` y `mp-webhook` leen de la DB, NO tienen hardcoded el mapeo de features.
+
+---
+
+## Link Publico de Reservas
+
+### Flujo para el dentista
+1. Va a Configuracion → Perfil → sección "Link de reservas"
+2. Configura un slug unico (ej: `dr-garcia`) — solo letras minusculas, numeros y guiones
+3. La URL resultante es `{origen}/agendar/dr-garcia`
+4. El link se puede copiar con el boton "Copiar"
+
+### Flujo para el paciente
+1. Abre `/agendar/{slug}` (sin necesidad de cuenta)
+2. La pagina `PublicBookingView` llama a la Edge Function `public-booking`:
+   - `resolve_slug` → obtiene el `user_id` del dentista
+   - `get_profile` → nombre, consultorio, servicios, obras sociales
+   - `get_working_days` → dias laborales activos
+   - `get_slots` → horarios disponibles para una fecha y duracion
+3. Selecciona servicio → fecha → horario → completa datos personales → confirma
+4. La Edge Function llama al RPC `confirm_public_appointment_safe(p_user_id, ...)` que hace el overlap-check y crea el turno con `status=pending`
+5. Si el paciente ya existe (mismo DNI + user_id), se reutiliza; sino se crea nuevo
+
+---
+
 ## Notas para Claude
 
 - El sistema es **multitenant**. Nunca mezclar datos de distintos `user_id`.
@@ -292,3 +401,7 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 - Las obras sociales aceptadas en el perfil son `text[]`.
 - Los tipos de turno en el cliente vienen de `src/config/appointments.ts`.
 - El `chat-webhook` no verifica JWT porque Evolution API no puede enviar tokens de usuario.
+- Los `feature_keys` de cada plan viven en `subscription_plans.feature_keys` (DB), NO hardcodeados en Edge Functions.
+- `PublicBookingView` no usa `useAuth()` ni `useSubscription()`. Es completamente standalone.
+- El RPC `confirm_public_appointment_safe` tiene `SECURITY DEFINER` y acepta `p_user_id` explicito (para uso sin sesion de auth).
+- `src/config/featureKeys.ts` es la fuente de verdad para los 11 feature keys en el frontend.

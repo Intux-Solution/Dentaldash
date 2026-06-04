@@ -24,12 +24,18 @@ export default function AdminView() {
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<any | null>(null);
 
+  const [selectedPlans, setSelectedPlans] = useState<Record<string, string>>({});
+
   const loadTab = useCallback(async (t: Tab) => {
     setLoading(true);
     try {
       if (t === 'usuarios') {
-        const data = await AdminService.listUsers();
-        setUsers(data);
+        const [userData, planData] = await Promise.all([
+          AdminService.listUsers(),
+          AdminService.listPlans(),
+        ]);
+        setUsers(userData);
+        setPlans(planData);
       } else if (t === 'planes') {
         const data = await AdminService.listPlans();
         setPlans(data);
@@ -90,6 +96,21 @@ export default function AdminView() {
       await AdminService.deletePlan(planId);
       toast.success(`Plan "${planName}" eliminado`);
       loadTab('planes');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAssignPlan = async (userId: string, name: string) => {
+    const planId = selectedPlans[userId];
+    if (!planId) return;
+    setActionLoading(userId + '_assign');
+    try {
+      await AdminService.updateUserPlan(userId, planId);
+      toast.success(`Plan asignado a ${name}`);
+      loadTab('usuarios');
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -197,23 +218,44 @@ export default function AdminView() {
                         </td>
                         <td className="px-4 py-3 text-gray-500">{periodEnd}</td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleGrantFree(u.id, u.full_name ?? u.id)}
-                              disabled={actionLoading === u.id + '_free'}
-                              className="text-xs bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 rounded-md transition-colors disabled:opacity-50"
-                            >
-                              {actionLoading === u.id + '_free' ? <Loader2 size={12} className="animate-spin" /> : 'Acceso gratis'}
-                            </button>
-                            {sub?.status !== 'cancelled' && (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex gap-2">
                               <button
-                                onClick={() => handleCancel(u.id, u.full_name ?? u.id)}
-                                disabled={actionLoading === u.id + '_cancel'}
-                                className="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded-md transition-colors disabled:opacity-50"
+                                onClick={() => handleGrantFree(u.id, u.full_name ?? u.id)}
+                                disabled={actionLoading === u.id + '_free'}
+                                className="text-xs bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 rounded-md transition-colors disabled:opacity-50"
                               >
-                                {actionLoading === u.id + '_cancel' ? <Loader2 size={12} className="animate-spin" /> : 'Cancelar'}
+                                {actionLoading === u.id + '_free' ? <Loader2 size={12} className="animate-spin" /> : 'Acceso gratis'}
                               </button>
-                            )}
+                              {sub?.status !== 'cancelled' && (
+                                <button
+                                  onClick={() => handleCancel(u.id, u.full_name ?? u.id)}
+                                  disabled={actionLoading === u.id + '_cancel'}
+                                  className="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded-md transition-colors disabled:opacity-50"
+                                >
+                                  {actionLoading === u.id + '_cancel' ? <Loader2 size={12} className="animate-spin" /> : 'Cancelar'}
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex gap-1.5">
+                              <select
+                                value={selectedPlans[u.id] ?? ''}
+                                onChange={(e) => setSelectedPlans((prev) => ({ ...prev, [u.id]: e.target.value }))}
+                                className="text-xs border border-gray-200 rounded-md px-1.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                              >
+                                <option value="">Cambiar plan...</option>
+                                {plans.map((p: any) => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => handleAssignPlan(u.id, u.full_name ?? u.id)}
+                                disabled={!selectedPlans[u.id] || actionLoading === u.id + '_assign'}
+                                className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                {actionLoading === u.id + '_assign' ? <Loader2 size={12} className="animate-spin" /> : 'Asignar'}
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>

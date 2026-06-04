@@ -39,8 +39,6 @@ export default function PricingView() {
     }
   };
 
-  const proIndex = plans.findIndex((p) => p.name === 'Pro');
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-teal-50 to-white">
       {/* Nav mínimo */}
@@ -71,7 +69,7 @@ export default function PricingView() {
       ) : (
         <div className="max-w-5xl mx-auto px-6 pb-20 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
           {plans.filter((p) => p.name !== 'Trial').concat(plans.filter((p) => p.name === 'Trial')).map((plan, idx) => {
-            const isPro = plan.name === 'Pro';
+            const isPro = plan.name === 'Asistente IA';
             const isBusy = checkoutLoading === plan.id;
             return (
               <div

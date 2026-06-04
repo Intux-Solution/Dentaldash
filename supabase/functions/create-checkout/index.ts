@@ -80,18 +80,33 @@ serve(async (req) => {
       );
     }
 
-    // Verificar que el usuario no tenga suscripcion activa
+    // Si el usuario ya tiene suscripcion activa en MP, cancelarla antes de crear la nueva
     const { data: existingSub } = await supabase
       .from("subscriptions")
-      .select("status")
+      .select("status, mercadopago_sub_id")
       .eq("user_id", user.id)
       .single();
 
-    if (existingSub?.status === "active") {
-      return new Response(
-        JSON.stringify({ error: "User already has an active subscription." }),
-        { status: 409, headers: corsHeaders }
+    if (existingSub?.status === "active" && existingSub?.mercadopago_sub_id) {
+      const cancelRes = await fetch(
+        `https://api.mercadopago.com/preapproval/${existingSub.mercadopago_sub_id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
+          },
+          body: JSON.stringify({ status: "cancelled" }),
+        }
       );
+      if (!cancelRes.ok) {
+        const detail = await cancelRes.text();
+        console.error("MercadoPago cancel error:", detail);
+        return new Response(
+          JSON.stringify({ error: "No se pudo cancelar la suscripción anterior en MercadoPago.", detail }),
+          { status: 502, headers: corsHeaders }
+        );
+      }
     }
 
     // Obtener el email del usuario desde profiles
