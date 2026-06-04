@@ -65,6 +65,19 @@ export async function fetchPublicPlans(): Promise<SubscriptionPlan[]> {
   return data ?? [];
 }
 
+export async function cancelMySubscription(): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('No hay sesión activa.');
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ status: 'cancelled', cancelled_at: now })
+    .eq('user_id', session.user.id);
+
+  if (error) throw error;
+}
+
 export async function createCheckout(planId: string): Promise<{ init_point: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('No hay sesión activa.');

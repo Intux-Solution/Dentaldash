@@ -186,7 +186,11 @@ export default function AdminView() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-600">
-                          {sub?.subscription_plans?.name ?? '—'}
+                          {sub?.subscription_plans?.name
+                            ?? (sub?.status === 'free' ? 'Acceso Gratuito'
+                              : sub?.status === 'trial' ? 'Trial'
+                              : sub?.status ? sub.status
+                              : '—')}
                         </td>
                         <td className={`px-4 py-3 font-medium ${statusCfg.color}`}>
                           {statusCfg.label}

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 
 // Rutas a las que siempre se permite acceso independientemente del estado de suscripción
-const SUBSCRIPTION_EXEMPT = ['/suscripcion', '/suscripcion/exito', '/suscripcion/error'];
+const SUBSCRIPTION_EXEMPT = ['/suscripcion', '/suscripcion/exito', '/suscripcion/error', '/pricing'];
 
 export default function ProtectedRoute() {
     const location = useLocation();
@@ -33,8 +33,7 @@ export default function ProtectedRoute() {
     const isExempt = SUBSCRIPTION_EXEMPT.some((path) => location.pathname.startsWith(path));
     const isBlocked =
         !isExempt &&
-        subscription !== null &&
-        (isExpired || subscription?.status === 'cancelled');
+        (subscription === null || isExpired || subscription?.status === 'cancelled');
 
     if (isBlocked) {
         return <Navigate to="/suscripcion" replace />;

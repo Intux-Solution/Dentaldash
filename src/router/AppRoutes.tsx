@@ -11,6 +11,7 @@ const OdontogramView = React.lazy(() => import('../components/OdontogramView'));
 const SubscriptionView = React.lazy(() => import('../components/SubscriptionView'));
 const AdminView = React.lazy(() => import('../components/AdminView'));
 const CheckoutResultView = React.lazy(() => import('../components/CheckoutResultView'));
+const PricingView = React.lazy(() => import('../components/PricingView'));
 
 export default function AppRoutes() {
     return (
@@ -26,6 +27,7 @@ export default function AppRoutes() {
                     <Route path="/suscripcion" element={<SubscriptionView />} />
                     <Route path="/suscripcion/exito" element={<CheckoutResultView success={true} />} />
                     <Route path="/suscripcion/error" element={<CheckoutResultView success={false} />} />
+                    <Route path="/pricing" element={<PricingView />} />
                 </Route>
 
                 {/* ── Ruta de administración (solo admin) ─────────────────────── */}
