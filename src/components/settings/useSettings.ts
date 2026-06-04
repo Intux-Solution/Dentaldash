@@ -47,6 +47,7 @@ export function useSettings(session: any = null) {
     const [qrCodeData, setQrCodeData] = useState<string | null>(null);
     const [instanceStatus, setInstanceStatus] = useState<string>('disconnected');
     const [pollingActive, setPollingActive] = useState(false);
+    const [pollErrorCount, setPollErrorCount] = useState(0);
 
     const userId = session?.user?.id;
 
@@ -356,12 +357,16 @@ export function useSettings(session: any = null) {
             });
 
             if (error) {
-                if (error.status === 404) {
+                const nextCount = pollErrorCount + 1;
+                setPollErrorCount(nextCount);
+                if (nextCount >= 3) {
                     setPollingActive(false);
                     setInstanceStatus('disconnected');
+                    setPollErrorCount(0);
                 }
                 return;
             }
+            setPollErrorCount(0);
 
             if (data.qrcode || data.base64 || data.code) {
                 setQrCodeData(data.qrcode?.base64 || data.qrcode?.code || data.base64 || data.code);
@@ -380,7 +385,7 @@ export function useSettings(session: any = null) {
             const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             console.error('Connection check error:', err);
         }
-    }, [profile.whatsapp_instance, userId, queryClient]);
+    }, [profile.whatsapp_instance, userId, queryClient, pollErrorCount]);
 
     useEffect(() => {
         let interval: any;
