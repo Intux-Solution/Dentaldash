@@ -44,6 +44,25 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
+    // ── check_slug ──────────────────────────────────────────────────────────
+    if (action === "check_slug") {
+      const { slug, user_id } = body;
+      if (!slug) return jsonErr("Missing slug.", 400);
+
+      let query = supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("booking_slug", String(slug).toLowerCase().trim());
+
+      if (user_id) {
+        query = query.neq("id", user_id);
+      }
+
+      const { count, error } = await query;
+      if (error) throw error;
+      return json({ available: (count ?? 0) === 0 });
+    }
+
     // ── resolve_slug ────────────────────────────────────────────────────────
     if (action === "resolve_slug") {
       const { slug } = body;

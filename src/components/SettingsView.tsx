@@ -5,6 +5,7 @@ import { useSettings } from './settings/useSettings';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useAuth } from '../context/AuthContext';
 import ProfileTab from './settings/ProfileTab';
+import BookingLinkTab from './settings/BookingLinkTab';
 import InsurancesTab from './settings/InsurancesTab';
 import ServicesTab from './settings/ServicesTab';
 import ScheduleTab from './settings/ScheduleTab';
@@ -48,6 +49,7 @@ export default function SettingsView() {
             <div className="flex border-b mb-6 border-gray-100 overflow-x-auto">
                 {([
                     { key: 'profile', label: 'Perfil' },
+                    { key: 'booking', label: 'Link de Reservas' },
                     { key: 'insurances', label: 'Obras Sociales' },
                     { key: 'services', label: 'Servicios' },
                     { key: 'schedule', label: 'Horarios' },
@@ -79,6 +81,13 @@ export default function SettingsView() {
                         avatarPreview={avatarPreview}
                         googleAvatar={googleAvatar}
                         handleAvatarChange={handleAvatarChange}
+                    />
+                )}
+
+                {activeTab === 'booking' && (
+                    <BookingLinkTab
+                        profile={profile}
+                        handleAutoSaveProfile={handleAutoSaveProfile}
                     />
                 )}
 

@@ -34,6 +34,15 @@ export const PublicBookingService = {
   getSlots: (userId: string, date: string, duration: number): Promise<string[]> =>
     call('get_slots', { user_id: userId, date, duration }),
 
+  checkSlug: async (slug: string, userId?: string | null): Promise<boolean> => {
+    try {
+      const data = await call('check_slug', { slug, user_id: userId ?? undefined });
+      return data.available === true;
+    } catch {
+      return false;
+    }
+  },
+
   createAppointment: (params: {
     user_id: string;
     nombre: string;

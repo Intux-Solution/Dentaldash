@@ -84,25 +84,35 @@ serve(async (req) => {
 
     // ── list_users ──────────────────────────────────────────────────────────
     if (action === "list_users") {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          full_name,
-          role,
-          subscriptions (
-            status,
-            trial_ends_at,
-            current_period_end,
-            cancelled_at,
-            plan_id,
-            subscription_plans ( name, price_monthly )
-          )
-        `)
-        .order("full_name");
+      const [profilesRes, subsRes, plansRes] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, role").order("full_name"),
+        supabase.from("subscriptions").select("user_id, status, plan_id, trial_ends_at, current_period_end, cancelled_at, mercadopago_sub_id"),
+        supabase.from("subscription_plans").select("id, name, price_monthly"),
+      ]);
 
-      if (error) throw error;
-      return json(data);
+      if (profilesRes.error) throw profilesRes.error;
+      if (subsRes.error) throw subsRes.error;
+      if (plansRes.error) throw plansRes.error;
+
+      const plansById: Record<string, any> = {};
+      (plansRes.data ?? []).forEach((p: any) => { plansById[p.id] = p; });
+
+      const subsByUserId: Record<string, any> = {};
+      (subsRes.data ?? []).forEach((s: any) => { subsByUserId[s.user_id] = s; });
+
+      const result = (profilesRes.data ?? []).map((p: any) => ({
+        ...p,
+        subscriptions: subsByUserId[p.id]
+          ? [{
+              ...subsByUserId[p.id],
+              subscription_plans: subsByUserId[p.id].plan_id
+                ? (plansById[subsByUserId[p.id].plan_id] ?? null)
+                : null,
+            }]
+          : [],
+      }));
+
+      return json(result);
     }
 
     // ── update_user_plan ────────────────────────────────────────────────────
