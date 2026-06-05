@@ -12,6 +12,7 @@ serve(async (req) => {
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")?.trim();
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
   const MP_ACCESS_TOKEN = Deno.env.get("MP_ACCESS_TOKEN")?.trim();
+  const MP_TEST_PAYER_EMAIL = Deno.env.get("MP_TEST_PAYER_EMAIL")?.trim();
   const APP_URL = Deno.env.get("APP_URL")?.trim();
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -117,6 +118,11 @@ serve(async (req) => {
       .single();
 
     // Crear preapproval (suscripcion recurrente) en MercadoPago
+    // payer_email es requerido por MP. En test se puede sobrescribir con
+    // MP_TEST_PAYER_EMAIL (email de la cuenta test-comprador de MP) para
+    // evitar el bloqueo de auto-pago cuando el dev usa su propia cuenta.
+    const isTestToken = MP_ACCESS_TOKEN.startsWith("TEST-");
+    const payerEmail = (isTestToken && MP_TEST_PAYER_EMAIL) ? MP_TEST_PAYER_EMAIL : user.email;
     const mpPayload = {
       reason: `Suscripcion DentalDash ${plan.name}`,
       auto_recurring: {
@@ -126,7 +132,7 @@ serve(async (req) => {
         currency_id: plan.currency ?? "ARS",
       },
       back_url: `${APP_URL}/suscripcion/exito`,
-      payer_email: user.email,
+      payer_email: payerEmail,
       external_reference: `${user.id}|${plan_id}`,
     };
 
