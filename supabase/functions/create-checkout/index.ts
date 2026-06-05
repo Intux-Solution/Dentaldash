@@ -109,27 +109,24 @@ serve(async (req) => {
       }
     }
 
-    // Obtener el email del usuario desde profiles
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .single();
-
     // Crear preapproval (suscripcion recurrente) en MercadoPago.
     // payer_email es el email del usuario: en test debe ser una cuenta
     // de comprador de prueba de MP; en produccion es el email real del usuario.
+    // status="pending" es obligatorio para suscripciones sin plan asociado:
+    // genera el init_point para que el usuario elija el medio de pago.
+    // transaction_amount debe ser numero (Postgres devuelve numeric como string).
     const mpPayload = {
       reason: `Suscripcion DentalDash ${plan.name}`,
       auto_recurring: {
         frequency: 1,
         frequency_type: "months",
-        transaction_amount: plan.price_monthly,
+        transaction_amount: Number(plan.price_monthly),
         currency_id: plan.currency ?? "ARS",
       },
       back_url: `${APP_URL}/suscripcion/exito`,
       payer_email: user.email,
       external_reference: `${user.id}|${plan_id}`,
+      status: "pending",
     };
 
     const mpRes = await fetch("https://api.mercadopago.com/preapproval", {
