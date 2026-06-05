@@ -1,8 +1,13 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { AdminService } from '../services/AdminService';
-import { Users, CreditCard, LayoutList, CheckCircle, RefreshCw, Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ExportService } from '../services/ExportService';
+import { Users, CreditCard, LayoutList, CheckCircle, RefreshCw, Loader2, Plus, Pencil, Trash2, Download, Shield, ShieldOff, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PlanFormModal from './PlanFormModal';
+import AdminMetrics from './AdminMetrics';
+import TrialExpiringAlert from './TrialExpiringAlert';
+import UserPermissionsModal from './UserPermissionsModal';
+import SearchInput from './SearchInput';
 
 type Tab = 'usuarios' | 'planes' | 'pagos';
 
@@ -25,6 +30,9 @@ export default function AdminView() {
   const [editingPlan, setEditingPlan] = useState<any | null>(null);
 
   const [selectedPlans, setSelectedPlans] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [permissionsUser, setPermissionsUser] = useState<any | null>(null);
+  const [permissionsModalOpen, setPermissionsModalOpen] = useState(false);
 
   const loadTab = useCallback(async (t: Tab) => {
     setLoading(true);
@@ -51,6 +59,49 @@ export default function AdminView() {
   }, []);
 
   useEffect(() => { loadTab(tab); }, [tab, loadTab]);
+
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return users;
+    const q = searchQuery.toLowerCase();
+    return users.filter((u: any) => {
+      const sub = u.subscriptions?.[0];
+      return (
+        (u.full_name ?? '').toLowerCase().includes(q) ||
+        (u.email ?? '').toLowerCase().includes(q) ||
+        (sub?.status ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [users, searchQuery]);
+
+  const handleExportUsers = () => {
+    ExportService.exportUsersCSV(users);
+  };
+
+  const handleOpenPermissions = (user: any) => {
+    setPermissionsUser(user);
+    setPermissionsModalOpen(true);
+  };
+
+  const handleToggleAdmin = async (userId: string, name: string, currentRole: string) => {
+    const isAdmin = currentRole === 'admin';
+    const msg = isAdmin ? `¿Quitar rol admin a ${name}?` : `¿Otorgar rol admin a ${name}?`;
+    if (!confirm(msg)) return;
+    setActionLoading(userId + '_admin');
+    try {
+      if (isAdmin) {
+        await AdminService.removeAdmin(userId);
+        toast.success(`${name} ya no es admin`);
+      } else {
+        await AdminService.addAdmin(userId);
+        toast.success(`${name} ahora es admin`);
+      }
+      loadTab('usuarios');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const handleGrantFree = async (userId: string, name: string) => {
     setActionLoading(userId + '_free');
@@ -176,20 +227,39 @@ export default function AdminView() {
         <>
           {/* ── USUARIOS ── */}
           {tab === 'usuarios' && (
+            <div>
+              <AdminMetrics users={users} />
+              <TrialExpiringAlert users={users} />
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <SearchInput
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar por nombre, email o estado..."
+                />
+                <button
+                  onClick={handleExportUsers}
+                  className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-teal-700 border border-gray-200 hover:border-teal-300 bg-white px-3 py-2 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <Download size={14} />
+                  Exportar CSV
+                </button>
+              </div>
             <div className="overflow-x-auto rounded-xl border border-gray-200">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3 text-left">Nombre</th>
+                    <th className="px-4 py-3 text-left">Email</th>
                     <th className="px-4 py-3 text-left">Rol</th>
                     <th className="px-4 py-3 text-left">Plan</th>
                     <th className="px-4 py-3 text-left">Estado</th>
                     <th className="px-4 py-3 text-left">Vencimiento</th>
+                    <th className="px-4 py-3 text-left">Registro</th>
                     <th className="px-4 py-3 text-left">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
-                  {users.map((u: any) => {
+                  {filteredUsers.map((u: any) => {
                     const sub = u.subscriptions?.[0];
                     const statusCfg = STATUS_LABEL[sub?.status] ?? { label: 'Sin suscripción', color: 'text-gray-400' };
                     const periodEnd = sub?.current_period_end
@@ -201,6 +271,7 @@ export default function AdminView() {
                     return (
                       <tr key={u.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium text-gray-800">{u.full_name ?? '(sin nombre)'}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{u.email || '—'}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
                             {u.role}
@@ -218,9 +289,12 @@ export default function AdminView() {
                           {statusCfg.label}
                         </td>
                         <td className="px-4 py-3 text-gray-500">{periodEnd}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">
+                          {u.created_at ? new Date(u.created_at).toLocaleDateString('es-AR') : '—'}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-2">
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
                               <button
                                 onClick={() => handleGrantFree(u.id, u.full_name ?? u.id)}
                                 disabled={actionLoading === u.id + '_free'}
@@ -237,6 +311,30 @@ export default function AdminView() {
                                   {actionLoading === u.id + '_cancel' ? <Loader2 size={12} className="animate-spin" /> : 'Cancelar'}
                                 </button>
                               )}
+                              <button
+                                onClick={() => handleOpenPermissions(u)}
+                                title="Editar permisos individuales"
+                                className="text-xs bg-gray-50 hover:bg-gray-100 text-gray-600 px-2 py-1 rounded-md transition-colors flex items-center gap-1"
+                              >
+                                <Settings size={11} />
+                                Permisos
+                              </button>
+                              <button
+                                onClick={() => handleToggleAdmin(u.id, u.full_name ?? u.id, u.role)}
+                                disabled={actionLoading === u.id + '_admin'}
+                                title={u.role === 'admin' ? 'Quitar admin' : 'Hacer admin'}
+                                className={`text-xs px-2 py-1 rounded-md transition-colors flex items-center gap-1 disabled:opacity-50 ${
+                                  u.role === 'admin'
+                                    ? 'bg-purple-50 hover:bg-purple-100 text-purple-700'
+                                    : 'bg-gray-50 hover:bg-gray-100 text-gray-500'
+                                }`}
+                              >
+                                {actionLoading === u.id + '_admin'
+                                  ? <Loader2 size={11} className="animate-spin" />
+                                  : u.role === 'admin'
+                                    ? <><ShieldOff size={11} /> Admin</>
+                                    : <><Shield size={11} /> Admin</>}
+                              </button>
                             </div>
                             <div className="flex gap-1.5">
                               <select
@@ -262,11 +360,14 @@ export default function AdminView() {
                       </tr>
                     );
                   })}
-                  {users.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No hay usuarios</td></tr>
+                  {filteredUsers.length === 0 && (
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                      {searchQuery ? 'Sin resultados para la búsqueda' : 'No hay usuarios'}
+                    </td></tr>
                   )}
                 </tbody>
               </table>
+            </div>
             </div>
           )}
 
@@ -360,6 +461,7 @@ export default function AdminView() {
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3 text-left">Fecha</th>
+                    <th className="px-4 py-3 text-left">Usuario</th>
                     <th className="px-4 py-3 text-left">Tipo</th>
                     <th className="px-4 py-3 text-left">ID MercadoPago</th>
                     <th className="px-4 py-3 text-left">Estado</th>
@@ -371,6 +473,7 @@ export default function AdminView() {
                       <td className="px-4 py-3 text-gray-500">
                         {new Date(e.created_at).toLocaleString('es-AR')}
                       </td>
+                      <td className="px-4 py-3 text-gray-700">{e.user_name ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-700">{e.event_type}</td>
                       <td className="px-4 py-3 text-gray-500 font-mono text-xs">{e.mp_resource_id ?? '—'}</td>
                       <td className="px-4 py-3">
@@ -381,7 +484,7 @@ export default function AdminView() {
                     </tr>
                   ))}
                   {events.length === 0 && (
-                    <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Sin eventos de pago</td></tr>
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Sin eventos de pago</td></tr>
                   )}
                 </tbody>
               </table>
@@ -394,6 +497,11 @@ export default function AdminView() {
         plan={editingPlan}
         onClose={() => { setPlanModalOpen(false); setEditingPlan(null); }}
         onSaved={() => loadTab('planes')}
+      />
+      <UserPermissionsModal
+        open={permissionsModalOpen}
+        user={permissionsUser}
+        onClose={() => { setPermissionsModalOpen(false); setPermissionsUser(null); }}
       />
     </div>
   );

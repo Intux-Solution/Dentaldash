@@ -84,15 +84,21 @@ serve(async (req) => {
 
     // ── list_users ──────────────────────────────────────────────────────────
     if (action === "list_users") {
-      const [profilesRes, subsRes, plansRes] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, role").order("full_name"),
+      const [profilesRes, subsRes, plansRes, authUsersRes] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, role, created_at").order("full_name"),
         supabase.from("subscriptions").select("user_id, status, plan_id, trial_ends_at, current_period_end, cancelled_at, mercadopago_sub_id"),
         supabase.from("subscription_plans").select("id, name, price_monthly"),
+        supabase.auth.admin.listUsers({ perPage: 1000 }),
       ]);
 
       if (profilesRes.error) throw profilesRes.error;
       if (subsRes.error) throw subsRes.error;
       if (plansRes.error) throw plansRes.error;
+
+      const emailMap: Record<string, string> = {};
+      ((authUsersRes.data as any)?.users ?? []).forEach((u: any) => {
+        emailMap[u.id] = u.email ?? "";
+      });
 
       const plansById: Record<string, any> = {};
       (plansRes.data ?? []).forEach((p: any) => { plansById[p.id] = p; });
@@ -102,6 +108,8 @@ serve(async (req) => {
 
       const result = (profilesRes.data ?? []).map((p: any) => ({
         ...p,
+        email: emailMap[p.id] ?? "",
+        created_at: p.created_at,
         subscriptions: subsByUserId[p.id]
           ? [{
               ...subsByUserId[p.id],
@@ -322,7 +330,23 @@ serve(async (req) => {
         .limit(limit);
 
       if (error) throw error;
-      return json(data);
+
+      const userIds = [...new Set(((data ?? []) as any[]).map((e: any) => e.user_id).filter(Boolean))];
+      const profileMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", userIds);
+        ((profiles ?? []) as any[]).forEach((p: any) => { profileMap[p.id] = p.full_name ?? ""; });
+      }
+
+      const result = ((data ?? []) as any[]).map((e: any) => ({
+        ...e,
+        user_name: profileMap[e.user_id] ?? "—",
+      }));
+
+      return json(result);
     }
 
     // ── list_plans ──────────────────────────────────────────────────────────
@@ -393,6 +417,83 @@ serve(async (req) => {
         .eq("id", plan_id);
 
       if (error) throw error;
+      return json({ ok: true });
+    }
+
+    // ── get_user_permissions ────────────────────────────────────────────────
+    if (action === "get_user_permissions") {
+      const { target_user_id } = body;
+      if (!target_user_id) {
+        return new Response(
+          JSON.stringify({ error: "Missing target_user_id." }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const { data, error } = await supabase
+        .from("feature_permissions")
+        .select("feature_key, enabled")
+        .eq("user_id", target_user_id);
+
+      if (error) throw error;
+      return json(data ?? []);
+    }
+
+    // ── add_admin ───────────────────────────────────────────────────────────
+    if (action === "add_admin") {
+      const { target_user_id } = body;
+      if (!target_user_id) {
+        return new Response(
+          JSON.stringify({ error: "Missing target_user_id." }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const { error: insertError } = await supabase
+        .from("admin_users")
+        .insert({ user_id: target_user_id });
+
+      if (insertError && !insertError.message.includes("duplicate")) throw insertError;
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ role: "admin" })
+        .eq("id", target_user_id);
+
+      if (profileError) throw profileError;
+      return json({ ok: true });
+    }
+
+    // ── remove_admin ────────────────────────────────────────────────────────
+    if (action === "remove_admin") {
+      const { target_user_id } = body;
+      if (!target_user_id) {
+        return new Response(
+          JSON.stringify({ error: "Missing target_user_id." }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      if (target_user_id === user.id) {
+        return new Response(
+          JSON.stringify({ error: "No podés quitarte el rol admin a vos mismo." }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const { error: deleteError } = await supabase
+        .from("admin_users")
+        .delete()
+        .eq("user_id", target_user_id);
+
+      if (deleteError) throw deleteError;
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ role: "dentist" })
+        .eq("id", target_user_id);
+
+      if (profileError) throw profileError;
       return json({ ok: true });
     }
 

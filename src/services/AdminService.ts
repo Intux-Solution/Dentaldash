@@ -52,4 +52,13 @@ export const AdminService = {
 
   grantFreeAccess: (targetUserId: string) =>
     callAdminApi('grant_free_access', { target_user_id: targetUserId }),
+
+  getUserPermissions: (targetUserId: string) =>
+    callAdminApi('get_user_permissions', { target_user_id: targetUserId }),
+
+  addAdmin: (targetUserId: string) =>
+    callAdminApi('add_admin', { target_user_id: targetUserId }),
+
+  removeAdmin: (targetUserId: string) =>
+    callAdminApi('remove_admin', { target_user_id: targetUserId }),
 };

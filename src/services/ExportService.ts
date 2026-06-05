@@ -34,6 +34,30 @@ export class ExportService {
     this.downloadCsv(`pacientes_${date}.csv`, [headers, ...rows]);
   }
 
+  static exportUsersCSV(users: any[]): void {
+    const headers = [
+      'Nombre', 'Email', 'Rol', 'Plan', 'Estado', 'Vencimiento', 'Fecha registro',
+    ];
+    const rows = users.map((u: any) => {
+      const sub = u.subscriptions?.[0];
+      return [
+        u.full_name || '',
+        u.email || '',
+        u.role || '',
+        sub?.subscription_plans?.name || '',
+        sub?.status || '',
+        sub?.current_period_end
+          ? new Date(sub.current_period_end).toLocaleDateString('es-AR')
+          : sub?.trial_ends_at
+            ? new Date(sub.trial_ends_at).toLocaleDateString('es-AR')
+            : '',
+        u.created_at ? new Date(u.created_at).toLocaleDateString('es-AR') : '',
+      ];
+    });
+    const date = new Date().toISOString().slice(0, 10);
+    this.downloadCsv(`usuarios_${date}.csv`, [headers, ...rows]);
+  }
+
   static exportAppointmentsCSV(events: any[]): void {
     const headers = [
       'Fecha', 'Hora Inicio', 'Hora Fin',
