@@ -95,6 +95,9 @@ export async function createCheckout(planId: string): Promise<{ init_point: stri
   );
 
   const json = await res.json();
-  if (!res.ok) throw new Error(json.error ?? 'Error al crear el checkout.');
+  if (!res.ok) {
+    const detail = json.detail ? ` — ${json.detail}` : '';
+    throw new Error((json.error ?? 'Error al crear el checkout.') + detail);
+  }
   return json;
 }

@@ -12,7 +12,6 @@ serve(async (req) => {
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")?.trim();
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
   const MP_ACCESS_TOKEN = Deno.env.get("MP_ACCESS_TOKEN")?.trim();
-  const MP_TEST_PAYER_EMAIL = Deno.env.get("MP_TEST_PAYER_EMAIL")?.trim();
   const APP_URL = Deno.env.get("APP_URL")?.trim();
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -88,25 +87,25 @@ serve(async (req) => {
       .eq("user_id", user.id)
       .single();
 
-    if (existingSub?.status === "active" && existingSub?.mercadopago_sub_id) {
-      const cancelRes = await fetch(
-        `https://api.mercadopago.com/preapproval/${existingSub.mercadopago_sub_id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
-          },
-          body: JSON.stringify({ status: "cancelled" }),
-        }
-      );
-      if (!cancelRes.ok) {
-        const detail = await cancelRes.text();
-        console.error("MercadoPago cancel error:", detail);
-        return new Response(
-          JSON.stringify({ error: "No se pudo cancelar la suscripción anterior en MercadoPago.", detail }),
-          { status: 502, headers: corsHeaders }
+    if (existingSub?.mercadopago_sub_id) {
+      try {
+        const cancelRes = await fetch(
+          `https://api.mercadopago.com/preapproval/${existingSub.mercadopago_sub_id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
+            },
+            body: JSON.stringify({ status: "cancelled" }),
+          }
         );
+        if (!cancelRes.ok) {
+          const detail = await cancelRes.text();
+          console.warn("MercadoPago cancel warning (non-fatal):", detail);
+        }
+      } catch (cancelErr) {
+        console.warn("MercadoPago cancel exception (non-fatal):", cancelErr);
       }
     }
 
@@ -117,12 +116,9 @@ serve(async (req) => {
       .eq("id", user.id)
       .single();
 
-    // Crear preapproval (suscripcion recurrente) en MercadoPago
-    // payer_email es requerido por MP. En test se puede sobrescribir con
-    // MP_TEST_PAYER_EMAIL (email de la cuenta test-comprador de MP) para
-    // evitar el bloqueo de auto-pago cuando el dev usa su propia cuenta.
-    const isTestToken = MP_ACCESS_TOKEN.startsWith("TEST-");
-    const payerEmail = (isTestToken && MP_TEST_PAYER_EMAIL) ? MP_TEST_PAYER_EMAIL : user.email;
+    // Crear preapproval (suscripcion recurrente) en MercadoPago.
+    // payer_email es el email del usuario: en test debe ser una cuenta
+    // de comprador de prueba de MP; en produccion es el email real del usuario.
     const mpPayload = {
       reason: `Suscripcion DentalDash ${plan.name}`,
       auto_recurring: {
@@ -132,7 +128,7 @@ serve(async (req) => {
         currency_id: plan.currency ?? "ARS",
       },
       back_url: `${APP_URL}/suscripcion/exito`,
-      payer_email: payerEmail,
+      payer_email: user.email,
       external_reference: `${user.id}|${plan_id}`,
     };
 
