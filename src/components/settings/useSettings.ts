@@ -146,6 +146,8 @@ export function useSettings(session: any = null) {
                 profile: mergedProfile,
                 schedules: (scheduleData as ScheduleData[]) || [],
                 faqs: (faqData as FaqData[]) || [],
+                // Solo exponemos el booleano, nunca el token al cliente
+                googleConnected: !!profileData?.google_refresh_token,
             };
         },
         enabled: !!userId,
@@ -154,6 +156,7 @@ export function useSettings(session: any = null) {
     const profile = settingsData?.profile || ({} as ProfileData);
     const schedules = settingsData?.schedules || [];
     const faqs = settingsData?.faqs || [];
+    const googleConnected = settingsData?.googleConnected ?? false;
 
     // --- MUTATIONS ---
 
@@ -273,6 +276,39 @@ export function useSettings(session: any = null) {
         onError: (err: any) => {
             console.error('Disconnect WhatsApp error:', err);
             message.error('Error al desconectar: ' + err.message);
+        }
+    });
+
+    // 4.b Disconnect Google Calendar Mutation
+    const disconnectGoogleMutation = useMutation({
+        mutationFn: async () => {
+            if (!userId) throw new Error("No user ID");
+            // Limpiar el refresh token para que la app deje de sincronizar
+            const { error } = await supabase
+                .from('profiles')
+                .update({ google_refresh_token: null })
+                .eq('id', userId);
+            if (error) throw error;
+
+            // Desvincular la identidad de Google (best-effort, no bloqueante)
+            try {
+                const { data } = await supabase.auth.getUserIdentities();
+                const googleIdentity = data?.identities?.find((i: any) => i.provider === 'google');
+                if (googleIdentity) {
+                    await supabase.auth.unlinkIdentity(googleIdentity);
+                }
+            } catch (unlinkErr) {
+                console.warn('No se pudo desvincular la identidad de Google:', unlinkErr);
+            }
+            return true;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['settings', userId] });
+            message.success('Google Calendar desconectado correctamente.');
+        },
+        onError: (err: any) => {
+            console.error('Disconnect Google error:', err);
+            message.error('Error al desconectar Google: ' + err.message);
         }
     });
 
@@ -429,6 +465,27 @@ export function useSettings(session: any = null) {
         disconnectWhatsAppMutation.mutate();
     }, [disconnectWhatsAppMutation]);
 
+    // --- GOOGLE CALENDAR CONNECTION ---
+    // linkIdentity hace un full-page redirect, por eso no usamos useMutation aquí.
+    const handleConnectGoogle = useCallback(async () => {
+        const { error } = await supabase.auth.linkIdentity({
+            provider: 'google',
+            options: {
+                redirectTo: `${window.location.origin}/configuracion?tab=googlecalendar`,
+                scopes: 'https://www.googleapis.com/auth/calendar',
+                queryParams: { access_type: 'offline', prompt: 'consent' },
+            },
+        });
+        if (error) {
+            console.error('Connect Google error:', error);
+            message.error('Error al conectar Google: ' + error.message);
+        }
+    }, []);
+
+    const handleDisconnectGoogle = useCallback(() => {
+        disconnectGoogleMutation.mutate();
+    }, [disconnectGoogleMutation]);
+
     // Combined saving state for UI loading indicators
     const saving = updateProfileMutation.isPending || updateAvatarMutation.isPending || connectWhatsAppMutation.isPending || disconnectWhatsAppMutation.isPending;
 
@@ -446,6 +503,8 @@ export function useSettings(session: any = null) {
         qrCodeData,
         instanceStatus,
         pollingActive,
+        googleConnected,
+        googleDisconnecting: disconnectGoogleMutation.isPending,
 
         // Actions
         handleProfileChange,
@@ -453,6 +512,8 @@ export function useSettings(session: any = null) {
         handleAvatarChange,
         handleConnectWhatsApp,
         handleDisconnectWhatsApp,
+        handleConnectGoogle,
+        handleDisconnectGoogle,
         setInstanceStatus,
         setPollingActive,
         setQrCodeData,

@@ -141,9 +141,11 @@ export default function UserDetailModal({
             className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-400"
           >
             <option value="">Cambiar plan...</option>
-            {plans.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
+            {plans
+              .filter((p: any) => p.name !== 'Trial' && Number(p.price_monthly) > 0)
+              .map((p: any) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
           </select>
           <button
             onClick={() => onAssignPlan(user.id, name)}

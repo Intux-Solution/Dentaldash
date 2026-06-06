@@ -36,13 +36,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setProfile(profileData ?? null);
 
             if (currentSession.provider_refresh_token) {
-                supabase
+                // Await para evitar una race condition: al volver del redirect de
+                // linkIdentity, garantizamos que el token esté persistido antes de
+                // renderizar la app (y que useSettings vea googleConnected=true).
+                const { error } = await supabase
                     .from('profiles')
                     .update({ google_refresh_token: currentSession.provider_refresh_token })
-                    .eq('id', currentSession.user.id)
-                    .then(({ error }) => {
-                        if (error) console.error('Error saving google refresh token:', error);
-                    });
+                    .eq('id', currentSession.user.id);
+                if (error) console.error('Error saving google refresh token:', error);
             }
         } else {
             setProfile(null);

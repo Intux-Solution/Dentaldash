@@ -1,5 +1,6 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-21 (Refactored)
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { useSettings } from './settings/useSettings';
 import { useSubscription } from '../context/SubscriptionContext';
@@ -10,6 +11,7 @@ import InsurancesTab from './settings/InsurancesTab';
 import ServicesTab from './settings/ServicesTab';
 import ScheduleTab from './settings/ScheduleTab';
 import WhatsAppTab from './settings/WhatsAppTab';
+import GoogleCalendarTab from './settings/GoogleCalendarTab';
 import FaqsTab from './settings/FaqsTab';
 import UpgradePrompt from './UpgradePrompt';
 
@@ -19,20 +21,24 @@ const TAB_FEATURE_MAP: Record<string, string | null> = {
     services: 'services_config',
     schedule: null,
     whatsapp: 'whatsapp_bot',
+    googlecalendar: null,
     faqs: 'faqs_config',
 };
 
 export default function SettingsView() {
-    const [activeTab, setActiveTab] = useState('profile');
+    const [searchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'profile');
     const { canUse } = useSubscription();
     const { session } = useAuth();
 
     const {
         profile, tenant, schedules, faqs, loading, saving,
         googleAvatar, avatarPreview, qrCodeData, instanceStatus, pollingActive,
+        googleConnected, googleDisconnecting,
         setProfile, setTenant, setFaqs,
         handleProfileChange, handleAutoSaveProfile, handleAvatarChange,
         handleConnectWhatsApp, handleDisconnectWhatsApp,
+        handleConnectGoogle, handleDisconnectGoogle,
         updateSchedule, addSchedule, deleteSchedule
     } = useSettings(session);
 
@@ -54,6 +60,7 @@ export default function SettingsView() {
                     { key: 'services', label: 'Servicios' },
                     { key: 'schedule', label: 'Horarios' },
                     { key: 'whatsapp', label: 'WhatsApp' },
+                    { key: 'googlecalendar', label: 'Google Calendar' },
                     { key: 'faqs', label: 'Preguntas Frecuentes' },
                 ] as { key: string; label: string }[]).map(({ key, label }) => {
                     const featureKey = TAB_FEATURE_MAP[key];
@@ -116,6 +123,15 @@ export default function SettingsView() {
                     canUse('whatsapp_bot')
                         ? <WhatsAppTab profile={profile} instanceStatus={instanceStatus} pollingActive={pollingActive} qrCodeData={qrCodeData} saving={saving} handleConnectWhatsApp={handleConnectWhatsApp} handleDisconnectWhatsApp={handleDisconnectWhatsApp} />
                         : <UpgradePrompt feature="Bot de WhatsApp" />
+                )}
+
+                {activeTab === 'googlecalendar' && (
+                    <GoogleCalendarTab
+                        googleConnected={googleConnected}
+                        googleDisconnecting={googleDisconnecting}
+                        handleConnectGoogle={handleConnectGoogle}
+                        handleDisconnectGoogle={handleDisconnectGoogle}
+                    />
                 )}
 
                 {activeTab === 'faqs' && (

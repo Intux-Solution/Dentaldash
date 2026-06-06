@@ -25,6 +25,7 @@ export const AdminService = {
   listUsers: () => callAdminApi('list_users'),
   listPlans: () => callAdminApi('list_plans'),
   listPaymentEvents: (limit = 100) => callAdminApi('list_payment_events', { limit }),
+  backfillPaymentStatus: () => callAdminApi('backfill_payment_status'),
 
   updateUserPlan: (targetUserId: string, planId: string) =>
     callAdminApi('update_user_plan', { target_user_id: targetUserId, plan_id: planId }),

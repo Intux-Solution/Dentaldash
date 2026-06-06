@@ -20,6 +20,16 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'Cancelada', color: 'text-red-600' },
 };
 
+// Estado real del pago segun MercadoPago (columna mp_status de payment_events)
+const PAYMENT_STATUS: Record<string, { label: string; color: string }> = {
+  authorized: { label: 'Autorizado', color: 'bg-green-100 text-green-700' },
+  charged: { label: 'Cobrado', color: 'bg-green-100 text-green-700' },
+  pending: { label: 'Pendiente', color: 'bg-amber-100 text-amber-700' },
+  paused: { label: 'Pausado', color: 'bg-amber-100 text-amber-700' },
+  payment_failed: { label: 'Pago fallido', color: 'bg-red-100 text-red-700' },
+  cancelled: { label: 'Cancelado', color: 'bg-red-100 text-red-700' },
+};
+
 export default function AdminView() {
   const [tab, setTab] = useState<Tab>('usuarios');
   const [users, setUsers] = useState<any[]>([]);
@@ -81,6 +91,19 @@ export default function AdminView() {
 
   const handleExportUsers = () => {
     ExportService.exportUsersCSV(users);
+  };
+
+  const handleSyncPayments = async () => {
+    setActionLoading('sync_payments');
+    try {
+      const res = await AdminService.backfillPaymentStatus();
+      toast.success(`Estados sincronizados (${res?.updated ?? 0} actualizados)`);
+      loadTab('pagos');
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al sincronizar estados');
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const handleOpenPermissions = (user: any) => {
@@ -414,6 +437,19 @@ export default function AdminView() {
 
           {/* ── PAGOS ── */}
           {tab === 'pagos' && (
+            <div>
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={handleSyncPayments}
+                disabled={actionLoading === 'sync_payments'}
+                className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-teal-700 border border-gray-200 hover:border-teal-300 bg-white px-3 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {actionLoading === 'sync_payments'
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <RefreshCw size={14} />}
+                Sincronizar estados
+              </button>
+            </div>
             <div className="overflow-x-auto rounded-xl border border-gray-200">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
@@ -435,9 +471,21 @@ export default function AdminView() {
                       <td className="px-4 py-3 text-gray-700">{e.event_type}</td>
                       <td className="px-4 py-3 text-gray-500 font-mono text-xs">{e.mp_resource_id ?? '—'}</td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${e.processed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {e.processed ? 'Procesado' : 'Pendiente'}
-                        </span>
+                        {(() => {
+                          const cfg = PAYMENT_STATUS[e.mp_status];
+                          if (cfg) {
+                            return (
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.color}`}>
+                                {cfg.label}
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                              {e.mp_status ?? (e.processed ? 'Sin datos' : 'Sin procesar')}
+                            </span>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -446,6 +494,7 @@ export default function AdminView() {
                   )}
                 </tbody>
               </table>
+            </div>
             </div>
           )}
         </>

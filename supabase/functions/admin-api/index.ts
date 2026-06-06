@@ -85,7 +85,7 @@ serve(async (req) => {
     // ── list_users ──────────────────────────────────────────────────────────
     if (action === "list_users") {
       const [profilesRes, subsRes, plansRes, authUsersRes] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, role, created_at").order("full_name"),
+        supabase.from("profiles").select("id, full_name, role").order("full_name"),
         supabase.from("subscriptions").select("user_id, status, plan_id, trial_ends_at, current_period_end, cancelled_at, mercadopago_sub_id"),
         supabase.from("subscription_plans").select("id, name, price_monthly"),
         supabase.auth.admin.listUsers({ perPage: 1000 }),
@@ -96,8 +96,10 @@ serve(async (req) => {
       if (plansRes.error) throw plansRes.error;
 
       const emailMap: Record<string, string> = {};
+      const createdAtMap: Record<string, string | null> = {};
       ((authUsersRes.data as any)?.users ?? []).forEach((u: any) => {
         emailMap[u.id] = u.email ?? "";
+        createdAtMap[u.id] = u.created_at ?? null;
       });
 
       const plansById: Record<string, any> = {};
@@ -109,7 +111,7 @@ serve(async (req) => {
       const result = (profilesRes.data ?? []).map((p: any) => ({
         ...p,
         email: emailMap[p.id] ?? "",
-        created_at: p.created_at,
+        created_at: createdAtMap[p.id] ?? null,
         subscriptions: subsByUserId[p.id]
           ? [{
               ...subsByUserId[p.id],
@@ -139,10 +141,23 @@ serve(async (req) => {
         .eq("id", plan_id)
         .single();
 
+      const now = new Date();
+      const periodEnd = new Date(now);
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+
       const { error } = await supabase
         .from("subscriptions")
         .upsert(
-          { user_id: target_user_id, plan_id, status: "active", updated_at: new Date().toISOString() },
+          {
+            user_id: target_user_id,
+            plan_id,
+            status: "active",
+            trial_ends_at: now.toISOString(),          // finaliza el trial
+            current_period_start: now.toISOString(),   // comienza el periodo del plan
+            current_period_end: periodEnd.toISOString(),
+            cancelled_at: null,
+            updated_at: now.toISOString(),
+          },
           { onConflict: "user_id" }
         );
 
@@ -347,6 +362,80 @@ serve(async (req) => {
       }));
 
       return json(result);
+    }
+
+    // ── backfill_payment_status ─────────────────────────────────────────────
+    // Consulta a MercadoPago el estado real de cada preapproval y rellena
+    // payment_events.mp_status en los eventos que aun no lo tienen.
+    if (action === "backfill_payment_status") {
+      const MP_ACCESS_TOKEN = Deno.env.get("MP_ACCESS_TOKEN")?.trim();
+      if (!MP_ACCESS_TOKEN) {
+        return new Response(
+          JSON.stringify({ error: "MP_ACCESS_TOKEN no configurado." }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      const { data: pending, error: pendingError } = await supabase
+        .from("payment_events")
+        .select("mp_resource_id, event_type")
+        .is("mp_status", null)
+        .not("mp_resource_id", "is", null);
+
+      if (pendingError) throw pendingError;
+
+      // Deduplicar por mp_resource_id para no repetir llamadas a MP
+      const resourceMap = new Map<string, string>();
+      ((pending ?? []) as any[]).forEach((e: any) => {
+        if (!resourceMap.has(e.mp_resource_id)) {
+          resourceMap.set(e.mp_resource_id, e.event_type);
+        }
+      });
+
+      let updated = 0;
+      for (const [resourceId, eventType] of resourceMap) {
+        try {
+          // Resolver el preapproval segun el tipo de evento
+          let preapprovalId: string | null = null;
+          if (eventType === "subscription_preapproval") {
+            preapprovalId = resourceId;
+          } else if (eventType === "subscription_authorized_payment") {
+            const apRes = await fetch(
+              `https://api.mercadopago.com/authorized_payments/${resourceId}`,
+              { headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` } },
+            );
+            if (apRes.ok) {
+              const ap = await apRes.json();
+              preapprovalId = ap?.preapproval_id ?? null;
+            }
+          }
+
+          if (!preapprovalId) continue;
+
+          const mpRes = await fetch(
+            `https://api.mercadopago.com/preapproval/${preapprovalId}`,
+            { headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` } },
+          );
+          if (!mpRes.ok) continue;
+
+          const mpSub = await mpRes.json();
+          const mpStatus: string | null = mpSub?.status ?? null;
+          if (!mpStatus) continue;
+
+          const { error: updErr } = await supabase
+            .from("payment_events")
+            .update({ mp_status: mpStatus })
+            .eq("mp_resource_id", resourceId)
+            .is("mp_status", null);
+
+          if (!updErr) updated++;
+        } catch (_e) {
+          // Ignorar errores individuales y seguir con el resto
+          continue;
+        }
+      }
+
+      return json({ ok: true, updated });
     }
 
     // ── list_plans ──────────────────────────────────────────────────────────

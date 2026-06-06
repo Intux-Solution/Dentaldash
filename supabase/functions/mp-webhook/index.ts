@@ -186,8 +186,10 @@ serve(async (req) => {
     };
 
     if (internalStatus === "active") {
+      updateData.plan_id = planId;                      // garantiza el plan elegido
       updateData.current_period_start = now.toISOString();
       updateData.current_period_end = periodEnd.toISOString();
+      updateData.trial_ends_at = now.toISOString();     // finaliza el trial al activar el plan
       updateData.cancelled_at = null;
     } else if (internalStatus === "cancelled") {
       updateData.cancelled_at = now.toISOString();
@@ -228,10 +230,10 @@ serve(async (req) => {
       }
     }
 
-    // Marcar el evento como procesado
+    // Marcar el evento como procesado y guardar el estado REAL de MercadoPago
     await supabase
       .from("payment_events")
-      .update({ processed: true, user_id: userId })
+      .update({ processed: true, user_id: userId, mp_status: mpStatus })
       .eq("mp_resource_id", resourceId)
       .eq("processed", false);
 
