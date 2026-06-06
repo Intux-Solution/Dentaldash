@@ -497,6 +497,100 @@ serve(async (req) => {
       return json({ ok: true });
     }
 
+    // ── delete_user ─────────────────────────────────────────────────────────
+    if (action === "delete_user") {
+      const { target_user_id } = body;
+      if (!target_user_id) {
+        return new Response(
+          JSON.stringify({ error: "Missing target_user_id." }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      if (target_user_id === user.id) {
+        return new Response(
+          JSON.stringify({ error: "No podés eliminar tu propia cuenta." }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      // 1) Recolectar paths de Storage antes de borrar las filas (best-effort)
+      const isStoragePath = (v: unknown): v is string =>
+        typeof v === "string" &&
+        v.length > 5 &&
+        !v.startsWith("http://") &&
+        !v.startsWith("https://") &&
+        !v.includes(" ");
+
+      const clinicalPaths: string[] = [];
+      const avatarPaths: string[] = [];
+
+      const { data: patientFiles } = await supabase
+        .from("patients")
+        .select("historia_clinica_url, consentimiento_url")
+        .eq("user_id", target_user_id);
+
+      ((patientFiles ?? []) as any[]).forEach((p: any) => {
+        if (isStoragePath(p.historia_clinica_url)) clinicalPaths.push(p.historia_clinica_url);
+        if (isStoragePath(p.consentimiento_url)) clinicalPaths.push(p.consentimiento_url);
+      });
+
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("id", target_user_id)
+        .single();
+
+      if (isStoragePath((profileRow as any)?.avatar_url)) {
+        avatarPaths.push((profileRow as any).avatar_url);
+      }
+
+      if (clinicalPaths.length > 0) {
+        try { await supabase.storage.from("clinical-records").remove(clinicalPaths); }
+        catch (e) { console.warn("delete_user: storage clinical-records cleanup failed", e); }
+      }
+      if (avatarPaths.length > 0) {
+        try { await supabase.storage.from("avatars").remove(avatarPaths); }
+        catch (e) { console.warn("delete_user: storage avatars cleanup failed", e); }
+      }
+
+      // 2) Borrar filas en orden hijos -> padres (best-effort, acumulando errores no fatales)
+      const byUser: { table: string; col: string }[] = [
+        { table: "treatment_history", col: "user_id" },
+        { table: "odontograms", col: "user_id" },
+        { table: "appointments", col: "user_id" },
+        { table: "patients", col: "user_id" },
+        { table: "schedules", col: "user_id" },
+        { table: "feature_permissions", col: "user_id" },
+        { table: "payment_events", col: "user_id" },
+        { table: "chat_history", col: "tenant_id" },
+        { table: "tenant_faqs", col: "tenant_id" },
+        { table: "subscriptions", col: "user_id" },
+        { table: "admin_users", col: "user_id" },
+        { table: "profiles", col: "id" },
+      ];
+
+      const cleanupErrors: string[] = [];
+      for (const { table, col } of byUser) {
+        const { error } = await supabase.from(table).delete().eq(col, target_user_id);
+        if (error) {
+          console.warn(`delete_user: failed to clean ${table}: ${error.message}`);
+          cleanupErrors.push(`${table}: ${error.message}`);
+        }
+      }
+
+      // 3) Borrar la cuenta de auth (si esto falla, es un error real)
+      const { error: authDeleteError } = await supabase.auth.admin.deleteUser(target_user_id);
+      if (authDeleteError) {
+        return new Response(
+          JSON.stringify({ error: `No se pudo eliminar la cuenta de acceso: ${authDeleteError.message}` }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      return json({ ok: true, cleanup_warnings: cleanupErrors });
+    }
+
     return new Response(
       JSON.stringify({ error: `Unknown action: ${action}` }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }

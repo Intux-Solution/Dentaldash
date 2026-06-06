@@ -61,4 +61,7 @@ export const AdminService = {
 
   removeAdmin: (targetUserId: string) =>
     callAdminApi('remove_admin', { target_user_id: targetUserId }),
+
+  deleteUser: (targetUserId: string) =>
+    callAdminApi('delete_user', { target_user_id: targetUserId }),
 };

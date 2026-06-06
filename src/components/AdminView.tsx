@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { AdminService } from '../services/AdminService';
 import { ExportService } from '../services/ExportService';
-import { Users, CreditCard, LayoutList, CheckCircle, RefreshCw, Loader2, Plus, Pencil, Trash2, Download, Shield, ShieldOff, Settings } from 'lucide-react';
+import { Users, CreditCard, LayoutList, CheckCircle, RefreshCw, Loader2, Plus, Pencil, Trash2, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PlanFormModal from './PlanFormModal';
 import AdminMetrics from './AdminMetrics';
 import TrialExpiringAlert from './TrialExpiringAlert';
 import UserPermissionsModal from './UserPermissionsModal';
+import UserDetailModal from './UserDetailModal';
 import SearchInput from './SearchInput';
 
 type Tab = 'usuarios' | 'planes' | 'pagos';
@@ -33,6 +34,11 @@ export default function AdminView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [permissionsUser, setPermissionsUser] = useState<any | null>(null);
   const [permissionsModalOpen, setPermissionsModalOpen] = useState(false);
+  const [detailUserId, setDetailUserId] = useState<string | null>(null);
+  const detailUser = useMemo(
+    () => users.find((u: any) => u.id === detailUserId) ?? null,
+    [users, detailUserId]
+  );
 
   const loadTab = useCallback(async (t: Tab) => {
     setLoading(true);
@@ -122,6 +128,20 @@ export default function AdminView() {
     try {
       await AdminService.cancelSubscription(userId);
       toast.success(`Suscripción de ${name} cancelada`);
+      loadTab('usuarios');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, name: string) => {
+    setActionLoading(userId + '_delete');
+    try {
+      await AdminService.deleteUser(userId);
+      toast.success(`Usuario ${name} eliminado`);
+      setDetailUserId(null);
       loadTab('usuarios');
     } catch (err: any) {
       toast.error(err.message);
@@ -255,7 +275,6 @@ export default function AdminView() {
                     <th className="px-4 py-3 text-left">Estado</th>
                     <th className="px-4 py-3 text-left">Vencimiento</th>
                     <th className="px-4 py-3 text-left">Registro</th>
-                    <th className="px-4 py-3 text-left">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
@@ -269,7 +288,11 @@ export default function AdminView() {
                         : '—';
 
                     return (
-                      <tr key={u.id} className="hover:bg-gray-50">
+                      <tr
+                        key={u.id}
+                        onClick={() => setDetailUserId(u.id)}
+                        className="hover:bg-teal-50/50 cursor-pointer transition-colors"
+                      >
                         <td className="px-4 py-3 font-medium text-gray-800">{u.full_name ?? '(sin nombre)'}</td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{u.email || '—'}</td>
                         <td className="px-4 py-3">
@@ -292,76 +315,11 @@ export default function AdminView() {
                         <td className="px-4 py-3 text-gray-400 text-xs">
                           {u.created_at ? new Date(u.created_at).toLocaleDateString('es-AR') : '—'}
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col gap-2">
-                            <div className="flex gap-2 flex-wrap">
-                              <button
-                                onClick={() => handleGrantFree(u.id, u.full_name ?? u.id)}
-                                disabled={actionLoading === u.id + '_free'}
-                                className="text-xs bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 rounded-md transition-colors disabled:opacity-50"
-                              >
-                                {actionLoading === u.id + '_free' ? <Loader2 size={12} className="animate-spin" /> : 'Acceso gratis'}
-                              </button>
-                              {sub?.status !== 'cancelled' && (
-                                <button
-                                  onClick={() => handleCancel(u.id, u.full_name ?? u.id)}
-                                  disabled={actionLoading === u.id + '_cancel'}
-                                  className="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded-md transition-colors disabled:opacity-50"
-                                >
-                                  {actionLoading === u.id + '_cancel' ? <Loader2 size={12} className="animate-spin" /> : 'Cancelar'}
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleOpenPermissions(u)}
-                                title="Editar permisos individuales"
-                                className="text-xs bg-gray-50 hover:bg-gray-100 text-gray-600 px-2 py-1 rounded-md transition-colors flex items-center gap-1"
-                              >
-                                <Settings size={11} />
-                                Permisos
-                              </button>
-                              <button
-                                onClick={() => handleToggleAdmin(u.id, u.full_name ?? u.id, u.role)}
-                                disabled={actionLoading === u.id + '_admin'}
-                                title={u.role === 'admin' ? 'Quitar admin' : 'Hacer admin'}
-                                className={`text-xs px-2 py-1 rounded-md transition-colors flex items-center gap-1 disabled:opacity-50 ${
-                                  u.role === 'admin'
-                                    ? 'bg-purple-50 hover:bg-purple-100 text-purple-700'
-                                    : 'bg-gray-50 hover:bg-gray-100 text-gray-500'
-                                }`}
-                              >
-                                {actionLoading === u.id + '_admin'
-                                  ? <Loader2 size={11} className="animate-spin" />
-                                  : u.role === 'admin'
-                                    ? <><ShieldOff size={11} /> Admin</>
-                                    : <><Shield size={11} /> Admin</>}
-                              </button>
-                            </div>
-                            <div className="flex gap-1.5">
-                              <select
-                                value={selectedPlans[u.id] ?? ''}
-                                onChange={(e) => setSelectedPlans((prev) => ({ ...prev, [u.id]: e.target.value }))}
-                                className="text-xs border border-gray-200 rounded-md px-1.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-teal-400"
-                              >
-                                <option value="">Cambiar plan...</option>
-                                {plans.map((p: any) => (
-                                  <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
-                              </select>
-                              <button
-                                onClick={() => handleAssignPlan(u.id, u.full_name ?? u.id)}
-                                disabled={!selectedPlans[u.id] || actionLoading === u.id + '_assign'}
-                                className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                              >
-                                {actionLoading === u.id + '_assign' ? <Loader2 size={12} className="animate-spin" /> : 'Asignar'}
-                              </button>
-                            </div>
-                          </div>
-                        </td>
                       </tr>
                     );
                   })}
                   {filteredUsers.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">
                       {searchQuery ? 'Sin resultados para la búsqueda' : 'No hay usuarios'}
                     </td></tr>
                   )}
@@ -502,6 +460,21 @@ export default function AdminView() {
         open={permissionsModalOpen}
         user={permissionsUser}
         onClose={() => { setPermissionsModalOpen(false); setPermissionsUser(null); }}
+      />
+      <UserDetailModal
+        open={!!detailUserId}
+        user={detailUser}
+        plans={plans}
+        actionLoading={actionLoading}
+        selectedPlans={selectedPlans}
+        setSelectedPlans={setSelectedPlans}
+        onGrantFree={handleGrantFree}
+        onCancel={handleCancel}
+        onToggleAdmin={handleToggleAdmin}
+        onAssignPlan={handleAssignPlan}
+        onOpenPermissions={handleOpenPermissions}
+        onDelete={handleDeleteUser}
+        onClose={() => setDetailUserId(null)}
       />
     </div>
   );
