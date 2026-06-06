@@ -17,6 +17,7 @@ import UpgradePrompt from './UpgradePrompt';
 
 const TAB_FEATURE_MAP: Record<string, string | null> = {
     profile: null,
+    booking: null,
     insurances: 'insurance_management',
     services: 'services_config',
     schedule: null,
@@ -64,7 +65,7 @@ export default function SettingsView() {
                     { key: 'faqs', label: 'Preguntas Frecuentes' },
                 ] as { key: string; label: string }[]).map(({ key, label }) => {
                     const featureKey = TAB_FEATURE_MAP[key];
-                    const locked = featureKey !== null && !canUse(featureKey);
+                    const locked = key === 'booking' ? false : (featureKey !== null && !canUse(featureKey));
                     return (
                         <button
                             key={key}

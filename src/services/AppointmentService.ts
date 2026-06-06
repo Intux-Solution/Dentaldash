@@ -247,7 +247,8 @@ ${data.notas || 'Sin notas adicionales'}
                         title: `${appt.title} - ${appt.patient?.nombre || 'Paciente'}`,
                         start_time: appt.start_time,
                         end_time: appt.end_time,
-                        notes: appt.notes
+                        notes: appt.notes,
+                        patientEmail: appt.patient?.email || null
                     };
 
                     const googleEvent = await GoogleCalendarService.createEvent(eventData, session);

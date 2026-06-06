@@ -46,6 +46,12 @@ export function useAppointmentsQuery(fromDate: string | null = null, toDate: str
             }
 
             const events = await AppointmentService.getAppointments(fromISO, toISO, session);
+
+            // Trigger background sync for any unsynced confirmed appointments
+            if (session?.user?.id) {
+                AppointmentService.syncPendingAppointments(session).catch(e => console.error("Background sync error:", e));
+            }
+
             const normalized = Array.isArray(events) ? events : [];
             // Remove cancelled from UI
             return normalized.filter((ev: any) => (ev?.status || '').toLowerCase() !== 'cancelled' && (ev?.status || '').toLowerCase() !== 'canceled');
