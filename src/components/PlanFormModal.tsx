@@ -32,11 +32,14 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
     handleSubmit,
     control,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<PlanFormData>({
     resolver: zodResolver(PlanFormSchema),
-    defaultValues: { name: '', description: '', price_monthly: 0, price_yearly: undefined, features: [], feature_keys: [], sort_order: 0 },
+    defaultValues: { name: '', description: '', price_monthly: 0, price_yearly: undefined, features: [], feature_keys: [], sort_order: 0, trial_days: undefined },
   });
+
+  const watchPriceMonthly = watch('price_monthly');
 
   useEffect(() => {
     if (open) {
@@ -49,9 +52,10 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
           features: plan.features ?? [],
           feature_keys: plan.feature_keys ?? [],
           sort_order: plan.sort_order ?? 0,
+          trial_days: plan.trial_days ?? undefined,
         });
       } else {
-        reset({ name: '', description: '', price_monthly: 0, price_yearly: undefined, features: [], feature_keys: [], sort_order: 0 });
+        reset({ name: '', description: '', price_monthly: 0, price_yearly: undefined, features: [], feature_keys: [], sort_order: 0, trial_days: undefined });
       }
     }
   }, [open, plan, reset]);
@@ -69,6 +73,7 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
           price_yearly: data.price_yearly ?? undefined,
           features: data.features,
           sort_order: data.sort_order,
+          trial_days: data.trial_days ?? null,
         });
         toast.success('Plan creado');
       }
@@ -165,6 +170,23 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
             <FieldError error={errors.price_yearly} />
           </div>
         </div>
+
+        {/* Dias de prueba (solo para planes gratuitos) */}
+        {Number(watchPriceMonthly) === 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Dias de prueba</label>
+            <input
+              {...register('trial_days')}
+              type="number"
+              min={1}
+              placeholder="Ej: 14"
+              className={inputCls(errors.trial_days)}
+              disabled={isSubmitting}
+            />
+            <p className="mt-1 text-xs text-gray-400">Duracion del periodo de prueba para nuevos usuarios</p>
+            <FieldError error={errors.trial_days} />
+          </div>
+        )}
 
         {/* Features */}
         <div>

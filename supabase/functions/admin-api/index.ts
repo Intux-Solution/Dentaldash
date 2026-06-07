@@ -226,7 +226,7 @@ serve(async (req) => {
 
     // ── create_plan ─────────────────────────────────────────────────────────
     if (action === "create_plan") {
-      const { name, description, price_monthly, price_yearly, features, feature_keys, sort_order } = body;
+      const { name, description, price_monthly, price_yearly, features, feature_keys, sort_order, trial_days } = body;
       if (!name || price_monthly === undefined) {
         return new Response(
           JSON.stringify({ error: "Missing name or price_monthly." }),
@@ -244,6 +244,7 @@ serve(async (req) => {
           features: features ?? [],
           feature_keys: feature_keys ?? [],
           sort_order: sort_order ?? 0,
+          trial_days: trial_days ?? null,
         })
         .select()
         .single();
@@ -451,7 +452,7 @@ serve(async (req) => {
 
     // ── update_plan ─────────────────────────────────────────────────────────
     if (action === "update_plan") {
-      const { plan_id, name, description, price_monthly, price_yearly, features, feature_keys, sort_order } = body;
+      const { plan_id, name, description, price_monthly, price_yearly, features, feature_keys, sort_order, trial_days } = body;
       if (!plan_id) {
         return new Response(
           JSON.stringify({ error: "Missing plan_id." }),
@@ -467,6 +468,7 @@ serve(async (req) => {
       if (features !== undefined) updates.features = features;
       if (feature_keys !== undefined) updates.feature_keys = feature_keys;
       if (sort_order !== undefined) updates.sort_order = sort_order;
+      if (trial_days !== undefined) updates.trial_days = trial_days;
 
       const { error } = await supabase
         .from("subscription_plans")

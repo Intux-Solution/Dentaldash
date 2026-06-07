@@ -8,6 +8,7 @@ export const PlanFormSchema = z.object({
   features: z.array(z.string()).default([]),
   feature_keys: z.array(z.string()).default([]),
   sort_order: z.coerce.number().int().min(0).default(0),
+  trial_days: z.coerce.number().int().min(1).optional().nullable(),
 });
 
 export type PlanFormData = z.infer<typeof PlanFormSchema>;
