@@ -142,7 +142,7 @@ export default function UserDetailModal({
           >
             <option value="">Cambiar plan...</option>
             {plans
-              .filter((p: any) => p.name !== 'Trial' && Number(p.price_monthly) > 0)
+              .filter((p: any) => p.is_active)
               .map((p: any) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}

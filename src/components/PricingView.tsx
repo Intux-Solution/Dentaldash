@@ -24,10 +24,6 @@ export default function PricingView() {
       navigate('/login', { state: { redirect: '/pricing' } });
       return;
     }
-    if (plan.price_monthly === 0) {
-      navigate('/');
-      return;
-    }
     try {
       setCheckoutLoading(plan.id);
       const { init_point } = await createCheckout(plan.id);
@@ -67,8 +63,8 @@ export default function PricingView() {
           <Loader2 className="animate-spin text-teal-600" size={32} />
         </div>
       ) : (
-        <div className="max-w-5xl mx-auto px-6 pb-20 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-          {plans.filter((p) => p.name !== 'Trial').concat(plans.filter((p) => p.name === 'Trial')).map((plan, idx) => {
+        <div className="max-w-5xl mx-auto px-6 pb-20 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          {plans.map((plan, idx) => {
             const isPro = plan.name === 'Asistente IA';
             const isBusy = checkoutLoading === plan.id;
             return (
@@ -92,20 +88,14 @@ export default function PricingView() {
                 </div>
 
                 <div>
-                  {plan.price_monthly === 0 ? (
-                    <p className="text-3xl font-bold text-gray-900">Gratis</p>
-                  ) : (
-                    <>
-                      <p className="text-3xl font-bold text-gray-900">
-                        ${plan.price_monthly.toLocaleString('es-AR')}
-                        <span className="text-base font-normal text-gray-400"> ARS/mes</span>
-                      </p>
-                      {plan.price_yearly && (
-                        <p className="text-xs text-teal-600 mt-1">
-                          o ${plan.price_yearly.toLocaleString('es-AR')} ARS/año (ahorrás 2 meses)
-                        </p>
-                      )}
-                    </>
+                  <p className="text-3xl font-bold text-gray-900">
+                    ${plan.price_monthly.toLocaleString('es-AR')}
+                    <span className="text-base font-normal text-gray-400"> ARS/mes</span>
+                  </p>
+                  {plan.price_yearly && (
+                    <p className="text-xs text-teal-600 mt-1">
+                      o ${plan.price_yearly.toLocaleString('es-AR')} ARS/año (ahorrás 2 meses)
+                    </p>
                   )}
                 </div>
 
@@ -128,9 +118,7 @@ export default function PricingView() {
                   } disabled:opacity-60`}
                 >
                   {isBusy && <Loader2 size={15} className="animate-spin" />}
-                  {plan.price_monthly === 0
-                    ? 'Comenzar prueba gratis'
-                    : 'Contratar plan'}
+                  Contratar plan
                 </button>
               </div>
             );
