@@ -26,6 +26,86 @@ function addMinutes(date: Date, mins: number): Date {
   return new Date(date.getTime() + mins * 60 * 1000);
 }
 
+// Sincroniza un turno recien creado con el Google Calendar del dentista.
+// Best-effort: cualquier fallo se loguea pero no interrumpe la reserva.
+async function syncToGoogleCalendar(
+  supabase: any,
+  params: {
+    userId: string;
+    appointmentId: string;
+    title: string;
+    description: string | null;
+    startTime: string;
+    endTime: string;
+    attendeeEmail?: string | null;
+  },
+): Promise<void> {
+  const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
+  const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) return;
+
+  // El dentista debe tener Google Calendar conectado
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("google_refresh_token")
+    .eq("id", params.userId)
+    .single();
+
+  const refreshToken = profile?.google_refresh_token;
+  if (!refreshToken) return;
+
+  // Refrescar el access token (mismo patron que chat-webhook)
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }).toString(),
+  });
+
+  if (!tokenRes.ok) {
+    console.error("public-booking: failed to refresh Google token", await tokenRes.text());
+    return;
+  }
+
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData.access_token;
+  if (!accessToken) return;
+
+  const event = {
+    summary: params.title,
+    description: params.description || "",
+    start: { dateTime: params.startTime, timeZone: "America/Argentina/Buenos_Aires" },
+    end: { dateTime: params.endTime, timeZone: "America/Argentina/Buenos_Aires" },
+    attendees: params.attendeeEmail ? [{ email: params.attendeeEmail }] : [],
+  };
+
+  const eventRes = await fetch(
+    "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(event),
+    },
+  );
+
+  if (!eventRes.ok) {
+    console.error("public-booking: failed to create Google Calendar event", await eventRes.text());
+    return;
+  }
+
+  const gcalEvent = await eventRes.json();
+  if (gcalEvent?.id) {
+    await supabase
+      .from("appointments")
+      .update({ google_event_id: gcalEvent.id })
+      .eq("id", params.appointmentId);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -268,6 +348,21 @@ serve(async (req) => {
       const result = rpcResult as any;
       if (!result?.success) {
         return jsonErr(result?.error ?? "El horario ya está ocupado.", 409);
+      }
+
+      // Sincronizar con el Google Calendar del dentista (best-effort)
+      try {
+        await syncToGoogleCalendar(supabase, {
+          userId: user_id,
+          appointmentId: result.id,
+          title: `${appointment_type} - ${nombre}`,
+          description: notes || null,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          attendeeEmail: email || null,
+        });
+      } catch (e) {
+        console.warn("public-booking: Google Calendar sync failed", e);
       }
 
       return json({ ok: true, appointment_id: result.id });

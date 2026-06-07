@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { AdminService } from '../services/AdminService';
 import { ExportService } from '../services/ExportService';
-import { Users, CreditCard, LayoutList, CheckCircle, RefreshCw, Loader2, Plus, Pencil, Trash2, Download } from 'lucide-react';
+import { Users, CreditCard, LayoutList, CheckCircle, RefreshCw, Loader2, Plus, Pencil, Trash2, Download, MessageSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PlanFormModal from './PlanFormModal';
 import AdminMetrics from './AdminMetrics';
@@ -10,7 +10,7 @@ import UserPermissionsModal from './UserPermissionsModal';
 import UserDetailModal from './UserDetailModal';
 import SearchInput from './SearchInput';
 
-type Tab = 'usuarios' | 'planes' | 'pagos';
+type Tab = 'usuarios' | 'planes' | 'pagos' | 'mensajes';
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   active: { label: 'Activa', color: 'text-green-600' },
@@ -35,6 +35,7 @@ export default function AdminView() {
   const [users, setUsers] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [planModalOpen, setPlanModalOpen] = useState(false);
@@ -63,6 +64,9 @@ export default function AdminView() {
       } else if (t === 'planes') {
         const data = await AdminService.listPlans();
         setPlans(data);
+      } else if (t === 'mensajes') {
+        const data = await AdminService.listSupportMessages();
+        setMessages(data);
       } else {
         const data = await AdminService.listPaymentEvents();
         setEvents(data);
@@ -225,10 +229,25 @@ export default function AdminView() {
     }
   };
 
+  const handleMarkRead = async (messageId: string) => {
+    setActionLoading(`msg-${messageId}`);
+    try {
+      await AdminService.markSupportMessageRead(messageId);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, status: 'read', read_at: new Date().toISOString() } : m))
+      );
+    } catch (err: any) {
+      toast.error(err.message ?? 'No se pudo marcar como leído');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'usuarios', label: 'Usuarios', icon: <Users size={16} /> },
     { key: 'planes', label: 'Planes', icon: <LayoutList size={16} /> },
     { key: 'pagos', label: 'Pagos', icon: <CreditCard size={16} /> },
+    { key: 'mensajes', label: 'Mensajes', icon: <MessageSquare size={16} /> },
   ];
 
   return (
@@ -495,6 +514,62 @@ export default function AdminView() {
                 </tbody>
               </table>
             </div>
+            </div>
+          )}
+
+          {/* ── MENSAJES ── */}
+          {tab === 'mensajes' && (
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium">Dentista</th>
+                      <th className="px-4 py-3 text-left font-medium">Asunto</th>
+                      <th className="px-4 py-3 text-left font-medium">Mensaje</th>
+                      <th className="px-4 py-3 text-left font-medium">Fecha</th>
+                      <th className="px-4 py-3 text-left font-medium">Estado</th>
+                      <th className="px-4 py-3 text-right font-medium">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {messages.map((msg) => (
+                      <tr key={msg.id} className={`border-t border-gray-50 ${msg.status === 'new' ? 'bg-amber-50/40' : ''}`}>
+                        <td className="px-4 py-3 font-medium text-gray-700 whitespace-nowrap">{msg.user_name ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-700">{msg.subject}</td>
+                        <td className="px-4 py-3 text-gray-500 max-w-md whitespace-pre-wrap break-words">{msg.body}</td>
+                        <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                          {new Date(msg.created_at).toLocaleString('es-AR')}
+                        </td>
+                        <td className="px-4 py-3">
+                          {msg.status === 'read' ? (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Leído</span>
+                          ) : (
+                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">Nuevo</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {msg.status !== 'read' && (
+                            <button
+                              onClick={() => handleMarkRead(msg.id)}
+                              disabled={actionLoading === `msg-${msg.id}`}
+                              className="inline-flex items-center gap-1.5 text-xs text-teal-600 hover:text-teal-700 disabled:opacity-50"
+                            >
+                              {actionLoading === `msg-${msg.id}`
+                                ? <Loader2 size={14} className="animate-spin" />
+                                : <CheckCircle size={14} />}
+                              Marcar leído
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {messages.length === 0 && (
+                      <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Sin mensajes</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>

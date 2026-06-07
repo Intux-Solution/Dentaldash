@@ -60,8 +60,8 @@ export default function SettingsView() {
                     { key: 'insurances', label: 'Obras Sociales' },
                     { key: 'services', label: 'Servicios' },
                     { key: 'schedule', label: 'Horarios' },
-                    { key: 'whatsapp', label: 'WhatsApp' },
                     { key: 'googlecalendar', label: 'Google Calendar' },
+                    { key: 'whatsapp', label: 'WhatsApp' },
                     { key: 'faqs', label: 'Preguntas Frecuentes' },
                 ] as { key: string; label: string }[]).map(({ key, label }) => {
                     const featureKey = TAB_FEATURE_MAP[key];

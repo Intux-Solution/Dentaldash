@@ -517,6 +517,38 @@ serve(async (req) => {
 
                         if (apptError) throw new Error("Error creating appointment: " + apptError.message);
 
+                        // --- Sync con Google Calendar (best-effort, reutiliza el token ya refrescado) ---
+                        if (googleAccessToken && appointment?.id) {
+                            try {
+                                const gcalEvent = {
+                                    summary: `${appointment_type} - ${patientName}`,
+                                    description: notes || "Agendado vía WhatsApp",
+                                    start: { dateTime: startDateTime.toISOString(), timeZone: 'America/Argentina/Buenos_Aires' },
+                                    end: { dateTime: endDateTime.toISOString(), timeZone: 'America/Argentina/Buenos_Aires' },
+                                    attendees: email ? [{ email }] : [],
+                                };
+                                const gcalRes = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+                                    method: 'POST',
+                                    headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(gcalEvent),
+                                });
+                                if (gcalRes.ok) {
+                                    const createdEvent = await gcalRes.json();
+                                    if (createdEvent?.id) {
+                                        await supabase
+                                            .from('appointments')
+                                            .update({ google_event_id: createdEvent.id })
+                                            .eq('id', appointment.id);
+                                    }
+                                } else {
+                                    console.error("chat-webhook: failed to create Google Calendar event", await gcalRes.text());
+                                }
+                            } catch (gcalErr: any) {
+                                console.warn("chat-webhook: Google Calendar sync failed", gcalErr.message);
+                            }
+                        }
+                        // ------------------------------------
+
                         // --- Notify Dentist (New Feature) ---
                         if (tenant.notification_phone) {
                             const notifyMsg = `🔔 *Nuevo Turno Agendado*\n\n👤 Paciente: ${patientName}\n📅 Fecha: ${date}\n⏰ Hora: ${time}\n🆔 DNI: ${dni}\n🏥 Obra Social: ${obraSocial}\n📝 Notas: ${notes || '-'}\n\n_Agendado vía WhatsApp Bot_`;

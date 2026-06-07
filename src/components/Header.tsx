@@ -1,9 +1,10 @@
 // src/components/Header.tsx - UPDATED 2026-02-16 - FINAL VERSION
 import React, { useState, useEffect } from 'react';
-import { Settings, LogOut, User, ChevronDown } from 'lucide-react';
+import { Settings, LogOut, User, ChevronDown, LifeBuoy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import SupportMessageModal from './SupportMessageModal';
 
 interface HeaderProps {
   title: string;
@@ -15,6 +16,7 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
   const navigate = useNavigate();
   const { session } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const [userData, setUserData] = useState<{ name: string; avatar: string | null; email: string; role: string }>({
     name: 'Usuario',
     avatar: null,
@@ -119,6 +121,15 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
         </div>
 
         <div className="flex items-center space-x-4">
+          <button
+            onClick={() => setSupportOpen(true)}
+            title="Contactar al administrador"
+            className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-gray-600 transition-all hover:bg-teal-50 hover:text-teal-700 border border-transparent hover:border-teal-100"
+          >
+            <LifeBuoy size={18} />
+            <span className="hidden sm:block">Soporte</span>
+          </button>
+
           <div className="relative">
             <button
               id="user-menu-button"
@@ -211,6 +222,8 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
           onClick={() => setShowUserMenu(false)}
         />
       )}
+
+      <SupportMessageModal open={supportOpen} onClose={() => setSupportOpen(false)} />
     </>
   );
 }

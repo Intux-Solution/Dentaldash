@@ -65,4 +65,10 @@ export const AdminService = {
 
   deleteUser: (targetUserId: string) =>
     callAdminApi('delete_user', { target_user_id: targetUserId }),
+
+  listSupportMessages: (limit = 100) =>
+    callAdminApi('list_support_messages', { limit }),
+
+  markSupportMessageRead: (messageId: string) =>
+    callAdminApi('mark_message_read', { message_id: messageId }),
 };

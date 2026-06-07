@@ -474,6 +474,34 @@ serve(async (req) => {
         .eq("id", plan_id);
 
       if (error) throw error;
+
+      // Si cambiaron los feature_keys, propagar a los usuarios que tienen este plan
+      // (asi, editar los permisos de un plan SI impacta a los usuarios existentes).
+      if (feature_keys !== undefined) {
+        const enabledFeatures: string[] = (feature_keys as string[]) ?? [];
+        const { data: subs } = await supabase
+          .from("subscriptions")
+          .select("user_id")
+          .eq("plan_id", plan_id);
+
+        const userIds = [...new Set(((subs ?? []) as any[]).map((s: any) => s.user_id).filter(Boolean))];
+        if (userIds.length > 0) {
+          const now = new Date().toISOString();
+          const perms = userIds.flatMap((uid: string) =>
+            ALL_FEATURES.map((key) => ({
+              user_id: uid,
+              feature_key: key,
+              enabled: enabledFeatures.includes(key),
+              updated_at: now,
+            }))
+          );
+          const { error: permError } = await supabase
+            .from("feature_permissions")
+            .upsert(perms, { onConflict: "user_id,feature_key" });
+          if (permError) throw permError;
+        }
+      }
+
       return json({ ok: true });
     }
 
@@ -678,6 +706,54 @@ serve(async (req) => {
       }
 
       return json({ ok: true, cleanup_warnings: cleanupErrors });
+    }
+
+    // ── list_support_messages ───────────────────────────────────────────────
+    if (action === "list_support_messages") {
+      const limit = Number(body.limit ?? 100);
+      const { data, error } = await supabase
+        .from("support_messages")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+
+      const userIds = [...new Set(((data ?? []) as any[]).map((m: any) => m.user_id).filter(Boolean))];
+      const profileMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", userIds);
+        ((profiles ?? []) as any[]).forEach((p: any) => { profileMap[p.id] = p.full_name ?? ""; });
+      }
+
+      const result = ((data ?? []) as any[]).map((m: any) => ({
+        ...m,
+        user_name: profileMap[m.user_id] || "—",
+      }));
+
+      return json(result);
+    }
+
+    // ── mark_message_read ───────────────────────────────────────────────────
+    if (action === "mark_message_read") {
+      const { message_id } = body;
+      if (!message_id) {
+        return new Response(
+          JSON.stringify({ error: "Missing message_id." }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const { error } = await supabase
+        .from("support_messages")
+        .update({ status: "read", read_at: new Date().toISOString() })
+        .eq("id", message_id);
+
+      if (error) throw error;
+      return json({ ok: true });
     }
 
     return new Response(
