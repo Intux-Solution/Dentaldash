@@ -97,13 +97,14 @@ serve(async (req) => {
       processed: false,
     });
 
-    // 2) Validacion de firma (no bloqueante): se loguea el resultado pero NO se rechaza,
-    //    porque mas abajo el webhook consulta el estado REAL en MercadoPago antes de
-    //    actuar (un payload falsificado no puede activar nada sin un recurso valido en MP).
+    // 2) Validacion de firma (BLOQUEANTE si MP_WEBHOOK_SECRET esta configurado).
+    //    El evento crudo ya quedo registrado arriba para auditoria; si la firma es
+    //    invalida o falta, rechazamos sin procesar.
     if (MP_WEBHOOK_SECRET) {
       const validSig = await verifySignature(req, url, MP_WEBHOOK_SECRET);
       if (!validSig) {
-        console.warn("Webhook signature invalid or missing (processing anyway).");
+        console.warn("Webhook signature invalid or missing. Rejecting request.");
+        return new Response("Invalid signature", { status: 401 });
       }
     }
 
@@ -155,6 +156,20 @@ serve(async (req) => {
     if (!userId || !planId) {
       console.error("Could not extract userId/planId from external_reference:", external_reference);
       return new Response("OK", { status: 200 });
+    }
+
+    // Idempotencia: si ya procesamos este (preapproval, estado), no reprocesar.
+    // MercadoPago reenvia webhooks; la PK de processed_mp_events rechaza el duplicado.
+    const eventKey = `${preapprovalId}:${mpStatus}`;
+    const { error: idemError } = await supabase
+      .from("processed_mp_events")
+      .insert({ event_key: eventKey });
+    if (idemError) {
+      if (idemError.code === "23505") {
+        return new Response("OK (already processed)", { status: 200 });
+      }
+      // Si fallo por otra causa, lo logueamos pero seguimos (no bloqueante).
+      console.error("Error registrando idempotencia:", idemError.message);
     }
 
     // Mapear estado de MP a estado interno

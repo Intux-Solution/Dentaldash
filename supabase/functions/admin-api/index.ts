@@ -1,11 +1,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// Allowlist de origenes permitidos (CORS). Se configura via APP_URL (coma-separada).
+// Origen de produccion conocido + los configurados en APP_URL (con/sin www, etc.)
+const ALLOWED_ORIGINS = [
+  "https://dashboard.dentaldash.cloud",
+  ...(Deno.env.get("APP_URL") ?? "").split(",").map((s) => s.trim().replace(/\/+$/, "")),
+].filter(Boolean);
+
+function buildCors(origin: string | null): Record<string, string> {
+  const allow = origin && ALLOWED_ORIGINS.includes(origin)
+    ? origin
+    : (ALLOWED_ORIGINS[0] ?? "");
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Vary": "Origin",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
 
 const ALL_FEATURES = [
   "appointments",
@@ -22,6 +35,13 @@ const ALL_FEATURES = [
 ];
 
 serve(async (req) => {
+  const corsHeaders = buildCors(req.headers.get("origin"));
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -763,16 +783,10 @@ serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
+    console.error("admin-api error:", err?.message ?? err);
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: "Error interno del servidor." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
-
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}

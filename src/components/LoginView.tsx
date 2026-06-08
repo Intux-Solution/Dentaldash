@@ -218,9 +218,9 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
                   type={showPass ? "text" : "password"}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  placeholder={mode === "register" ? "Mínimo 6 caracteres" : "••••••••"}
+                  placeholder={mode === "register" ? "Mínimo 8 caracteres" : "••••••••"}
                   required
-                  minLength={6}
+                  minLength={8}
                   className="w-full px-3.5 py-3 pr-10 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-all"
                 />
                 <button

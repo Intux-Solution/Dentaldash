@@ -1,12 +1,27 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Allowlist de origenes permitidos (CORS). Se configura via APP_URL (coma-separada).
+// Origen de produccion conocido + los configurados en APP_URL (con/sin www, etc.)
+const ALLOWED_ORIGINS = [
+  "https://dashboard.dentaldash.cloud",
+  ...(Deno.env.get("APP_URL") ?? "").split(",").map((s) => s.trim().replace(/\/+$/, "")),
+].filter(Boolean);
+
+function buildCors(origin: string | null): Record<string, string> {
+  const allow = origin && ALLOWED_ORIGINS.includes(origin)
+    ? origin
+    : (ALLOWED_ORIGINS[0] ?? "");
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Vary": "Origin",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
 
 serve(async (req) => {
+  const corsHeaders = buildCors(req.headers.get("origin"));
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")?.trim();
@@ -142,7 +157,7 @@ serve(async (req) => {
       const mpError = await mpRes.text();
       console.error("MercadoPago error:", mpError);
       return new Response(
-        JSON.stringify({ error: "Failed to create MercadoPago preapproval.", detail: mpError }),
+        JSON.stringify({ error: "No se pudo crear la suscripción en MercadoPago." }),
         { status: 502, headers: corsHeaders }
       );
     }
@@ -177,8 +192,9 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
+    console.error("create-checkout error:", err?.message ?? err);
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: "Error interno del servidor." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

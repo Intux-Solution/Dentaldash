@@ -45,12 +45,16 @@ build_err.txt
 
 # Scripts de setup con datos sensibles
 supabase/seed_admin.sql
+/.supabase
 
 # Documentos internos (no publicos)
 Dentaldash.md
 Supabase.md
 MEJORA.md
+SECURITY.md
 PLAN.md
 /Manuales
 deploy.json
 DESIGN_SYSTEM.md
+CLAUDE.md
+

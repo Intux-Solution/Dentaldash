@@ -1,11 +1,50 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
+import { z } from "https://esm.sh/zod@3.23.8";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// Allowlist de origenes permitidos (CORS). Se configura via APP_URL (coma-separada).
+// Origen de produccion conocido + los configurados en APP_URL (con/sin www, etc.)
+const ALLOWED_ORIGINS = [
+  "https://dashboard.dentaldash.cloud",
+  ...(Deno.env.get("APP_URL") ?? "").split(",").map((s) => s.trim().replace(/\/+$/, "")),
+].filter(Boolean);
+
+function buildCors(origin: string | null): Record<string, string> {
+  const allow = origin && ALLOWED_ORIGINS.includes(origin)
+    ? origin
+    : (ALLOWED_ORIGINS[0] ?? "");
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Vary": "Origin",
+    "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
+
+// Validacion server-side de la reserva publica (no confiar solo en el front).
+const CreateAppointmentSchema = z.object({
+  user_id: z.string().uuid(),
+  nombre: z.string().trim().min(2).max(120),
+  dni: z.string().trim().min(7).max(15),
+  telefono: z.string().trim().min(6).max(30),
+  email: z.string().max(150).optional().nullable(),
+  obra_social: z.string().max(120).optional().nullable(),
+  appointment_type: z.string().trim().min(1).max(120),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  time: z.string().regex(/^\d{1,2}:\d{2}$/),
+  duration: z.coerce.number().int().min(5).max(480).optional(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+// Rate limiting (basado en DB) para el endpoint publico sin auth.
+const RL_IP_MAX_PER_HOUR = 5;
+const RL_IP_MAX_PER_DAY = 8;
+const RL_MAX_PENDING_PER_PATIENT = 3;
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 const SLOT_INTERVAL_MINUTES = 30;
 // Argentina is UTC-3
@@ -107,6 +146,18 @@ async function syncToGoogleCalendar(
 }
 
 serve(async (req) => {
+  const corsHeaders = buildCors(req.headers.get("origin"));
+  const json = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  const jsonErr = (msg: string, status: number) =>
+    new Response(JSON.stringify({ error: msg }), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -276,17 +327,49 @@ serve(async (req) => {
 
     // ── create_appointment ──────────────────────────────────────────────────
     if (action === "create_appointment") {
+      // Validacion server-side robusta
+      const parsed = CreateAppointmentSchema.safeParse(body);
+      if (!parsed.success) {
+        return jsonErr("Datos de reserva inválidos.", 400);
+      }
       const {
         user_id, nombre, dni, telefono, email, obra_social,
         appointment_type, date, time, duration, notes,
-      } = body;
-
-      if (!user_id || !nombre || !dni || !telefono || !appointment_type || !date || !time) {
-        return jsonErr("Faltan datos obligatorios.", 400);
-      }
+      } = parsed.data;
 
       // Sanitize DNI
       const dniClean = String(dni).replace(/[.\-\s]/g, "");
+
+      // ── Rate limiting por IP (basado en DB, resiste multiples isolates) ──
+      const fwd = req.headers.get("x-forwarded-for") ?? "";
+      const ip = fwd.split(",")[0].trim() || "unknown";
+      const ipHash = await sha256Hex(ip);
+      const nowMs = Date.now();
+      const oneHourAgo = new Date(nowMs - 60 * 60 * 1000).toISOString();
+      const oneDayAgo = new Date(nowMs - 24 * 60 * 60 * 1000).toISOString();
+
+      const { count: hourCount } = await supabase
+        .from("public_booking_attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("ip_hash", ipHash)
+        .gte("created_at", oneHourAgo);
+      if ((hourCount ?? 0) >= RL_IP_MAX_PER_HOUR) {
+        return jsonErr("Demasiadas reservas desde esta conexión. Esperá un rato e intentá de nuevo.", 429);
+      }
+
+      const { count: dayCount } = await supabase
+        .from("public_booking_attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("ip_hash", ipHash)
+        .gte("created_at", oneDayAgo);
+      if ((dayCount ?? 0) >= RL_IP_MAX_PER_DAY) {
+        return jsonErr("Alcanzaste el límite de reservas por hoy.", 429);
+      }
+
+      // Registrar el intento (cuenta para el rate limit aunque la reserva luego falle)
+      await supabase.from("public_booking_attempts").insert({
+        ip_hash: ipHash, user_id, dni: dniClean,
+      });
 
       // Find or create patient
       let patientId: string;
@@ -317,6 +400,18 @@ serve(async (req) => {
 
         if (patErr) throw patErr;
         patientId = newPatient.id;
+      }
+
+      // Limite de turnos pendientes futuros por paciente (anti-spam)
+      const { count: pendingCount } = await supabase
+        .from("appointments")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user_id)
+        .eq("patient_id", patientId)
+        .eq("status", "pending")
+        .gte("start_time", new Date().toISOString());
+      if ((pendingCount ?? 0) >= RL_MAX_PENDING_PER_PATIENT) {
+        return jsonErr("Ya tenés turnos pendientes con este consultorio. Contactalos para gestionarlos.", 429);
       }
 
       // Build start/end times from date + time strings (Argentina local)
@@ -370,21 +465,7 @@ serve(async (req) => {
 
     return jsonErr(`Unknown action: ${action}`, 400);
   } catch (err: any) {
-    console.error("public-booking error:", err.message);
-    return jsonErr(err.message ?? "Internal error", 500);
+    console.error("public-booking error:", err?.message ?? err);
+    return jsonErr("Error interno del servidor.", 500);
   }
 });
-
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-function jsonErr(msg: string, status: number) {
-  return new Response(JSON.stringify({ error: msg }), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}

@@ -3,6 +3,11 @@ import { supabase } from '../config/supabaseClient';
 // Module-level cache for the token (persists while the page is open)
 let cachedToken: string | null = null;
 
+// Logger de debug: solo escribe en desarrollo (evita ensuciar logs de produccion).
+const devLog = (...args: unknown[]) => {
+    if (import.meta.env.DEV) console.log(...args);
+};
+
 export class GoogleCalendarService {
 
     /**
@@ -24,15 +29,15 @@ export class GoogleCalendarService {
      * Refresh the Google Access Token using our Edge Function
      */
     static async refreshGoogleToken(session: any) {
-        console.log("[GoogleCalendarService] refreshGoogleToken called with session user ID:", session?.user?.id);
+        devLog("[GoogleCalendarService] refreshGoogleToken called with session user ID:", session?.user?.id);
         try {
             let refreshToken = this.getRefreshToken(session);
-            console.log("[GoogleCalendarService] Refresh token from session object:", refreshToken ? "Yes" : "No");
+            devLog("[GoogleCalendarService] Refresh token from session object:", refreshToken ? "Yes" : "No");
 
             // Si el token no está en la sesión efímera (por ej. recarga F5), 
             // lo buscamos en la base de datos (guardado previamente por AuthContext)
             if (!refreshToken && session?.user?.id) {
-                console.log("[GoogleCalendarService] Attempting to fetch refresh_token from DB for user", session.user.id);
+                devLog("[GoogleCalendarService] Attempting to fetch refresh_token from DB for user", session.user.id);
                 const { data, error } = await supabase
                     .from('profiles')
                     .select('google_refresh_token')
@@ -44,7 +49,7 @@ export class GoogleCalendarService {
                 }
 
                 if (!error && data?.google_refresh_token) {
-                    console.log("[GoogleCalendarService] Successfully retrieved refresh_token from DB");
+                    devLog("[GoogleCalendarService] Successfully retrieved refresh_token from DB");
                     refreshToken = data.google_refresh_token;
                 }
             }
@@ -54,7 +59,7 @@ export class GoogleCalendarService {
                 return null;
             }
 
-            console.log("[GoogleCalendarService] Invoking google-token-refresh edge function...");
+            devLog("[GoogleCalendarService] Invoking google-token-refresh edge function...");
 
             const { data, error } = await supabase.functions.invoke('google-token-refresh', {
                 body: { refresh_token: refreshToken }
@@ -69,7 +74,7 @@ export class GoogleCalendarService {
             }
 
             if (data?.access_token) {
-                console.log("[GoogleCalendarService] Edge function successfully returned new access_token");
+                devLog("[GoogleCalendarService] Edge function successfully returned new access_token");
                 cachedToken = data.access_token;
                 return data.access_token;
             }
@@ -85,14 +90,14 @@ export class GoogleCalendarService {
      * Middleware fetching function that handles auth and 401 retries
      */
     static async fetchWithAuth(url: string, options: any = {}, session: any = null): Promise<Response> {
-        console.log(`[GoogleCalendarService] fetchWithAuth to ${url}`);
-        console.log(`[GoogleCalendarService] fetchWithAuth received session object:`, session ? `Yes (ID: ${session?.user?.id})` : "No (null/undefined)");
+        devLog(`[GoogleCalendarService] fetchWithAuth to ${url}`);
+        devLog(`[GoogleCalendarService] fetchWithAuth received session object:`, session ? `Yes (ID: ${session?.user?.id})` : "No (null/undefined)");
 
         let token = this.getProviderToken(session);
 
         // Si el token es null (ej: F5 o sesión restaurada), intentamos refrescar proactivamente
         if (!token && session) {
-            console.log("[GoogleCalendarService] Token efímero no encontrado. Intentando refrescar proactivamente...");
+            devLog("[GoogleCalendarService] Token efímero no encontrado. Intentando refrescar proactivamente...");
             token = await this.refreshGoogleToken(session);
         }
 
@@ -104,7 +109,7 @@ export class GoogleCalendarService {
             );
         }
 
-        console.log("[GoogleCalendarService] Token acquired successfully. Proceeding with fetch...");
+        devLog("[GoogleCalendarService] Token acquired successfully. Proceeding with fetch...");
 
         // Prepare headers
         const headers: Record<string, string> = {
