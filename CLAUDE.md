@@ -67,7 +67,9 @@ src/
 │   ├── CheckoutResultView.tsx      # Pagina de resultado de pago (/suscripcion/exito y /error)
 │   ├── AdminApp.tsx                # Shell de la app para admins (header + AdminView)
 │   ├── AdminView.tsx               # Panel de admin: tabs Usuarios, Planes, Pagos
-│   └── PlanFormModal.tsx           # Modal para crear/editar planes (incluye feature_keys checkboxes)
+│   ├── PlanFormModal.tsx           # Modal para crear/editar planes (incluye feature_keys checkboxes)
+│   ├── UserPermissionsModal.tsx    # Modal admin: editar feature_permissions de un usuario
+│   └── SupportMessageModal.tsx     # Modal: enviar mensaje de soporte al admin (desde Header)
 │   ├── form/
 │   │   ├── PatientInfoFields.tsx   # Campos de datos del paciente (reutilizables)
 │   │   └── TimeSlotGrid.tsx        # Grilla de horarios disponibles
@@ -107,7 +109,8 @@ src/
 │   ├── SubscriptionService.ts      # Fetch de suscripcion y feature_permissions del usuario
 │   ├── AdminService.ts             # Llamadas a la Edge Function admin-api
 │   ├── PublicBookingService.ts     # Llamadas a la Edge Function public-booking (sin auth)
-│   └── AppointmentService.test.ts  # Tests (vitest)
+│   ├── ExportService.ts            # Exportacion de datos (feature export_data)
+│   └── *.test.ts                   # Tests (vitest): AppointmentService, ExportService
 ├── repositories/
 │   └── AppointmentRepository.ts   # Acceso a datos de appointments (Supabase)
 ├── schemas/
@@ -162,7 +165,7 @@ src/
 
 ## Base de Datos (Supabase / PostgreSQL)
 
-Todas las tablas tienen RLS habilitado excepto `debug_payloads`.
+Todas las tablas tienen RLS habilitado. Algunas (debug_payloads, processed_mp_events, public_booking_attempts) no tienen politicas: solo las accede el service role.
 
 ### `public.patients`
 Registro de pacientes. Campo `user_id` = dentista propietario. Soft-delete via `deleted_at` y `estado = 'Inactivo'`.
@@ -207,14 +210,25 @@ Preguntas frecuentes del consultorio (usadas como contexto del chatbot IA).
 Columnas: `id`, `tenant_id`, `question`, `answer`.
 
 ### `public.debug_payloads`
-Logs de debugging de Edge Functions. **Sin RLS** - solo para uso interno.
+Logs de debugging de Edge Functions. RLS habilitado sin politicas (solo escribe el service role). Los inserts desde `chat-webhook` y `whatsapp-manager` solo ocurren si la env var `DEBUG_LOGS=true`.
+
+### `public.support_messages`
+Mensajes de soporte de usuarios al admin. RLS: usuario ve/inserta solo sus filas.
+
+Columnas: `id`, `user_id`, `subject`, `body`, `status`, `created_at`, `read_at`.
+
+### `public.processed_mp_events`
+Deduplicacion de webhooks de MercadoPago (`event_key` unico). Solo service role; RLS habilitado sin politicas.
+
+### `public.public_booking_attempts`
+Rate-limiting del formulario publico de reservas (`ip_hash`, `dni`, `user_id`). Solo service role; RLS habilitado sin politicas.
 
 ### `public.subscription_plans`
 Planes de suscripcion disponibles. **Sin RLS** (lectura publica, escritura solo service role).
 
-Columnas: `id`, `name`, `description`, `price_monthly`, `price_yearly`, `currency` (default 'ARS'), `features` (jsonb, etiquetas de display), `feature_keys` (text[], claves de funcionalidades habilitadas), `is_active`, `sort_order`.
+Columnas: `id`, `name`, `description`, `price_monthly`, `price_yearly`, `currency` (default 'ARS'), `features` (jsonb, etiquetas de display), `feature_keys` (text[], claves de funcionalidades habilitadas), `trial_days` (dias de prueba al registrarse), `is_active`, `sort_order`.
 
-Planes actuales: **Trial** (gratis, 14 dias), **Basico**, **Asistente IA** (todas las features).
+Planes actuales: **Basico** y **Asistente IA** (todas las features). El plan Trial se elimino; el trial ahora son dias gratis configurables sobre un plan (`subscription_plans.trial_days`, editable desde el panel admin).
 
 ### `public.subscriptions`
 Suscripcion activa por usuario (1:1 con `auth.users`). RLS: usuario ve solo su fila.
@@ -239,7 +253,7 @@ Log de eventos de MercadoPago. **Sin RLS** - auditoria.
 ### `whatsapp-manager`
 Gestiona la instancia de WhatsApp via Evolution API.
 
-Acciones: `create`, `get_qr`, `logout`, `send_text`, `sync_webhook`, `debug_instance`.
+Acciones: `create`, `get_qr`, `logout`, `sync_webhook`, `debug_instance`.
 
 Requiere JWT. Variables de entorno: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`.
 
@@ -252,14 +266,14 @@ Flujo:
 3. Espera 3s (debounce para agrupar mensajes rapidos)
 4. Si no hay mensajes mas nuevos, procesa el lote completo
 5. Genera respuesta via OpenAI GPT-4o-mini (fallback: Gemini)
-6. Ejecuta Function Calling: `get_available_slots`, `create_appointment`
+6. Ejecuta Function Calling: `get_available_slots`, `create_appointment` (crea el turno via RPC `confirm_public_appointment_safe` con overlap-check, duracion segun `profile.services`, status `confirmed`, y sincroniza con Google Calendar)
 7. Envia respuesta por WhatsApp
 8. Persiste respuesta en `chat_history`
 
 Variables de entorno: `OPENAI_API_KEY`, `GEMINI_API_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 
 ### `cleanup-orphaned-files`
-Limpieza programada de archivos huerfanos en Supabase Storage. Elimina archivos en `clinical-records` que no esten referenciados por ningun paciente y sean mayores a N dias (default: 30).
+Limpieza programada de archivos huerfanos en Supabase Storage. Elimina archivos en `clinical-records` que no esten referenciados por ningun paciente y sean mayores a N dias (default: 30). La dispara un cron job de pg_cron (`cleanup-orphaned-files`, domingos 03:00 UTC) via `net.http_post` con el anon key — debe mantenerse con `verify_jwt=true`.
 
 ### `admin-api`
 Panel de administracion (requiere JWT + estar en `admin_users`). Acciones: `list_users`, `update_user_plan`, `update_user_permission`, `update_plan_price`, `create_plan`, `update_plan`, `delete_plan`, `toggle_plan`, `cancel_subscription`, `grant_free_access`, `list_plans`, `list_payment_events`.
@@ -347,7 +361,7 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 ## Sistema de Suscripciones y Feature Gating
 
 ### Flujo de acceso
-1. Al registrarse, un trigger Postgres crea automaticamente una `subscriptions` row (status=trial, 14 dias) y 11 `feature_permissions` rows con los defaults del plan Trial.
+1. Al registrarse, el trigger `handle_new_user_subscription` crea una `subscriptions` row (status=trial) usando el primer plan activo con `trial_days` configurado (fallback: 14 dias), y 11 `feature_permissions` rows segun los `feature_keys` de ese plan.
 2. `SubscriptionContext.tsx` carga la suscripcion y permisos al iniciar sesion. Expone `canUse(featureKey)`.
 3. `ProtectedRoute.tsx` bloquea todas las rutas privadas si la suscripcion esta vencida/cancelada (redirige a `/suscripcion`). Admins y usuarios `free` siempre pasan.
 4. `canUse()` retorna `true` si: es admin, es `free`, o tiene la `feature_permission` con `enabled=true`.
