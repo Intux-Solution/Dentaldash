@@ -102,8 +102,8 @@ serve(async (req) => {
         if (!bodyText) return new Response('Empty body', { status: 200 });
         payload = JSON.parse(bodyText);
 
-        // --- DEBUG LOGGING (Sanitized for Privacy) ---
-        try {
+        // --- DEBUG LOGGING (Sanitized for Privacy, solo con DEBUG_LOGS=true) ---
+        if (Deno.env.get('DEBUG_LOGS') === 'true') try {
             const sanitizedPayload = JSON.parse(JSON.stringify(payload)); // Deep clone
 
             // Redact Evolution API typical paths
@@ -494,31 +494,41 @@ serve(async (req) => {
                             patient = newPatient;
                         }
 
+                        // Duración real del servicio desde profile.services ({name, duration, price}); fallback 30 min
+                        const services = Array.isArray(profile?.services) ? profile.services : [];
+                        const matchedService = services.find((s: any) =>
+                            typeof s?.name === 'string' &&
+                            s.name.trim().toLowerCase() === (appointment_type || '').trim().toLowerCase()
+                        );
+                        const durationMin = Number(matchedService?.duration) > 0 ? Number(matchedService.duration) : 30;
+
                         // FIX: Force Argentina Timezone (-03:00) so that 14:00 matches 14:00 AR, not 14:00 UTC (11:00 AR)
                         const startDateTime = new Date(`${date}T${time}:00-03:00`);
-                        const endDateTime = new Date(startDateTime.getTime() + 30 * 60000);
+                        const endDateTime = new Date(startDateTime.getTime() + durationMin * 60000);
 
-                        const { data: appointment, error: apptError } = await supabase
-                            .from('appointments')
-                            .insert({
-                                title: `${appointment_type} - ${patientName}`,
-                                patient_id: patient.id,
-                                user_id: tenant.id,
-                                start_time: startDateTime.toISOString(),
-                                end_time: endDateTime.toISOString(),
-                                duration: 30,
-                                status: 'confirmed',
-                                notes: notes || "Agendado vía WhatsApp",
-                                appointment_type: appointment_type
-                            })
-                            .select()
-                            .single();
-
+                        // Crear vía RPC con overlap-check atómico (mismo camino que el booking público)
+                        const { data: rpcResult, error: apptError } = await supabase.rpc('confirm_public_appointment_safe', {
+                            p_user_id: tenant.id,
+                            p_patient_id: patient.id,
+                            p_title: `${appointment_type} - ${patientName}`,
+                            p_start_time: startDateTime.toISOString(),
+                            p_end_time: endDateTime.toISOString(),
+                            p_duration: durationMin,
+                            p_appointment_type: appointment_type,
+                            p_notes: notes || "Agendado vía WhatsApp",
+                            p_status: 'confirmed'
+                        });
 
                         if (apptError) throw new Error("Error creating appointment: " + apptError.message);
 
+                        if (!rpcResult?.success) {
+                            return `ERROR: ${rpcResult?.error || 'El horario ya está ocupado.'} Vuelve a llamar 'get_available_slots' para esa fecha y ofrece al paciente únicamente los horarios que devuelva.`;
+                        }
+
+                        const appointmentId = rpcResult.id;
+
                         // --- Sync con Google Calendar (best-effort, reutiliza el token ya refrescado) ---
-                        if (googleAccessToken && appointment?.id) {
+                        if (googleAccessToken && appointmentId) {
                             try {
                                 const gcalEvent = {
                                     summary: `${appointment_type} - ${patientName}`,
@@ -538,7 +548,7 @@ serve(async (req) => {
                                         await supabase
                                             .from('appointments')
                                             .update({ google_event_id: createdEvent.id })
-                                            .eq('id', appointment.id);
+                                            .eq('id', appointmentId);
                                     }
                                 } else {
                                     console.error("chat-webhook: failed to create Google Calendar event", await gcalRes.text());
@@ -563,7 +573,7 @@ serve(async (req) => {
                         // ------------------------------------
 
                         // Detailed confirmation prompt for the AI
-                        return `Turno RESERVADO con éxito. ID: ${appointment.id}. 
+                        return `Turno RESERVADO con éxito. ID: ${appointmentId}.
 INSTRUCCIÓN PARA LA IA: Responde al paciente con este formato exacto (puedes añadir emojis):
 ✅ *Turno Confirmado*
 📅 Fecha: ${date}

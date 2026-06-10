@@ -76,6 +76,8 @@ serve(async (req) => {
          * Optimiza la eficiencia guardando logs de forma asíncrona (best-effort).
          */
         const logFetch = (url: string, options: any, res: Response) => {
+            // Solo loguear a debug_payloads si DEBUG_LOGS=true (evita crecimiento sin límite en prod)
+            if (Deno.env.get('DEBUG_LOGS') !== 'true') return;
             // Intentamos clonar y procesar sin bloquear el flujo principal
             const p = res.clone().text().then(resText => {
                 return supabase.from('debug_payloads').insert({
