@@ -16,8 +16,8 @@ const inputCls = (hasError?: any) =>
     : 'border-transparent bg-[#F5F5F5]'
   }`;
 
-// ─── Helper: extraer string de campos que pueden ser arrays (legado de N8N) ───
-const safeStr = (val: any) => (Array.isArray(val) ? val[0] ?? '' : val ?? '');
+// ─── Helper: normalizar null/undefined a string vacío ───
+const safeStr = (val: any) => val ?? '';
 
 interface EditPatientModalProps {
   open: boolean;

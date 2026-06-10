@@ -94,22 +94,9 @@ export function useAppointmentsQuery(fromDate: string | null = null, toDate: str
     }, [refetch]);
 
     useEffect(() => {
-        const handleWebhookMutation = (e: Event) => {
-            const detail = (e as CustomEvent<{ method?: string; url?: string }>).detail;
-            const method = String(detail?.method || '').toUpperCase();
-            if (method === 'GET') return;
-            const url = String(detail?.url || '');
-            const touchesTurnos = !url || /appointment|turno|calendar/i.test(url);
-            if (!touchesTurnos) return;
-            refetch();
-        };
-
-        window.addEventListener('webhook:mutated', handleWebhookMutation);
         const triggerRefresh = () => refetch();
         window.addEventListener('turnos:refresh', triggerRefresh);
-
         return () => {
-            window.removeEventListener('webhook:mutated', handleWebhookMutation);
             window.removeEventListener('turnos:refresh', triggerRefresh);
         };
     }, [refetch]);

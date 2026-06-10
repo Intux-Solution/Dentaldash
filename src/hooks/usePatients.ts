@@ -86,22 +86,10 @@ export function usePatients(
         queryClient.invalidateQueries({ queryKey: PATIENTS_KEY });
     };
 
-    // ── Eventos globales → invalidación (compatibilidad con N8N webhooks) ──────
-    // Sólo se mantienen porque algunos servicios externos hacen POST directamente
-    // a Supabase y disparan estos eventos. NO se usan para polling.
+    // ── Evento global → invalidación (lo despachan los modales tras mutaciones) ──
     useEffect(() => {
-        const handleWebhookMutation = (e: Event): void => {
-            const detail = (e as CustomEvent<{ method?: string; url?: string }>).detail;
-            const method = String(detail?.method ?? '').toUpperCase();
-            if (method === 'GET') return;
-            const url = String(detail?.url ?? '');
-            if (!url || /patient/i.test(url)) invalidate();
-        };
-
-        window.addEventListener('webhook:mutated', handleWebhookMutation);
         window.addEventListener('patients:refresh', invalidate);
         return () => {
-            window.removeEventListener('webhook:mutated', handleWebhookMutation);
             window.removeEventListener('patients:refresh', invalidate);
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
