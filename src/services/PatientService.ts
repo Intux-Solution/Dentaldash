@@ -457,49 +457,4 @@ export class PatientService {
     if (error) throw error;
     return true;
   }
-
-  /**
-   * Obtener lista única de todas las obras sociales registradas.
-   */
-  static async getAllUniqueInsurances(userId: string | null = null): Promise<string[]> {
-    try {
-      let profileInsurances: string[] = [];
-      let uid = userId;
-
-      if (!uid) {
-        const { data: { session } } = await supabase.auth.getSession();
-        uid = session?.user?.id ?? null;
-      }
-
-      if (uid) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('accepted_insurances')
-          .eq('id', uid)
-          .single();
-        if (profile?.accepted_insurances) {
-          profileInsurances = profile.accepted_insurances;
-        }
-      }
-
-      // V2: Optimizado vía RPC. Esto hace e SELECT DISTINCT en la BDD
-      // previniendo cuellos de botella de memoria al enviar miles de filas al cliente.
-      const { data: patientData, error } = await supabase
-        .rpc('get_unique_insurances');
-
-      if (error) throw error;
-
-      const patientInsurances = (patientData ?? [])
-        .map((p: any) => p.obra_social)
-        .filter((val: unknown): val is string => typeof val === 'string' && val.trim() !== '');
-
-      const combined = [...new Set([...profileInsurances, ...patientInsurances])];
-      return combined.sort((a, b) => a.localeCompare(b));
-
-    } catch (errorUnknown: unknown) {
-      const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
-      console.error('Error fetching unique insurances:', error);
-      return [];
-    }
-  }
 }

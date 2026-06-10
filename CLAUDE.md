@@ -275,6 +275,9 @@ Crea un preapproval de MercadoPago para una suscripcion recurrente. Requiere JWT
 ### `public-booking`
 Endpoint publico (sin JWT) para el formulario de reservas de pacientes. Acciones: `resolve_slug` (slug → user_id), `get_profile`, `get_working_days`, `get_slots`, `create_appointment`. Usa service role para bypassear RLS. Llama al RPC `confirm_public_appointment_safe`.
 
+### `google-token-refresh`
+Renueva el access token de Google Calendar a partir del `google_refresh_token` del perfil. Requiere JWT. Invocada desde `GoogleCalendarService.ts`.
+
 ---
 
 ## Integraciones Externas

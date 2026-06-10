@@ -85,7 +85,6 @@ npm run typecheck  # Verificación de tipos (tsc --noEmit)
 | `mp-webhook` | Procesa notificaciones de pago de MercadoPago y activa suscripciones |
 | `admin-api` | API privada del panel super-admin |
 | `google-token-refresh` | Renueva tokens de Google Calendar |
-| `process-pdf` | Procesamiento de archivos PDF de historia clínica |
 | `cleanup-orphaned-files` | Limpieza programada de archivos huérfanos en Storage |
 
 ### Migraciones
