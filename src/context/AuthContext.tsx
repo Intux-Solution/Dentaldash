@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../config/supabaseClient';
+import { GoogleCalendarService } from '../services/GoogleCalendarService';
 
 interface Profile {
     id: string;
@@ -44,9 +45,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     .update({ google_refresh_token: currentSession.provider_refresh_token })
                     .eq('id', currentSession.user.id);
                 if (error) console.error('Error saving google refresh token:', error);
+
+                // El token es nuevo: descartamos cualquier estado de conexión que
+                // GoogleCalendarService haya cacheado antes de este redirect.
+                GoogleCalendarService.clearTokenCache();
             }
         } else {
             setProfile(null);
+            // Cierre de sesión: el access token cacheado es del usuario anterior.
+            GoogleCalendarService.clearTokenCache();
         }
 
         setIsLoading(false);

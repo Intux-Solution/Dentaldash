@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Calendar, CheckCircle, Loader2, User } from 'lucide-react';
+import { Calendar, CheckCircle, Loader2 } from 'lucide-react';
 import { PublicBookingService, PublicDentistProfile } from '../services/PublicBookingService';
+import Avatar from './Avatar';
 import TimeSlotGrid from './form/TimeSlotGrid';
 import { PublicBookingSchema, PublicBookingData } from '../schemas/publicBooking.schema';
 
@@ -171,17 +172,13 @@ export default function PublicBookingView() {
       {/* Header */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-2xl mx-auto px-4 py-5 flex items-center gap-4">
-          {profile.avatar_url ? (
-            <img
-              src={profile.avatar_url}
-              alt="Avatar"
-              className="w-12 h-12 rounded-full object-cover border border-gray-100"
-            />
-          ) : (
-            <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center">
-              <User size={24} className="text-teal-600" />
-            </div>
-          )}
+          <Avatar
+            src={profile.avatar_url}
+            name={profile.business_name || profile.full_name}
+            size={48}
+            alt="Avatar"
+            className="border border-gray-100"
+          />
           <div>
             <h1 className="text-lg font-bold text-gray-900">
               {profile.business_name || profile.full_name || 'Consultorio'}

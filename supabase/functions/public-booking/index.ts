@@ -221,7 +221,17 @@ serve(async (req) => {
         .single();
 
       if (error || !data) return jsonErr("Perfil no encontrado.", 404);
-      return json(data);
+
+      // `profiles.avatar_url` guarda un nombre de archivo del bucket `avatars`
+      // (público) o, en cuentas creadas con Google OAuth, una URL absoluta.
+      const rawAvatar = (data.avatar_url ?? "").trim();
+      const avatar_url = !rawAvatar
+        ? null
+        : /^https?:\/\//i.test(rawAvatar)
+          ? rawAvatar
+          : supabase.storage.from("avatars").getPublicUrl(rawAvatar).data.publicUrl;
+
+      return json({ ...data, avatar_url });
     }
 
     // ── get_working_days ────────────────────────────────────────────────────

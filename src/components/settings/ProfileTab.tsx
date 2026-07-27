@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { Camera, User, Save } from 'lucide-react';
+import { Camera, Save } from 'lucide-react';
+import Avatar from '../Avatar';
 import { ProfileData } from './useSettings';
 
 interface ProfileTabProps {
@@ -18,14 +19,14 @@ export default function ProfileTab({ profile, handleProfileChange, handleAutoSav
         <div className="p-8">
             <div className="flex flex-col md:flex-row gap-8">
                 <div className="flex flex-col items-center gap-4">
-                    <div className="relative w-32 h-32 rounded-full bg-gray-50 border-2 border-gray-100 overflow-hidden group">
-                        {(avatarPreview || googleAvatar) ? (
-                            <img src={(avatarPreview || googleAvatar) ?? undefined} alt="Avatar" className="w-full h-full object-cover" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                <User size={48} />
-                            </div>
-                        )}
+                    <div className="relative w-32 h-32 rounded-full overflow-hidden group">
+                        <Avatar
+                            src={avatarPreview || googleAvatar}
+                            name={profile?.full_name}
+                            size={128}
+                            alt="Avatar"
+                            className="border-2 border-gray-100"
+                        />
                         <div
                             className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                             onClick={() => fileInputRef.current?.click()}
@@ -35,7 +36,7 @@ export default function ProfileTab({ profile, handleProfileChange, handleAutoSav
                     </div>
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange} />
                     <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
-                        {googleAvatar && !avatarPreview ? "De Google" : "Personalizada"}
+                        {avatarPreview ? "Personalizada" : googleAvatar ? "De Google" : "Sin foto"}
                     </p>
                 </div>
                 <div className="flex-1 max-w-lg space-y-6">

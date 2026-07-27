@@ -209,19 +209,11 @@ ${data.notas || 'Sin notas adicionales'}
                     }, session);
                 }
             } catch (syncErrorUnknown: unknown) {
-            const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
-                // Rollback DB to original state
-                await AppointmentRepository.updateAppointment(id, {
-                    patient_id: originalData.patient_id,
-                    title: originalData.title,
-                    start_time: originalData.start_time,
-                    end_time: originalData.end_time,
-                    duration: originalData.duration,
-                    appointment_type: originalData.appointment_type,
-                    notes: originalData.notes,
-                    status: originalData.status
-                }, session?.user?.id ?? '');
-                throw new Error(`Fallo al actualizar en Google Calendar: ${syncError.message}`);
+                const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
+                // Mismo criterio que createAppointment: la DB local es la fuente de
+                // verdad y Google es best-effort. Un fallo de la integración no debe
+                // impedirle al dentista editar un turno.
+                console.warn(`[AppointmentService] Turno ${id} actualizado, pero falló la sincronización con Google Calendar: ${syncError.message}`);
             }
 
             return result;
@@ -233,7 +225,10 @@ ${data.notas || 'Sin notas adicionales'}
     }
 
     static async syncPendingAppointments(session: Session | null = null): Promise<void> {
-        if (!session?.provider_token) {
+        // provider_token solo existe en la sesión recién creada por el OAuth; tras un
+        // F5 se pierde. Usamos isConnected(), que además consulta el refresh token
+        // persistido en profiles, para que la sincronización diferida siga corriendo.
+        if (!session || !(await GoogleCalendarService.isConnected(session))) {
             return;
         }
 
@@ -277,8 +272,10 @@ ${data.notas || 'Sin notas adicionales'}
                 try {
                     await GoogleCalendarService.deleteEvent(appointment.google_event_id, session);
                 } catch (syncErrorUnknown: unknown) {
-            const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
-                    throw new Error(`Fallo al borrar el evento en Google Calendar: ${syncError.message}`);
+                    const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
+                    // Best-effort, igual que en create/update: si Google falla igual
+                    // borramos el turno local en vez de dejarlo trabado.
+                    console.warn(`[AppointmentService] No se pudo borrar el evento de Google Calendar del turno ${id}: ${syncError.message}`);
                 }
             }
             await AppointmentRepository.deleteAppointment(id, session?.user?.id ?? '');

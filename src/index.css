@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  /* Scroll horizontal funcional pero sin barra visible (tabs de Configuración) */
+  .no-scrollbar {
+    -ms-overflow-style: none;   /* Edge/IE */
+    scrollbar-width: none;      /* Firefox */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;              /* Chrome/Safari */
+  }
+}

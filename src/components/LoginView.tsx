@@ -3,6 +3,7 @@ import { Shield, AlertCircle, Calendar, Users, Stethoscope, Eye, EyeOff } from "
 import { Link } from "react-router-dom";
 import fondoLogin from "../imagenes/fondo-login-dentista.jpg";
 import { supabase } from "../config/supabaseClient";
+import { GOOGLE_OAUTH_SCOPES } from "../config/google";
 
 interface LoginViewProps {
   onSuccess?: () => void;
@@ -41,7 +42,7 @@ export default function LoginView({ onSuccess }: LoginViewProps) {
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/`,
-          scopes: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.file",
+          scopes: GOOGLE_OAUTH_SCOPES,
           queryParams: { access_type: "offline", prompt: "consent" },
         },
       });

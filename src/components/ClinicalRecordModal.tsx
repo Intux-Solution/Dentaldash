@@ -8,16 +8,24 @@ import { Patient } from "../types/database.types";
 import { Session } from "@supabase/supabase-js";
 import { toast } from 'react-hot-toast';
 
-function isPdf(url = "") {
-  if (typeof url !== "string") return false;
-  const lowerUrl = url.toLowerCase();
-  return lowerUrl.includes(".pdf");
+type PreviewKind = 'pdf' | 'doc' | 'image';
+
+/**
+ * Deduce el tipo de documento a partir del MIME real del archivo.
+ * Necesario para los previews locales (blob:) cuya URL no tiene extensión.
+ */
+function kindFromMime(mime = ""): PreviewKind {
+  if (mime === 'application/pdf') return 'pdf';
+  if (mime.startsWith('image/')) return 'image';
+  return 'doc';
 }
 
-function isDoc(url = "") {
-  if (typeof url !== "string") return false;
-  const lowerUrl = url.toLowerCase();
-  return lowerUrl.includes(".doc");
+/** Deduce el tipo mirando la extensión en cualquiera de las URLs/paths dados. */
+function kindFromUrl(...urls: (string | null | undefined)[]): PreviewKind {
+  const joined = urls.filter(Boolean).join(' ').toLowerCase();
+  if (joined.includes('.pdf')) return 'pdf';
+  if (joined.includes('.doc')) return 'doc';
+  return 'image';
 }
 
 export interface ClinicalRecordModalProps {
@@ -32,6 +40,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
   const [loading, setLoading] = useState(false);
   const [localRawUrl, setLocalRawUrl] = useState<string | null>(null);
   const [instantPreviewUrl, setInstantPreviewUrl] = useState<string | null>(null);
+  const [previewKind, setPreviewKind] = useState<PreviewKind | null>(null);
 
   // Sincronizar prop patient con estado local al abrir o cambiar de paciente
   useEffect(() => {
@@ -45,7 +54,12 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
         patient.historia_clinica_url ||
         ""
       );
-      setInstantPreviewUrl(null); // Limpiar preview temporal al cambiar de paciente
+      // Limpiar preview temporal al cambiar de paciente
+      setInstantPreviewUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setPreviewKind(null);
     }
   }, [patient, open]);
 
@@ -78,6 +92,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       }
     } else {
       setSignedUrl(null);
+      setPreviewKind(null);
       if (instantPreviewUrl) {
         URL.revokeObjectURL(instantPreviewUrl);
         setInstantPreviewUrl(null);
@@ -85,7 +100,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     }
 
     return () => { active = false; };
-  }, [localRawUrl, open]);
+  }, [localRawUrl, open, instantPreviewUrl]);
 
   if (!open || !patient) return null;
 
@@ -96,6 +111,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     // Visualizar inmediatamente para UX perfecta e inmune a tiempos de red
     const objectUrl = URL.createObjectURL(file);
     setInstantPreviewUrl(objectUrl);
+    setPreviewKind(kindFromMime(file.type));
     setSignedUrl(objectUrl);
 
     try {
@@ -126,8 +142,12 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
 
       await supabase.from('patients').update({ historia_clinica_url: newPath }).eq('id', patient.id);
 
-      // Now set the new real path from the database. 
-      // The useEffect will trigger and fetch its signed URL silently in the background.
+      // Descartar el preview local ANTES de fijar el path real: así el efecto pide
+      // la URL firmada (con extensión real) en vez de quedarse pegado al blob:,
+      // que no permite renderizar PDF ni Word.
+      URL.revokeObjectURL(objectUrl);
+      setInstantPreviewUrl(null);
+      setPreviewKind(null);
       setLocalRawUrl(newPath);
       window.dispatchEvent(new CustomEvent('patients:refresh'));
       e.target.value = '';
@@ -135,7 +155,9 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     } catch (errUnknown: unknown) {
       const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
       // Revert if upload fails
+      URL.revokeObjectURL(objectUrl);
       setInstantPreviewUrl(null);
+      setPreviewKind(null);
       setSignedUrl(null);
       console.error("Upload error:", err);
       if (err.message?.includes('violates row-level security policy')) {
@@ -149,6 +171,8 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
   };
 
   const displayUrl = signedUrl;
+  const isGoogleDrive = typeof localRawUrl === 'string' && localRawUrl.includes('drive.google.com');
+  const kind: PreviewKind = previewKind ?? kindFromUrl(localRawUrl, displayUrl);
 
   return (
     <ModalShell
@@ -200,7 +224,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
               <AlertTriangle size={48} />
               <span className="text-sm font-bold uppercase tracking-wider text-center px-4">Error cargando archivo</span>
             </div>
-          ) : isDoc(displayUrl) || isDoc(localRawUrl ?? "") ? (
+          ) : kind === 'doc' ? (
             <div className="flex flex-col items-center justify-center gap-4 p-6 flex-1">
               <FileText size={64} strokeWidth={1} className="text-blue-500" />
               <p className="text-sm text-gray-500 text-center font-medium">
@@ -216,7 +240,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
                 Abrir documento
               </a>
             </div>
-          ) : isPdf(displayUrl) || (typeof localRawUrl === 'string' && localRawUrl.includes("drive.google.com")) ? (
+          ) : kind === 'pdf' || isGoogleDrive ? (
             <div className="w-full h-full flex flex-col">
               {/* Desktop: inline iframe */}
               <iframe title="Historia Clínica" src={displayUrl} className="flex-1 w-full border-none hidden sm:block" />

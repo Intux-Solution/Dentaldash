@@ -15,7 +15,8 @@ vi.mock('../config/supabaseClient', () => {
 vi.mock('./GoogleCalendarService', () => {
     return {
         GoogleCalendarService: {
-            listEvents: vi.fn()
+            listEvents: vi.fn(),
+            isConnected: vi.fn()
         }
     };
 });
@@ -26,6 +27,8 @@ describe('AppointmentService - getAvailableSlots', () => {
         // Fix system time so "minTimeForAppt" (now + 30 min) check doesn't block future requested dates
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-02-24T00:00:00.000Z'));
+        // Por defecto asumimos Google conectado; el escenario 4 lo sobreescribe.
+        (GoogleCalendarService.isConnected as any).mockResolvedValue(true);
     });
 
     afterEach(() => {
@@ -139,5 +142,17 @@ describe('AppointmentService - getAvailableSlots', () => {
         // Ensure neighboring slots are intact
         expect(availableSlots.includes('14:30')).toBe(true);
         expect(availableSlots.includes('15:30')).toBe(true);
+    });
+
+    it('Scenario 4: Given Google is not connected, should not call the Calendar API at all', async () => {
+        setupSupabaseMock([]);
+        (GoogleCalendarService.isConnected as any).mockResolvedValue(false);
+
+        const availableSlots = await AppointmentService.getAvailableSlots('2026-02-25', 30);
+
+        // Los slots locales se calculan igual...
+        expect(availableSlots.length).toBe(18);
+        // ...pero no se toca la API de Google.
+        expect(GoogleCalendarService.listEvents).not.toHaveBeenCalled();
     });
 });

@@ -31,7 +31,12 @@ export class AppointmentBusinessLogic {
                 }
             }
 
-            const googleEvents = await GoogleCalendarService.listEvents(dayBounds.start, dayBounds.end, session);
+            // Solo consultamos Google si la integración está configurada: evita una
+            // llamada de red (y un intento de refresh) en cada cambio de fecha/servicio
+            // para los usuarios que no la usan.
+            const googleEvents = (await GoogleCalendarService.isConnected(session))
+                ? await GoogleCalendarService.listEvents(dayBounds.start, dayBounds.end, session)
+                : [];
 
             const nowTime = new Date();
             const minTimeForAppt = addMinutes(nowTime, 30);

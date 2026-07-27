@@ -1,9 +1,11 @@
 // src/components/Header.tsx - UPDATED 2026-02-16 - FINAL VERSION
 import React, { useState, useEffect } from 'react';
-import { Settings, LogOut, User, ChevronDown, LifeBuoy } from 'lucide-react';
+import { Settings, LogOut, ChevronDown, LifeBuoy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { resolveAvatarUrl } from '../utils/avatar';
+import Avatar from './Avatar';
 import SupportMessageModal from './SupportMessageModal';
 
 interface HeaderProps {
@@ -70,7 +72,7 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
       // Query the flat profiles table
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, avatar_url, business_name')
+        .select('full_name, avatar_url')
         .eq('id', user.id)
         .maybeSingle(); // Use maybeSingle to handle cases where no profile exists
 
@@ -80,17 +82,13 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
       }
 
       let name = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
-      let avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture;
-      let businessName = 'Mi Consultorio'; // Default business name
+      let avatar = resolveAvatarUrl(user.user_metadata?.avatar_url || user.user_metadata?.picture);
 
       if (profileData) {
         if (profileData.full_name) name = profileData.full_name;
-        if (profileData.business_name) businessName = profileData.business_name;
 
-        if (profileData.avatar_url) {
-          const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(profileData.avatar_url);
-          if (publicUrlData?.publicUrl) avatar = publicUrlData.publicUrl;
-        }
+        const profileAvatar = resolveAvatarUrl(profileData.avatar_url);
+        if (profileAvatar) avatar = profileAvatar;
       }
 
       setUserData({
@@ -137,17 +135,12 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
               className="flex items-center space-x-2 rounded-xl p-1.5 transition-all hover:bg-gray-50 border border-transparent hover:border-gray-100"
             >
               <div className="relative">
-                {userData.avatar ? (
-                  <img
-                    src={userData.avatar}
-                    alt="Perfil"
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-teal-50"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center ring-2 ring-teal-50">
-                    <User size={20} className="text-teal-600" />
-                  </div>
-                )}
+                <Avatar
+                  src={userData.avatar}
+                  name={userData.name}
+                  size={40}
+                  className="ring-2 ring-teal-50"
+                />
                 <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
               </div>
 
@@ -166,13 +159,12 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
               <div className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
                 <div className="px-5 py-4 border-b border-gray-50 bg-gray-50/50 rounded-t-2xl -mt-2 mb-2">
                   <div className="flex items-center gap-4">
-                    {userData.avatar ? (
-                      <img src={userData.avatar} alt="" className="w-12 h-12 rounded-full object-cover shadow-sm ring-2 ring-white" />
-                    ) : (
-                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm">
-                        <User size={24} className="text-teal-600" />
-                      </div>
-                    )}
+                    <Avatar
+                      src={userData.avatar}
+                      name={userData.name}
+                      size={48}
+                      className="shadow-sm ring-2 ring-white"
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-gray-900 truncate">
                         {userData.name}

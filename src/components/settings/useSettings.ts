@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import { message } from 'antd';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { resolveAvatarUrl } from '../../utils/avatar';
+import { GOOGLE_OAUTH_SCOPES } from '../../config/google';
+import { GoogleCalendarService } from '../../services/GoogleCalendarService';
 
 // Interface definitions (Partial based on usage)
 export interface ProfileData {
@@ -101,10 +104,7 @@ export function useSettings(session: any = null) {
                     setPollingActive(true);
                 }
 
-                if (profileData.avatar_url) {
-                    const { data } = supabase.storage.from('avatars').getPublicUrl(profileData.avatar_url);
-                    if (data?.publicUrl) setAvatarPreview(data.publicUrl);
-                }
+                setAvatarPreview(resolveAvatarUrl(profileData.avatar_url));
             } else {
                 mergedProfile = {
                     full_name: sessionName,
@@ -203,8 +203,7 @@ export function useSettings(session: any = null) {
         },
         onSuccess: (fileName) => {
             queryClient.invalidateQueries({ queryKey: ['settings', userId] });
-            const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-            setAvatarPreview(publicUrl);
+            setAvatarPreview(resolveAvatarUrl(fileName));
             message.success('Avatar actualizado');
             window.dispatchEvent(new CustomEvent('profile:updated'));
         },
@@ -303,6 +302,9 @@ export function useSettings(session: any = null) {
             return true;
         },
         onSuccess: () => {
+            // Sin esto la app seguiría usando el access token cacheado en memoria
+            // hasta el próximo F5, aunque el usuario ya haya desconectado.
+            GoogleCalendarService.clearTokenCache();
             queryClient.invalidateQueries({ queryKey: ['settings', userId] });
             message.success('Google Calendar desconectado correctamente.');
         },
@@ -466,16 +468,30 @@ export function useSettings(session: any = null) {
     }, [disconnectWhatsAppMutation]);
 
     // --- GOOGLE CALENDAR CONNECTION ---
-    // linkIdentity hace un full-page redirect, por eso no usamos useMutation aquí.
+    // Ambos flujos hacen un full-page redirect, por eso no usamos useMutation aquí.
     const handleConnectGoogle = useCallback(async () => {
-        const { error } = await supabase.auth.linkIdentity({
-            provider: 'google',
-            options: {
-                redirectTo: `${window.location.origin}/configuracion?tab=googlecalendar`,
-                scopes: 'https://www.googleapis.com/auth/calendar',
-                queryParams: { access_type: 'offline', prompt: 'consent' },
-            },
-        });
+        const options = {
+            redirectTo: `${window.location.origin}/configuracion?tab=googlecalendar`,
+            scopes: GOOGLE_OAUTH_SCOPES,
+            // access_type=offline + prompt=consent son imprescindibles: sin ellos
+            // Google no reemite el refresh_token que necesitamos para sincronizar.
+            queryParams: { access_type: 'offline', prompt: 'consent' },
+        };
+
+        // Si el usuario ya inició sesión con Google, su identidad YA está vinculada
+        // y linkIdentity falla con 422 identity_already_exists. En ese caso pedimos
+        // el consentimiento vía signInWithOAuth: reautentica al mismo usuario y
+        // devuelve un provider_refresh_token fresco.
+        const { data: identityData, error: identityError } = await supabase.auth.getUserIdentities();
+        if (identityError) {
+            console.error('No se pudieron leer las identidades del usuario:', identityError);
+        }
+        const googleYaVinculada = identityData?.identities?.some((i: any) => i.provider === 'google') ?? false;
+
+        const { error } = googleYaVinculada
+            ? await supabase.auth.signInWithOAuth({ provider: 'google', options })
+            : await supabase.auth.linkIdentity({ provider: 'google', options });
+
         if (error) {
             console.error('Connect Google error:', error);
             message.error('Error al conectar Google: ' + error.message);

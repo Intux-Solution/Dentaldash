@@ -1,7 +1,7 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-21 (Refactored)
-import React, { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { message } from 'antd';
 import { useSettings } from './settings/useSettings';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useAuth } from '../context/AuthContext';
@@ -14,23 +14,70 @@ import WhatsAppTab from './settings/WhatsAppTab';
 import GoogleCalendarTab from './settings/GoogleCalendarTab';
 import FaqsTab from './settings/FaqsTab';
 import UpgradePrompt from './UpgradePrompt';
+import SettingsTabs from './settings/SettingsTabs';
 
 const TAB_FEATURE_MAP: Record<string, string | null> = {
     profile: null,
-    booking: null,
     insurances: 'insurance_management',
     services: 'services_config',
     schedule: null,
-    whatsapp: 'whatsapp_bot',
     googlecalendar: null,
     faqs: 'faqs_config',
+    whatsapp: 'whatsapp_bot',
 };
+
+/**
+ * Supabase devuelve los errores de OAuth en el query string y/o en el fragmento
+ * (`#error_description=...`) al volver del redirect. Sin esto el fallo es mudo:
+ * la URL cambia, la UI no dice nada y el usuario cree que se conectó.
+ */
+function readOAuthError(search: URLSearchParams): string | null {
+    const fromHash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const description = search.get('error_description') ?? fromHash.get('error_description');
+    const code = search.get('error_code') ?? fromHash.get('error_code');
+
+    if (!description && !code) return null;
+
+    if (code === 'identity_already_exists') {
+        // handleConnectGoogle ya evita este error para la propia identidad del
+        // usuario, así que llegar acá significa que esa cuenta de Google está
+        // vinculada a OTRA cuenta de DentalDash.
+        return 'Esa cuenta de Google ya está vinculada a otro usuario de DentalDash. Usá otra cuenta de Google.';
+    }
+    return description ? description.replace(/\+/g, ' ') : `Error de Google (${code}).`;
+}
+
+const TABS: { key: string; label: string }[] = [
+    { key: 'profile', label: 'Perfil' },
+    { key: 'insurances', label: 'Obras Sociales' },
+    { key: 'services', label: 'Servicios' },
+    { key: 'schedule', label: 'Horarios' },
+    { key: 'googlecalendar', label: 'Google Calendar' },
+    { key: 'faqs', label: 'Preguntas Frecuentes' },
+    { key: 'whatsapp', label: 'WhatsApp' },
+];
 
 export default function SettingsView() {
     const [searchParams] = useSearchParams();
-    const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'profile');
+    // 'booking' se fusionó dentro del tab de perfil: viejos links con ?tab=booking siguen funcionando
+    const initialTab = searchParams.get('tab');
+    const [activeTab, setActiveTab] = useState(
+        !initialTab || initialTab === 'booking' ? 'profile' : initialTab
+    );
     const { canUse } = useSubscription();
     const { session } = useAuth();
+    const navigate = useNavigate();
+
+    // Muestra el error del redirect de OAuth y limpia la URL para que no
+    // reaparezca al recargar.
+    useEffect(() => {
+        const oauthError = readOAuthError(searchParams);
+        if (!oauthError) return;
+
+        message.error(oauthError, 8);
+        navigate(`/configuracion?tab=${initialTab || 'profile'}`, { replace: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const {
         profile, tenant, schedules, faqs, loading, saving,
@@ -53,50 +100,32 @@ export default function SettingsView() {
                 </div>
             </div>
 
-            <div className="flex border-b mb-6 border-gray-100 overflow-x-auto">
-                {([
-                    { key: 'profile', label: 'Perfil' },
-                    { key: 'booking', label: 'Link de Reservas' },
-                    { key: 'insurances', label: 'Obras Sociales' },
-                    { key: 'services', label: 'Servicios' },
-                    { key: 'schedule', label: 'Horarios' },
-                    { key: 'googlecalendar', label: 'Google Calendar' },
-                    { key: 'whatsapp', label: 'WhatsApp' },
-                    { key: 'faqs', label: 'Preguntas Frecuentes' },
-                ] as { key: string; label: string }[]).map(({ key, label }) => {
+            <SettingsTabs
+                tabs={TABS.map(({ key, label }) => {
                     const featureKey = TAB_FEATURE_MAP[key];
-                    const locked = key === 'booking' ? false : (featureKey !== null && !canUse(featureKey));
-                    return (
-                        <button
-                            key={key}
-                            onClick={() => setActiveTab(key)}
-                            className={`px-6 py-3 font-medium text-sm whitespace-nowrap relative flex items-center gap-1.5 ${activeTab === key ? 'text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            {activeTab === key && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600" />}
-                            {label}
-                            {locked && <Lock size={12} className="text-gray-400" />}
-                        </button>
-                    );
+                    return { key, label, locked: featureKey !== null && !canUse(featureKey) };
                 })}
-            </div>
+                activeTab={activeTab}
+                onSelect={setActiveTab}
+            />
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 {activeTab === 'profile' && (
-                    <ProfileTab
-                        profile={profile}
-                        handleProfileChange={handleProfileChange}
-                        handleAutoSaveProfile={handleAutoSaveProfile}
-                        avatarPreview={avatarPreview}
-                        googleAvatar={googleAvatar}
-                        handleAvatarChange={handleAvatarChange}
-                    />
-                )}
-
-                {activeTab === 'booking' && (
-                    <BookingLinkTab
-                        profile={profile}
-                        handleAutoSaveProfile={handleAutoSaveProfile}
-                    />
+                    <>
+                        <ProfileTab
+                            profile={profile}
+                            handleProfileChange={handleProfileChange}
+                            handleAutoSaveProfile={handleAutoSaveProfile}
+                            avatarPreview={avatarPreview}
+                            googleAvatar={googleAvatar}
+                            handleAvatarChange={handleAvatarChange}
+                        />
+                        <div className="border-t border-gray-100" />
+                        <BookingLinkTab
+                            profile={profile}
+                            handleAutoSaveProfile={handleAutoSaveProfile}
+                        />
+                    </>
                 )}
 
                 {activeTab === 'insurances' && (
@@ -120,12 +149,6 @@ export default function SettingsView() {
                     />
                 )}
 
-                {activeTab === 'whatsapp' && (
-                    canUse('whatsapp_bot')
-                        ? <WhatsAppTab profile={profile} instanceStatus={instanceStatus} pollingActive={pollingActive} qrCodeData={qrCodeData} saving={saving} handleConnectWhatsApp={handleConnectWhatsApp} handleDisconnectWhatsApp={handleDisconnectWhatsApp} />
-                        : <UpgradePrompt feature="Bot de WhatsApp" />
-                )}
-
                 {activeTab === 'googlecalendar' && (
                     <GoogleCalendarTab
                         googleConnected={googleConnected}
@@ -139,6 +162,12 @@ export default function SettingsView() {
                     canUse('faqs_config')
                         ? <FaqsTab tenant={tenant} faqs={faqs} setFaqs={setFaqs} />
                         : <UpgradePrompt feature="Preguntas Frecuentes" />
+                )}
+
+                {activeTab === 'whatsapp' && (
+                    canUse('whatsapp_bot')
+                        ? <WhatsAppTab profile={profile} instanceStatus={instanceStatus} pollingActive={pollingActive} qrCodeData={qrCodeData} saving={saving} handleConnectWhatsApp={handleConnectWhatsApp} handleDisconnectWhatsApp={handleDisconnectWhatsApp} />
+                        : <UpgradePrompt feature="Bot de WhatsApp" />
                 )}
             </div>
         </div>

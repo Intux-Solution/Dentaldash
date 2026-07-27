@@ -1,6 +1,6 @@
 // src/utils/helpers.ts
 export const initials = (name = '') =>
-  name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+  name.split(' ').map((w: string) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
 
 // Accent-insensitive, case-insensitive normalization for search
 export const norm = (str = '') =>
