@@ -74,10 +74,44 @@ export default function PrivacyPolicy() {
                             </p>
                         </section>
 
+                        <section>
+                            <h2 className="text-xl font-bold text-gray-800">5. Compartición de Datos de Usuarios de Google</h2>
+                            <p>
+                                No vendemos, alquilamos ni compartimos los datos de usuarios de Google con terceros con fines publicitarios o de marketing. Los datos de Google (incluyendo eventos de Google Calendar y archivos de Google Drive) se utilizan exclusivamente para brindar las funcionalidades principales de DentalDash.
+                            </p>
+                            <p className="mt-3">
+                                Los datos de usuarios de Google podrán ser compartidos únicamente en las siguientes circunstancias limitadas:
+                            </p>
+                            <ul className="list-disc pl-5 space-y-2">
+                                <li><strong>Proveedores de infraestructura:</strong> Utilizamos proveedores externos de hosting y base de datos que procesan datos en nuestro nombre, bajo acuerdos de confidencialidad y exclusivamente para operar la plataforma.</li>
+                                <li><strong>Requerimientos legales:</strong> Podremos divulgar datos si así lo exige la ley, una orden judicial o una autoridad gubernamental competente.</li>
+                                <li><strong>Transferencias comerciales:</strong> En caso de fusión, adquisición o venta de activos, los datos podrán ser transferidos a la entidad sucesora, quien quedará sujeta a esta política.</li>
+                            </ul>
+                            <p className="mt-3">
+                                No transferimos datos de usuarios de Google a ningún tercero salvo en los casos descritos anteriormente.
+                            </p>
+                        </section>
+
+                        <section>
+                            <h2 className="text-xl font-bold text-gray-800">6. Retención y Eliminación de Datos de Usuarios de Google</h2>
+                            <p>
+                                Conservamos los datos de usuarios de Google únicamente durante el tiempo necesario para prestar nuestros servicios o según lo exija la legislación aplicable.
+                            </p>
+                            <ul className="list-disc pl-5 space-y-2">
+                                <li><strong>Datos de Google Calendar:</strong> Los eventos creados o modificados a través de DentalDash se almacenan en el propio Google Calendar del usuario. DentalDash no guarda copias independientes de los eventos más allá de lo necesario para el funcionamiento en tiempo real de la plataforma.</li>
+                                <li><strong>Datos de Google Drive:</strong> Los archivos accedidos o generados mediante la integración con Google Drive se almacenan en la cuenta de Google Drive del propio usuario. DentalDash no retiene copias de archivos de Drive en nuestros servidores.</li>
+                            </ul>
+                            <p className="mt-3">
+                                <strong>Eliminación de cuenta:</strong> Ante una solicitud de baja o cancelación de cuenta, cualquier referencia almacenada en caché a datos de Google dentro de DentalDash será eliminada de forma permanente dentro de los 30 días.
+                            </p>
+                            <p className="mt-3">
+                                Los usuarios también pueden revocar el acceso de DentalDash a su cuenta de Google en cualquier momento desde <strong>Permisos de cuenta de Google</strong>, lo que interrumpirá de inmediato nuestro acceso a sus datos.
+                            </p>
+                        </section>
+
                         <section className="pt-8 border-t">
                             <p className="text-xs text-center text-gray-400">
-                                Última actualización: 16 de febrero de 2026. <br />
-                                Si tienes dudas sobre nuestra política, puedes contactarnos en soporte@dentaldash.com
+                                Última actualización: 28 de junio de 2026.
                             </p>
                         </section>
                     </div>
