@@ -176,6 +176,10 @@ serve(async (req) => {
             current_period_start: now.toISOString(),   // comienza el periodo del plan
             current_period_end: periodEnd.toISOString(),
             cancelled_at: null,
+            // Una asignacion manual anula cualquier cambio de plan programado,
+            // para que el cron no la pise al dia siguiente.
+            pending_plan_id: null,
+            pending_plan_effective_at: null,
             updated_at: now.toISOString(),
           },
           { onConflict: "user_id" }

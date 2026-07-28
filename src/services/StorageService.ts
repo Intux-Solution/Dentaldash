@@ -96,7 +96,46 @@ export const StorageService = {
     },
 
     /**
-     * Valida la URL de un registro. Si es pública la devuelve, 
+     * Descarga el archivo y devuelve una object URL (`blob:`) del mismo origen.
+     *
+     * Se usa para previsualizar PDFs en un <iframe>: embeber directamente la URL
+     * firmada de Supabase es frágil (expira a la hora y queda sujeta a los headers
+     * que devuelva Storage). Un `blob:` es same-origin, no caduca mientras viva el
+     * documento y ya está contemplado en `frame-src`/`object-src` de la CSP.
+     *
+     * Quien lo llama es responsable de hacer `URL.revokeObjectURL` al desmontar.
+     *
+     * @param {string} path - El path del archivo dentro del bucket
+     * @param {string} bucket - El bucket (default: 'clinical-records')
+     * @returns {Promise<string|null>} La object URL, o null si falla la descarga
+     */
+    async downloadAsObjectUrl(path: string, bucket = 'clinical-records'): Promise<string | null> {
+        try {
+            if (!path) return null;
+
+            const { data, error } = await supabase.storage.from(bucket).download(path);
+            if (error || !data) {
+                console.error('Error downloading file for preview:', error);
+                return null;
+            }
+
+            // Storage puede devolver el blob sin content-type util; forzar
+            // application/pdf hace que el visor interno del navegador lo abra
+            // en vez de ofrecer una descarga.
+            const blob = path.toLowerCase().endsWith('.pdf') && data.type !== 'application/pdf'
+                ? new Blob([data], { type: 'application/pdf' })
+                : data;
+
+            return URL.createObjectURL(blob);
+        } catch (errorUnknown: unknown) {
+            const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
+            console.error('Error in downloadAsObjectUrl:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Valida la URL de un registro. Si es pública la devuelve,
      * si es un path válido solicita y devuelve una URL firmada.
      * @param {string} rawUrl - La string cruda desde la base de datos
      * @returns {Promise<string|null>} URL válida construida

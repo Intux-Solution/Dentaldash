@@ -22,7 +22,21 @@ export interface Subscription {
   current_period_start: string | null;
   current_period_end: string | null;
   cancelled_at: string | null;
+  /** Downgrade programado: plan al que se migra al vencer el periodo pagado. */
+  pending_plan_id: string | null;
+  pending_plan_effective_at: string | null;
   subscription_plans: SubscriptionPlan | null;
+  pending_plan: Pick<SubscriptionPlan, 'id' | 'name' | 'price_monthly'> | null;
+}
+
+export interface CheckoutResult {
+  /** Alta o upgrade: URL de MercadoPago a la que hay que redirigir. */
+  init_point?: string;
+  mp_sub_id?: string;
+  /** Downgrade: el cambio quedo programado, sin cobro ni redirect. */
+  scheduled?: boolean;
+  effective_at?: string;
+  plan_name?: string;
 }
 
 export interface FeaturePermission {
@@ -33,7 +47,11 @@ export interface FeaturePermission {
 export async function fetchSubscription(userId: string): Promise<Subscription | null> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('*, subscription_plans(*)')
+    // Hay dos FK a subscription_plans (plan_id y pending_plan_id): PostgREST
+    // exige nombrar la constraint en cada embed para desambiguar.
+    .select(
+      '*, subscription_plans:subscription_plans!subscriptions_plan_id_fkey(*), pending_plan:subscription_plans!subscriptions_pending_plan_id_fkey(id, name, price_monthly)'
+    )
     .eq('user_id', userId)
     .single();
 
@@ -41,7 +59,7 @@ export async function fetchSubscription(userId: string): Promise<Subscription | 
     if (error.code === 'PGRST116') return null; // no row found
     throw error;
   }
-  return data as Subscription;
+  return data as unknown as Subscription;
 }
 
 export async function fetchFeaturePermissions(userId: string): Promise<FeaturePermission[]> {
@@ -65,20 +83,10 @@ export async function fetchPublicPlans(): Promise<SubscriptionPlan[]> {
   return data ?? [];
 }
 
-export async function cancelMySubscription(): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('No hay sesión activa.');
-
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('subscriptions')
-    .update({ status: 'cancelled', cancelled_at: now })
-    .eq('user_id', session.user.id);
-
-  if (error) throw error;
-}
-
-export async function createCheckout(planId: string): Promise<{ init_point: string }> {
+async function callCreateCheckout(
+  body: Record<string, unknown>,
+  fallbackError: string
+): Promise<any> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('No hay sesión activa.');
 
@@ -90,14 +98,43 @@ export async function createCheckout(planId: string): Promise<{ init_point: stri
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ plan_id: planId }),
+      body: JSON.stringify(body),
     }
   );
 
   const json = await res.json();
   if (!res.ok) {
     const detail = json.detail ? ` — ${json.detail}` : '';
-    throw new Error((json.error ?? 'Error al crear el checkout.') + detail);
+    throw new Error((json.error ?? fallbackError) + detail);
   }
   return json;
+}
+
+/**
+ * Alta / upgrade → devuelve `init_point` para redirigir a MercadoPago.
+ * Downgrade → devuelve `scheduled: true` y la fecha efectiva, sin cobro.
+ */
+export async function createCheckout(planId: string): Promise<CheckoutResult> {
+  return callCreateCheckout({ plan_id: planId }, 'Error al crear el checkout.');
+}
+
+/** Revierte un downgrade programado y restaura el monto original en MercadoPago. */
+export async function cancelScheduledPlanChange(): Promise<void> {
+  await callCreateCheckout(
+    { action: 'cancel_scheduled_change' },
+    'Error al cancelar el cambio programado.'
+  );
+}
+
+/**
+ * Cancela la suscripción. Va por la Edge Function y no por un UPDATE directo porque
+ * hay que cancelar también el preapproval en MercadoPago (el token de MP no puede
+ * vivir en el front); sin eso MP le sigue cobrando al usuario. La función además
+ * limpia cualquier downgrade programado.
+ */
+export async function cancelMySubscription(): Promise<void> {
+  await callCreateCheckout(
+    { action: 'cancel_subscription' },
+    'Error al cancelar la suscripción.'
+  );
 }

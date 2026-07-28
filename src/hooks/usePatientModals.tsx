@@ -109,21 +109,36 @@ export function PatientModalsProvider({
         }
     }, [addPatient, refreshPatients]);
 
-    React.useEffect(() => {
-        if (selectedPatient && Array.isArray(patients)) {
-            const updated = patients.find(
-                (p: any) => (p.id || p._id) === (selectedPatient.id || selectedPatient._id)
-            );
-            if (updated && JSON.stringify(selectedPatient) !== JSON.stringify(updated)) {
-                setSelectedPatient(updated);
-            }
-        }
-    }, [selectedPatient, patients]);
-
     const selectedPatientRef = useRef<any>(null);
     React.useEffect(() => {
         selectedPatientRef.current = selectedPatient;
     }, [selectedPatient]);
+
+    // Propaga al modal abierto los cambios que lleguen por la lista de React Query.
+    //
+    // Depende SOLO de `patients`: si tambien dependiera de `selectedPatient`, cada vez
+    // que `handleRefresh` trae la fila fresca desde el servidor este efecto volveria a
+    // correr contra la lista todavia stale (el invalidate no resolvio) y la pisaria con
+    // la version vieja. Eso borraba el consentimiento/historia recien subidos de la UI.
+    React.useEffect(() => {
+        const current = selectedPatientRef.current;
+        if (!current || !Array.isArray(patients)) return;
+
+        const updated = patients.find(
+            (p: any) => (p.id || p._id) === (current.id || current._id)
+        );
+        if (!updated || JSON.stringify(current) === JSON.stringify(updated)) return;
+
+        // Las URLs de documentos nunca retroceden a vacio por una lista stale: el
+        // borrado real de un adjunto siempre reemplaza el path, no lo deja en null.
+        setSelectedPatient({
+            ...updated,
+            historia_clinica_url: updated.historia_clinica_url ?? current.historia_clinica_url,
+            historiaClinicaUrl: updated.historiaClinicaUrl ?? current.historiaClinicaUrl,
+            consentimiento_url: updated.consentimiento_url ?? current.consentimiento_url,
+            consentimientoUrl: updated.consentimientoUrl ?? current.consentimientoUrl,
+        });
+    }, [patients]);
 
     React.useEffect(() => {
         const handleRefresh = async () => {

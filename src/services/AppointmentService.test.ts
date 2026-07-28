@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AppointmentService } from './AppointmentService';
 import { supabase } from '../config/supabaseClient';
-import { GoogleCalendarService } from './GoogleCalendarService';
+import { CalendarSyncService } from './CalendarSyncService';
 
 // Mock dependencies
 vi.mock('../config/supabaseClient', () => {
@@ -12,14 +12,23 @@ vi.mock('../config/supabaseClient', () => {
     };
 });
 
-vi.mock('./GoogleCalendarService', () => {
+// Las franjas ocupadas de Google las resuelve la Edge Function `calendar-sync`.
+vi.mock('./CalendarSyncService', () => {
     return {
-        GoogleCalendarService: {
-            listEvents: vi.fn(),
-            isConnected: vi.fn()
+        CalendarSyncService: {
+            getBusy: vi.fn(),
+            pushAppointment: vi.fn(),
+            deleteEvent: vi.fn()
         }
     };
 });
+
+/**
+ * Construye un instante a partir de una hora de pared argentina.
+ * Los slots se calculan siempre en AR, así que el test no puede depender de la
+ * zona horaria de la máquina que lo corre.
+ */
+const arTime = (dateStr: string, time: string) => new Date(`${dateStr}T${time}:00.000-03:00`);
 
 describe('AppointmentService - getAvailableSlots', () => {
 
@@ -27,8 +36,8 @@ describe('AppointmentService - getAvailableSlots', () => {
         // Fix system time so "minTimeForAppt" (now + 30 min) check doesn't block future requested dates
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-02-24T00:00:00.000Z'));
-        // Por defecto asumimos Google conectado; el escenario 4 lo sobreescribe.
-        (GoogleCalendarService.isConnected as any).mockResolvedValue(true);
+        // Por defecto: Google conectado y sin nada ocupado.
+        (CalendarSyncService.getBusy as any).mockResolvedValue({ synced: true, busy: [] });
     });
 
     afterEach(() => {
@@ -74,85 +83,89 @@ describe('AppointmentService - getAvailableSlots', () => {
 
     it('Scenario 1: Given no appointments, should return all daily slots', async () => {
         setupSupabaseMock([]); // 0 local appts
-        (GoogleCalendarService.listEvents as any).mockResolvedValue([]); // 0 Google appts
 
         // Fetch for Wednesday
-        const availableSlots = await AppointmentService.getAvailableSlots('2026-02-25', 30);
+        const { slots } = await AppointmentService.getAvailableSlots('2026-02-25', 30);
 
         // 09:00 to 18:00 at 30 min intervals = 18 slots
-        expect(availableSlots.length).toBe(18);
-        expect(availableSlots[0]).toBe('09:00');
-        expect(availableSlots[availableSlots.length - 1]).toBe('17:30');
+        expect(slots.length).toBe(18);
+        expect(slots[0]).toBe('09:00');
+        expect(slots[slots.length - 1]).toBe('17:30');
     });
 
     it('Scenario 2: Given a Supabase appointment at 10:00 AM, should block that slot', async () => {
-        // We construct a local JS Date so that toISOString() guarantees it maps perfectly 
-        // back to 10:00 AM local time inside the AppointmentService parser.
-        const appDt = new Date('2026-02-25T12:00:00');
-        appDt.setHours(10, 0, 0, 0);
-        const startTimeStr = appDt.toISOString();
-        appDt.setHours(10, 30, 0, 0);
-        const endTimeStr = appDt.toISOString();
-
         const mockAppointments = [
             {
                 id: 'supabase-app-1',
-                start_time: startTimeStr,
-                end_time: endTimeStr,
+                start_time: arTime('2026-02-25', '10:00').toISOString(),
+                end_time: arTime('2026-02-25', '10:30').toISOString(),
             }
         ];
 
         setupSupabaseMock(mockAppointments);
-        (GoogleCalendarService.listEvents as any).mockResolvedValue([]);
 
-        const availableSlots = await AppointmentService.getAvailableSlots('2026-02-25', 30);
+        const { slots } = await AppointmentService.getAvailableSlots('2026-02-25', 30);
 
         // 1 slot removed
-        expect(availableSlots.length).toBe(17);
-        expect(availableSlots.includes('10:00')).toBe(false);
+        expect(slots.length).toBe(17);
+        expect(slots.includes('10:00')).toBe(false);
         // Ensure neighboring slots are intact
-        expect(availableSlots.includes('09:30')).toBe(true);
-        expect(availableSlots.includes('10:30')).toBe(true);
+        expect(slots.includes('09:30')).toBe(true);
+        expect(slots.includes('10:30')).toBe(true);
     });
 
     it('Scenario 3: Given a Google Calendar appointment at 15:00 PM, should block that slot', async () => {
         setupSupabaseMock([]);
 
-        const appDt = new Date('2026-02-25T12:00:00');
-        appDt.setHours(15, 0, 0, 0);
-        const startTimeStr = appDt.toISOString();
-        appDt.setHours(15, 30, 0, 0);
-        const endTimeStr = appDt.toISOString();
+        (CalendarSyncService.getBusy as any).mockResolvedValue({
+            synced: true,
+            busy: [
+                {
+                    start: arTime('2026-02-25', '15:00').toISOString(),
+                    end: arTime('2026-02-25', '15:30').toISOString(),
+                }
+            ]
+        });
 
-        const mockGoogleEvents = [
-            {
-                transparency: 'opaque',
-                start: { dateTime: startTimeStr },
-                end: { dateTime: endTimeStr }
-            }
-        ];
-
-        (GoogleCalendarService.listEvents as any).mockResolvedValue(mockGoogleEvents);
-
-        const availableSlots = await AppointmentService.getAvailableSlots('2026-02-25', 30);
+        const { slots } = await AppointmentService.getAvailableSlots('2026-02-25', 30);
 
         // 1 slot removed
-        expect(availableSlots.length).toBe(17);
-        expect(availableSlots.includes('15:00')).toBe(false);
+        expect(slots.length).toBe(17);
+        expect(slots.includes('15:00')).toBe(false);
         // Ensure neighboring slots are intact
-        expect(availableSlots.includes('14:30')).toBe(true);
-        expect(availableSlots.includes('15:30')).toBe(true);
+        expect(slots.includes('14:30')).toBe(true);
+        expect(slots.includes('15:30')).toBe(true);
     });
 
-    it('Scenario 4: Given Google is not connected, should not call the Calendar API at all', async () => {
+    it('Scenario 4: Given Google is not connected, slots are still returned without warning', async () => {
         setupSupabaseMock([]);
-        (GoogleCalendarService.isConnected as any).mockResolvedValue(false);
+        (CalendarSyncService.getBusy as any).mockResolvedValue({
+            synced: false,
+            reason: 'not_connected',
+            busy: []
+        });
 
-        const availableSlots = await AppointmentService.getAvailableSlots('2026-02-25', 30);
+        const { slots, calendarUnavailable } = await AppointmentService.getAvailableSlots('2026-02-25', 30);
 
         // Los slots locales se calculan igual...
-        expect(availableSlots.length).toBe(18);
-        // ...pero no se toca la API de Google.
-        expect(GoogleCalendarService.listEvents).not.toHaveBeenCalled();
+        expect(slots.length).toBe(18);
+        // ...y "no conectado" no es una advertencia: es un estado válido.
+        expect(calendarUnavailable).toBe(false);
+    });
+
+    it('Scenario 5: Given the Google query fails, it flags the slot list as unverified', async () => {
+        setupSupabaseMock([]);
+        (CalendarSyncService.getBusy as any).mockResolvedValue({
+            synced: false,
+            reason: 'api_error',
+            busy: []
+        });
+
+        const { slots, calendarUnavailable } = await AppointmentService.getAvailableSlots('2026-02-25', 30);
+
+        // Los horarios se devuelven igual, pero marcados como no verificados: sin esto
+        // una reunión de Google se ofrecía como disponible y nadie se enteraba.
+        expect(slots.length).toBe(18);
+        expect(calendarUnavailable).toBe(true);
     });
 });

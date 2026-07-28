@@ -163,7 +163,10 @@ export class AppointmentRepository {
                 *,
                 patient:patients (nombre, dni, telefono, email, obra_social, numero_afiliado)
             `)
-            .eq('status', 'confirmed')
+            // Se reintentan todos los turnos vigentes sin evento, no solo los
+            // 'confirmed': filtrar por ese estado dejaba a los 'pending' (los que crea
+            // el link público de reservas) sin volver a intentarse nunca.
+            .neq('status', 'cancelled')
             .is('google_event_id', null)
             .gte('start_time', todayISO);
 

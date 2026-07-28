@@ -158,9 +158,15 @@ serve(async (req) => {
       return new Response("OK", { status: 200 });
     }
 
-    // Idempotencia: si ya procesamos este (preapproval, estado), no reprocesar.
+    // Idempotencia: si ya procesamos este evento exacto, no reprocesar.
     // MercadoPago reenvia webhooks; la PK de processed_mp_events rechaza el duplicado.
-    const eventKey = `${preapprovalId}:${mpStatus}`;
+    //
+    // La clave incluye topic y resourceId, no solo el estado del preapproval: en una
+    // suscripcion recurrente mpStatus queda en "authorized" mes tras mes, asi que una
+    // clave `${preapprovalId}:${mpStatus}` descartaba TODAS las cuotas posteriores a la
+    // primera como duplicadas y current_period_end nunca avanzaba. Con el id del pago
+    // (distinto en cada cuota) cada cobro se procesa una sola vez y todos se procesan.
+    const eventKey = `${preapprovalId}:${topic}:${resourceId ?? ""}:${mpStatus}`;
     const { error: idemError } = await supabase
       .from("processed_mp_events")
       .insert({ event_key: eventKey });
@@ -190,8 +196,28 @@ serve(async (req) => {
         internalStatus = "trial";
     }
 
+    // Estado actual de la suscripcion: hace falta para no pisar un downgrade
+    // programado y para extender el periodo sin regalar ni recortar dias.
+    const { data: currentSub } = await supabase
+      .from("subscriptions")
+      .select("current_period_end, pending_plan_id")
+      .eq("mercadopago_sub_id", preapprovalId)
+      .maybeSingle();
+
+    const hasPendingChange = !!currentSub?.pending_plan_id;
+
     const now = new Date();
-    const periodEnd = new Date(now);
+
+    // En una renovacion el periodo nuevo arranca donde terminaba el anterior (si
+    // todavia no vencio); en un alta/activacion arranca hoy.
+    const previousEnd = currentSub?.current_period_end
+      ? new Date(currentSub.current_period_end)
+      : null;
+    const periodStart =
+      topic === "subscription_authorized_payment" && previousEnd && previousEnd > now
+        ? previousEnd
+        : now;
+    const periodEnd = new Date(periodStart);
     periodEnd.setMonth(periodEnd.getMonth() + 1);
 
     const updateData: Record<string, unknown> = {
@@ -201,8 +227,14 @@ serve(async (req) => {
     };
 
     if (internalStatus === "active") {
-      updateData.plan_id = planId;                      // garantiza el plan elegido
-      updateData.current_period_start = now.toISOString();
+      // Con un downgrade programado NO se toca plan_id: el preapproval es el mismo
+      // (solo se le bajo el monto), asi que external_reference sigue apuntando al plan
+      // caro y fijarlo aca revertiria el downgrade en cada cobro. El plan lo cambia
+      // apply_pending_plan_changes() cuando vence el periodo pagado.
+      if (!hasPendingChange) {
+        updateData.plan_id = planId;                    // garantiza el plan elegido
+      }
+      updateData.current_period_start = periodStart.toISOString();
       updateData.current_period_end = periodEnd.toISOString();
       updateData.trial_ends_at = now.toISOString();     // finaliza el trial al activar el plan
       updateData.cancelled_at = null;
@@ -219,8 +251,17 @@ serve(async (req) => {
       console.error("Error updating subscription:", updateError.message);
     }
 
-    // Si quedo activa, sincronizar feature_permissions segun el plan
-    if (internalStatus === "active") {
+    // Si quedo activa, sincronizar feature_permissions segun el plan.
+    //
+    // Con un downgrade programado las permissions son las del plan caro y deben
+    // quedarse asi hasta el vencimiento. El cobro es ademas el momento natural para
+    // aplicar un cambio ya vencido, sin esperar al cron diario.
+    if (internalStatus === "active" && hasPendingChange) {
+      const { error: applyError } = await supabase.rpc("apply_pending_plan_changes");
+      if (applyError) {
+        console.error("Error aplicando cambios de plan pendientes:", applyError.message);
+      }
+    } else if (internalStatus === "active") {
       const { data: plan } = await supabase
         .from("subscription_plans")
         .select("name, feature_keys")

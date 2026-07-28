@@ -102,8 +102,10 @@ src/
 │   ├── AppointmentService.ts       # CRUD de turnos + sync Google Calendar
 │   ├── AppointmentBusinessLogic.ts # Lógica de slots disponibles
 │   ├── OdontogramService.ts        # CRUD de odontograma
-│   ├── EvolutionService.ts         # Integración Evolution API (WhatsApp)
-│   ├── GoogleCalendarService.ts    # Integración Google Calendar
+│   ├── EvolutionService.ts         # CRUD de treatment_history (evolución clínica) — NO es la Evolution API
+│   ├── GoogleCalendarService.ts    # Conexión/desconexión de Google Calendar (Settings)
+│   ├── CalendarSyncService.ts      # Cliente de la Edge Function calendar-sync (sync + freeBusy)
+│   ├── NotificationService.ts      # Cliente de la Edge Function notify-appointment (emails)
 │   ├── InsuranceService.ts         # Listado de obras sociales
 │   ├── StorageService.ts           # Supabase Storage (upload/delete)
 │   ├── SubscriptionService.ts      # Fetch de suscripcion y feature_permissions del usuario
@@ -290,7 +292,24 @@ Crea un preapproval de MercadoPago para una suscripcion recurrente. Requiere JWT
 Endpoint publico (sin JWT) para el formulario de reservas de pacientes. Acciones: `resolve_slug` (slug → user_id), `get_profile`, `get_working_days`, `get_slots`, `create_appointment`. Usa service role para bypassear RLS. Llama al RPC `confirm_public_appointment_safe`.
 
 ### `google-token-refresh`
-Renueva el access token de Google Calendar a partir del `google_refresh_token` del perfil. Requiere JWT. Invocada desde `GoogleCalendarService.ts`.
+Renueva el access token de Google Calendar a partir del `google_refresh_token` del perfil. Requiere JWT. Invocada desde `GoogleCalendarService.ts` (que hoy solo se usa para conectar/desconectar la integracion desde Settings).
+
+### `calendar-sync`
+Sincronizacion de Google Calendar para la app autenticada (requiere JWT). Acciones: `push_appointment` (crea/actualiza el evento y persiste `google_event_id`), `delete_event`, `busy` (franjas ocupadas via `freeBusy` sobre **todos** los calendarios del usuario).
+
+Corre server-side con el `google_refresh_token` de `profiles`, igual que `public-booking` y `chat-webhook`. Reemplaza el camino anterior desde el navegador, que dependia del `provider_token` efimero de la sesion y fallaba en silencio: los turnos quedaban sin `google_event_id` y las reuniones de Google no bloqueaban horarios.
+
+Variables de entorno: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+
+### `notify-appointment`
+Envia el email de confirmacion del turno al paciente y al dentista (requiere JWT). Usada por la app; `public-booking` y `chat-webhook` llaman en proceso al helper compartido.
+
+Variables de entorno: `RESEND_API_KEY`, `NOTIFY_FROM_EMAIL` (remitente verificado en Resend). Si faltan, el envio se saltea en silencio.
+
+### Codigo compartido (`supabase/functions/_shared/`)
+- `google-calendar.ts` — refresh de token + create/update/delete de eventos + `freeBusy`.
+- `email.ts` — cliente de Resend y layout HTML comun.
+- `appointment-notifications.ts` — `notifyAppointmentCreated(supabase, appointmentId)`, usada por `notify-appointment`, `public-booking` y `chat-webhook`.
 
 ---
 
@@ -414,6 +433,10 @@ Los `feature_keys` de cada plan se guardan en `subscription_plans.feature_keys t
 - Los turnos se crean via RPC (`insertAppointmentRPC`) para garantizar atomicidad y evitar solapamientos.
 - Google Calendar sync: si falla la sincronizacion, se hace rollback del insert en DB.
 - El odontograma guarda todo el estado dental en un campo `jsonb` en la tabla `odontograms`.
+- La sincronizacion con Google Calendar y el calculo de franjas ocupadas van **siempre** por la Edge Function `calendar-sync`, nunca desde el navegador.
+- Los horarios de `schedules` son hora de pared argentina: usar `createARDateTime()` de `src/utils/dateUtils.ts`, nunca `setHours()`.
+- `AppointmentService.getAvailableSlots()` devuelve `{ slots, calendarUnavailable }`, no un array.
+- Al bajar de plan no se cobra de nuevo: se guarda `subscriptions.pending_plan_id` / `pending_plan_effective_at` y el cron `apply_pending_plan_changes()` (pg_cron, 04:00 UTC) lo aplica al vencer el periodo pagado. `mp-webhook` no toca `plan_id` mientras haya un cambio pendiente.
 - Los servicios del perfil son `jsonb` (array de objetos `{name, duration, price}`).
 - Las obras sociales aceptadas en el perfil son `text[]`.
 - Los tipos de turno en el cliente vienen de `src/config/appointments.ts`.

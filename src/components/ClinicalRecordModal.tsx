@@ -41,27 +41,30 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
   const [localRawUrl, setLocalRawUrl] = useState<string | null>(null);
   const [instantPreviewUrl, setInstantPreviewUrl] = useState<string | null>(null);
   const [previewKind, setPreviewKind] = useState<PreviewKind | null>(null);
+  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
 
-  // Sincronizar prop patient con estado local al abrir o cambiar de paciente
+  // Sincronizar prop patient con estado local al abrir o cambiar de paciente.
+  // Depende del ID y no de la referencia del objeto: ver la nota equivalente en
+  // ConsentimientoModal (una dependencia por referencia borraba el archivo recien subido).
   useEffect(() => {
-    if (patient) {
-      setLocalRawUrl(
-        patient.historiaUrl ||
-        patient.odontogramaUrl ||
-        patient.odontograma ||
-        patient.historiaClinica ||
-        patient.historiaClinicaUrl ||
-        patient.historia_clinica_url ||
-        ""
-      );
-      // Limpiar preview temporal al cambiar de paciente
-      setInstantPreviewUrl(prev => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      setPreviewKind(null);
-    }
-  }, [patient, open]);
+    if (!patient) return;
+    setLocalRawUrl(
+      patient.historiaUrl ||
+      patient.odontogramaUrl ||
+      patient.odontograma ||
+      patient.historiaClinica ||
+      patient.historiaClinicaUrl ||
+      patient.historia_clinica_url ||
+      ""
+    );
+    // Limpiar preview temporal al cambiar de paciente
+    setInstantPreviewUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setPreviewKind(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient?.id ?? patient?._id, open]);
 
   // Fetch signed URL if it's a path, or use it directly if it's a public URL
   useEffect(() => {
@@ -102,6 +105,38 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     return () => { active = false; };
   }, [localRawUrl, open, instantPreviewUrl]);
 
+  // Los PDF guardados se previsualizan desde un blob: same-origin en vez de embeber
+  // la URL firmada de Supabase. La firma caduca a la hora y el <iframe> queda en
+  // blanco; el blob no. Ver StorageService.downloadAsObjectUrl.
+  useEffect(() => {
+    const isStoredPdf =
+      open &&
+      !instantPreviewUrl &&
+      typeof localRawUrl === 'string' &&
+      !localRawUrl.startsWith('http') &&
+      localRawUrl.toLowerCase().endsWith('.pdf');
+
+    if (!isStoredPdf) {
+      setPdfObjectUrl(null);
+      return;
+    }
+
+    let active = true;
+    let created: string | null = null;
+
+    StorageService.downloadAsObjectUrl(localRawUrl as string).then(url => {
+      if (!url) return;
+      if (!active) { URL.revokeObjectURL(url); return; }
+      created = url;
+      setPdfObjectUrl(url);
+    });
+
+    return () => {
+      active = false;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [localRawUrl, open, instantPreviewUrl]);
+
   if (!open || !patient) return null;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,7 +175,13 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
         }
       }
 
-      await supabase.from('patients').update({ historia_clinica_url: newPath }).eq('id', patient.id);
+      const { error: updateError } = await supabase
+        .from('patients')
+        .update({ historia_clinica_url: newPath })
+        .eq('id', patient.id)
+        .eq('user_id', userId);
+
+      if (updateError) throw new Error(`Error al guardar en base de datos: ${updateError.message}`);
 
       // Descartar el preview local ANTES de fijar el path real: así el efecto pide
       // la URL firmada (con extensión real) en vez de quedarse pegado al blob:,
@@ -243,7 +284,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
           ) : kind === 'pdf' || isGoogleDrive ? (
             <div className="w-full h-full flex flex-col">
               {/* Desktop: inline iframe */}
-              <iframe title="Historia Clínica" src={displayUrl} className="flex-1 w-full border-none hidden sm:block" />
+              <iframe title="Historia Clínica" src={pdfObjectUrl ?? displayUrl} className="flex-1 w-full border-none hidden sm:block" />
               {/* Mobile fallback: iframe often fails silently on iOS/Android */}
               <div className="flex flex-col items-center justify-center gap-4 p-6 sm:hidden flex-1">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-16 h-16 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

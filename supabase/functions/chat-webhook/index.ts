@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0"
 import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.1.0"
 import OpenAI from "https://esm.sh/openai"
+import { notifyAppointmentCreated } from "../_shared/appointment-notifications.ts"
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -570,6 +571,12 @@ serve(async (req) => {
                                 body: JSON.stringify({ number: tenant.notification_phone, text: notifyMsg })
                             }).catch(err => console.error("Error notifying dentist:", err));
                         }
+                        // ------------------------------------
+
+                        // --- Notificacion por email (paciente + dentista) ---
+                        // Complementa el aviso de WhatsApp de arriba, que solo llega al
+                        // dentista y solo si tiene notification_phone cargado.
+                        await notifyAppointmentCreated(supabase, appointmentId);
                         // ------------------------------------
 
                         // Detailed confirmation prompt for the AI

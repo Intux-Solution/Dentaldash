@@ -1,6 +1,7 @@
 import { AppointmentRepository } from '../repositories/AppointmentRepository';
 import { AppointmentBusinessLogic } from './AppointmentBusinessLogic';
-import { GoogleCalendarService } from './GoogleCalendarService';
+import { CalendarSyncService } from './CalendarSyncService';
+import { NotificationService } from './NotificationService';
 import { CreateAppointmentSchema, UpdateAppointmentSchema } from '../schemas/appointment.schema';
 import { addMinutes } from 'date-fns';
 import { Session } from '@supabase/supabase-js';
@@ -138,25 +139,27 @@ ${data.notas || 'Sin notas adicionales'}
             // Since RPC only returns { success, id, error }, we construct the full object for Google Calendar
             const result = { ...appointment, id: rpcResult.id };
 
-            try {
-                const description = this.formatEventDescription(validatedData);
-                const googleEvent = await GoogleCalendarService.createEvent({
-                    ...result,
-                    title: appointment.title,
-                    patientEmail: data.email || null,
-                    notes: description
-                }, session);
+            // La sincronización con Google corre server-side (`calendar-sync`) y nunca
+            // lanza: el turno ya está guardado y la DB local es la fuente de verdad.
+            // `syncFailed` se devuelve para que la UI pueda avisar en vez de callar,
+            // que era el problema: el turno quedaba sin google_event_id en silencio.
+            const sync = await CalendarSyncService.pushAppointment(result.id, {
+                description: this.formatEventDescription(validatedData),
+                attendeeEmail: data.email || null,
+            });
 
-                if (googleEvent && googleEvent.id) {
-                    await AppointmentRepository.updateGoogleEventId(result.id, googleEvent.id, session?.user?.id ?? '');
-                }
-            } catch (syncErrorUnknown: unknown) {
-                const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
-                // El turno se guarda igual aunque GCal falle. syncPendingAppointments lo reintentará.
-                console.warn(`[AppointmentService] Turno ${result.id} guardado sin sincronizar con Google Calendar: ${syncError.message}`);
+            if (!sync.synced && sync.reason !== 'not_connected' && sync.reason !== 'not_configured') {
+                console.warn(`[AppointmentService] Turno ${result.id} guardado sin sincronizar con Google Calendar (${sync.reason}).`);
             }
 
-            return result;
+            // Aviso por email al paciente y al dentista. No bloquea ni puede fallar el alta.
+            await NotificationService.notifyAppointmentCreated(result.id);
+
+            return {
+                ...result,
+                google_event_id: sync.google_event_id ?? null,
+                syncFailed: !sync.synced && sync.reason !== 'not_connected' && sync.reason !== 'not_configured',
+            };
         } catch (errorUnknown: unknown) {
             const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error creating appointment:', error);
@@ -199,24 +202,20 @@ ${data.notas || 'Sin notas adicionales'}
 
             const result = rpcResult.data;
 
-            try {
-                if (result.google_event_id && session) {
-                    const description = this.formatEventDescription(validatedData);
-                    await GoogleCalendarService.updateEvent(result.google_event_id, {
-                        ...updates,
-                        patientEmail: validatedData.email,
-                        notes: description
-                    }, session);
-                }
-            } catch (syncErrorUnknown: unknown) {
-                const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
-                // Mismo criterio que createAppointment: la DB local es la fuente de
-                // verdad y Google es best-effort. Un fallo de la integración no debe
-                // impedirle al dentista editar un turno.
-                console.warn(`[AppointmentService] Turno ${id} actualizado, pero falló la sincronización con Google Calendar: ${syncError.message}`);
+            // Mismo criterio que createAppointment: la DB local es la fuente de verdad y
+            // Google es best-effort. Si el turno todavía no tenía evento (porque la
+            // sincronización original falló), `push_appointment` lo crea ahora.
+            const sync = await CalendarSyncService.pushAppointment(id, {
+                description: this.formatEventDescription(validatedData),
+                attendeeEmail: validatedData.email,
+            });
+
+            const syncFailed = !sync.synced && sync.reason !== 'not_connected' && sync.reason !== 'not_configured';
+            if (syncFailed) {
+                console.warn(`[AppointmentService] Turno ${id} actualizado, pero falló la sincronización con Google Calendar (${sync.reason}).`);
             }
 
-            return result;
+            return { ...result, syncFailed };
         } catch (errorUnknown: unknown) {
             const error = errorUnknown instanceof Error ? errorUnknown : new Error(String(errorUnknown) || "Ocurrió un error inesperado.");
             console.error('Error updating appointment:', error);
@@ -225,37 +224,26 @@ ${data.notas || 'Sin notas adicionales'}
     }
 
     static async syncPendingAppointments(session: Session | null = null): Promise<void> {
-        // provider_token solo existe en la sesión recién creada por el OAuth; tras un
-        // F5 se pierde. Usamos isConnected(), que además consulta el refresh token
-        // persistido en profiles, para que la sincronización diferida siga corriendo.
-        if (!session || !(await GoogleCalendarService.isConnected(session))) {
-            return;
-        }
+        if (!session) return;
 
         try {
             const pending = await AppointmentRepository.getPendingGoogleSync(new Date().toISOString());
             if (!pending || pending.length === 0) return;
 
             for (const appt of pending) {
-                try {
-                    const eventData = {
-                        title: `${appt.title} - ${appt.patient?.nombre || 'Paciente'}`,
-                        start_time: appt.start_time,
-                        end_time: appt.end_time,
-                        notes: appt.notes,
-                        patientEmail: appt.patient?.email || null
-                    };
+                // `push_appointment` no lanza y ya resuelve por su cuenta si la
+                // integración está conectada, así que un turno que falle no frena
+                // a los siguientes.
+                const sync = await CalendarSyncService.pushAppointment(appt.id, {
+                    attendeeEmail: appt.patient?.email || null,
+                });
 
-                    const googleEvent = await GoogleCalendarService.createEvent(eventData, session);
-
-                    if (googleEvent && googleEvent.id) {
-                        await AppointmentRepository.updateGoogleEventId(appt.id, googleEvent.id, session?.user?.id ?? '');
-                    }
-                } catch (eUnknown: unknown) {
-            const e = eUnknown instanceof Error ? eUnknown : new Error(String(eUnknown) || "Ocurrió un error inesperado.");
-                    // Log error but CONTINUE with the next appointment to prevent a domino effect block
-                    console.error(`Sincronización fallida para el turno ${appt.id}: ${e.message}`);
-                    continue;
+                // Sin integración conectada no tiene sentido recorrer el resto.
+                if (!sync.synced && (sync.reason === 'not_connected' || sync.reason === 'not_configured')) {
+                    return;
+                }
+                if (!sync.synced) {
+                    console.error(`Sincronización fallida para el turno ${appt.id} (${sync.reason}).`);
                 }
             }
         } catch (errorUnknown: unknown) {
@@ -269,14 +257,9 @@ ${data.notas || 'Sin notas adicionales'}
         try {
             const appointment = await AppointmentRepository.getAppointmentGoogleId(id);
             if (appointment?.google_event_id) {
-                try {
-                    await GoogleCalendarService.deleteEvent(appointment.google_event_id, session);
-                } catch (syncErrorUnknown: unknown) {
-                    const syncError = syncErrorUnknown instanceof Error ? syncErrorUnknown : new Error(String(syncErrorUnknown) || "Ocurrió un error inesperado.");
-                    // Best-effort, igual que en create/update: si Google falla igual
-                    // borramos el turno local en vez de dejarlo trabado.
-                    console.warn(`[AppointmentService] No se pudo borrar el evento de Google Calendar del turno ${id}: ${syncError.message}`);
-                }
+                // Best-effort, igual que en create/update: si Google falla igual
+                // borramos el turno local en vez de dejarlo trabado.
+                await CalendarSyncService.deleteEvent(appointment.google_event_id);
             }
             await AppointmentRepository.deleteAppointment(id, session?.user?.id ?? '');
             return true;

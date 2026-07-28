@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { useSubscription } from '../context/SubscriptionContext';
-import { CheckCircle, Clock, XCircle, AlertTriangle, CreditCard, ArrowUpCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, Clock, XCircle, AlertTriangle, CreditCard, ArrowUpCircle, Loader2, CalendarClock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { cancelMySubscription } from '../services/SubscriptionService';
+import { cancelMySubscription, cancelScheduledPlanChange } from '../services/SubscriptionService';
 import toast from 'react-hot-toast';
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
 
 const STATUS_CONFIG = {
   active: { label: 'Activa', color: 'text-green-600', bg: 'bg-green-50', icon: CheckCircle },
@@ -17,6 +20,7 @@ export default function SubscriptionView() {
   const { subscription, isLoading, daysLeft, refresh } = useSubscription();
   const navigate = useNavigate();
   const [cancelling, setCancelling] = useState(false);
+  const [revertingChange, setRevertingChange] = useState(false);
 
   if (isLoading) {
     return (
@@ -60,6 +64,19 @@ export default function SubscriptionView() {
     }
   };
 
+  const handleRevertChange = async () => {
+    setRevertingChange(true);
+    try {
+      await cancelScheduledPlanChange();
+      toast.success('Cambio de plan cancelado. Seguís con tu plan actual.');
+      refresh();
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al cancelar el cambio de plan');
+    } finally {
+      setRevertingChange(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Mi Suscripción</h1>
@@ -84,22 +101,46 @@ export default function SubscriptionView() {
           )}
           {subscription.current_period_end && subscription.status === 'active' && (
             <p className="text-sm text-gray-600 mt-1">
-              Próxima renovación:{' '}
-              {new Date(subscription.current_period_end).toLocaleDateString('es-AR', {
-                day: 'numeric', month: 'long', year: 'numeric',
-              })}
+              Próxima renovación: {formatDate(subscription.current_period_end)}
             </p>
           )}
           {subscription.cancelled_at && (
             <p className="text-sm text-gray-600 mt-1">
-              Cancelada el:{' '}
-              {new Date(subscription.cancelled_at).toLocaleDateString('es-AR', {
-                day: 'numeric', month: 'long', year: 'numeric',
-              })}
+              Cancelada el: {formatDate(subscription.cancelled_at)}
             </p>
           )}
         </div>
       </div>
+
+      {/* Downgrade programado: el plan actual sigue vigente hasta la fecha efectiva */}
+      {subscription.pending_plan_id && subscription.pending_plan_effective_at && (
+        <div className="rounded-xl p-5 bg-blue-50 flex items-start gap-4">
+          <CalendarClock size={22} className="text-blue-600 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-blue-700">Cambio de plan programado</p>
+            <p className="text-sm text-gray-700 mt-1">
+              El {formatDate(subscription.pending_plan_effective_at)} pasás al plan{' '}
+              <strong>{subscription.pending_plan?.name ?? 'seleccionado'}</strong>
+              {subscription.pending_plan &&
+                ` · $${subscription.pending_plan.price_monthly.toLocaleString('es-AR')} ARS/mes`}
+              .
+            </p>
+            <p className="text-sm text-gray-600 mt-1">
+              Hasta esa fecha seguís usando{' '}
+              {subscription.subscription_plans?.name ?? 'tu plan actual'} con todas sus funciones. No
+              hay ningún cobro adicional.
+            </p>
+            <button
+              onClick={handleRevertChange}
+              disabled={revertingChange}
+              className="mt-3 inline-flex items-center gap-2 bg-white border border-blue-200 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {revertingChange && <Loader2 size={15} className="animate-spin" />}
+              Cancelar cambio programado
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Acciones */}
       <div className="flex flex-wrap gap-3">

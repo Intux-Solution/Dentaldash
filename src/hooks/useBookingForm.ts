@@ -165,8 +165,15 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
         try {
             const appointmentType = services.find(t => (t.id === tipoTurno || t.name === tipoTurno));
             const duration = appointmentType?.duration || 30;
-            const slots = await AppointmentService.getAvailableSlots(fecha, duration, null, session);
+            const { slots, calendarUnavailable } = await AppointmentService.getAvailableSlots(fecha, duration, null, session);
             setAvailableSlots(slots);
+
+            // Si Google está conectado pero no se pudo leer la agenda, los horarios
+            // pueden incluir alguno realmente ocupado. Antes esto se tragaba y el
+            // dentista terminaba con dos cosas al mismo tiempo.
+            if (calendarUnavailable) {
+                message.warning('No se pudo verificar tu Google Calendar: algunos horarios podrían estar ocupados.');
+            }
 
             // Clear selected hora if it's no longer available
             if (selectedHora && !slots.includes(selectedHora)) {

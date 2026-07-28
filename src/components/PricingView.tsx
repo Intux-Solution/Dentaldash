@@ -2,14 +2,30 @@ import React, { useEffect, useState } from 'react';
 import { Check, Loader2, ArrowLeft } from 'lucide-react';
 import { fetchPublicPlans, createCheckout, SubscriptionPlan } from '../services/SubscriptionService';
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+/** Un downgrade solo es posible sobre una suscripcion paga con periodo vigente. */
+type PlanAction = 'current' | 'scheduled' | 'upgrade' | 'downgrade' | 'new';
+
+const LABELS: Record<PlanAction, string> = {
+  current: 'Tu plan actual',
+  scheduled: 'Cambio ya programado',
+  upgrade: 'Mejorar plan',
+  downgrade: 'Cambiar a este plan',
+  new: 'Contratar plan',
+};
 
 export default function PricingView() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const { session } = useAuth();
+  const { subscription, refresh } = useSubscription();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -19,15 +35,63 @@ export default function PricingView() {
       .finally(() => setLoading(false));
   }, []);
 
+  const currentPlan = subscription?.subscription_plans ?? null;
+  const periodEnd = subscription?.current_period_end ?? null;
+  const hasPaidPeriod =
+    subscription?.status === 'active' && !!periodEnd && new Date(periodEnd).getTime() > Date.now();
+
+  const actionFor = (plan: SubscriptionPlan): PlanAction => {
+    if (!currentPlan) return 'new';
+    if (plan.id === currentPlan.id) return subscription?.status === 'active' ? 'current' : 'new';
+    if (plan.id === subscription?.pending_plan_id) return 'scheduled';
+    if (!hasPaidPeriod) return 'new';
+    return Number(plan.price_monthly) < Number(currentPlan.price_monthly) ? 'downgrade' : 'upgrade';
+  };
+
   const handleContrat = async (plan: SubscriptionPlan) => {
     if (!session) {
       navigate('/login', { state: { redirect: '/pricing' } });
       return;
     }
+
+    const action = actionFor(plan);
+    if (action === 'current' || action === 'scheduled') return;
+
+    if (action === 'downgrade' && periodEnd) {
+      // Si ya habia un downgrade programado a otro plan, este lo reemplaza en silencio.
+      // Avisarlo evita que el usuario crea que quedaron los dos agendados.
+      const replacing = subscription?.pending_plan && subscription.pending_plan.id !== plan.id
+        ? `Esto reemplaza el cambio a ${subscription.pending_plan.name} que ya tenías programado.\n\n`
+        : '';
+
+      const ok = confirm(
+        replacing +
+          `Seguís con ${currentPlan!.name} y todas sus funciones hasta el ${formatDate(periodEnd)}.\n\n` +
+          `Desde esa fecha pasás a ${plan.name} y se te cobrará ` +
+          `$${plan.price_monthly.toLocaleString('es-AR')} ARS/mes.\n\n` +
+          'No se te cobra nada ahora.'
+      );
+      if (!ok) return;
+    }
+
     try {
       setCheckoutLoading(plan.id);
-      const { init_point } = await createCheckout(plan.id);
-      window.location.href = init_point;
+      const result = await createCheckout(plan.id);
+
+      // Downgrade: no hay redirect a MercadoPago, el cambio queda programado.
+      if (result.scheduled) {
+        refresh();
+        toast.success(
+          result.effective_at
+            ? `Cambio programado para el ${formatDate(result.effective_at)}`
+            : 'Cambio de plan programado'
+        );
+        navigate('/suscripcion');
+        return;
+      }
+
+      if (!result.init_point) throw new Error('MercadoPago no devolvió un link de pago.');
+      window.location.href = result.init_point;
     } catch (err: any) {
       toast.error(err.message ?? 'Error al iniciar el pago');
     } finally {
@@ -67,6 +131,8 @@ export default function PricingView() {
           {plans.map((plan, idx) => {
             const isPro = plan.name === 'Asistente IA';
             const isBusy = checkoutLoading === plan.id;
+            const action = actionFor(plan);
+            const isCurrent = action === 'current' || action === 'scheduled';
             return (
               <div
                 key={plan.id}
@@ -108,18 +174,27 @@ export default function PricingView() {
                   ))}
                 </ul>
 
-                <button
-                  onClick={() => handleContrat(plan)}
-                  disabled={isBusy}
-                  className={`w-full py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2 ${
-                    isPro
-                      ? 'bg-teal-600 hover:bg-teal-700 text-white'
-                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-                  } disabled:opacity-60`}
-                >
-                  {isBusy && <Loader2 size={15} className="animate-spin" />}
-                  Contratar plan
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleContrat(plan)}
+                    disabled={isBusy || isCurrent}
+                    className={`w-full py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2 ${
+                      isCurrent
+                        ? 'bg-white border border-teal-500 text-teal-700 cursor-default'
+                        : isPro
+                          ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                    } disabled:opacity-60`}
+                  >
+                    {isBusy && <Loader2 size={15} className="animate-spin" />}
+                    {LABELS[action]}
+                  </button>
+                  {action === 'downgrade' && periodEnd && (
+                    <p className="text-[11px] text-gray-500 text-center leading-snug">
+                      Sin cargo ahora: el cambio se aplica el {formatDate(periodEnd)}
+                    </p>
+                  )}
+                </div>
               </div>
             );
           })}

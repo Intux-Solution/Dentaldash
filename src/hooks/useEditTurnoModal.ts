@@ -82,7 +82,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             const appointmentType = services.find(t => (t.id === tipoTurno || t.name === tipoTurno));
             const effectiveExclude = excludeId || watch('id');
 
-            const slots = await AppointmentService.getAvailableSlots(
+            const { slots, calendarUnavailable } = await AppointmentService.getAvailableSlots(
                 fecha,
                 appointmentType?.duration || 30,
                 effectiveExclude,
@@ -90,6 +90,12 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             );
 
             setAvailableSlots(slots);
+
+            // Ver la nota equivalente en useBookingForm: un fallo al leer Google no
+            // puede quedar mudo, porque deja pasar horarios ocupados.
+            if (calendarUnavailable) {
+                message.warning('No se pudo verificar tu Google Calendar: algunos horarios podrían estar ocupados.');
+            }
 
             // Clear selected hora if it's no longer available
             setSelectedHora(prev => {

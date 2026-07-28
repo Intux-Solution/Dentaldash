@@ -43,6 +43,25 @@ export const createLocalMidday = (yStr: string, mStr: string, dStr: string): Dat
 };
 
 /**
+ * Combina el día de `date` con una hora "HH:mm[:ss]" interpretada SIEMPRE en hora
+ * argentina, sin importar la zona horaria del equipo.
+ *
+ * Los horarios laborales de `schedules` se guardan como hora de pared del
+ * consultorio. Aplicarlos con `setHours()` los interpretaba en la zona del
+ * navegador, así que en un equipo fuera de UTC-3 la franja quedaba corrida
+ * respecto de la etiqueta mostrada y del instante que se terminaba guardando.
+ */
+export const createARDateTime = (date: Date, timeStr: string): Date => {
+    const arDateStr = formatInTimeZone(date, AR_TZ, 'yyyy-MM-dd');
+    const [h = '0', m = '0', s = '0'] = String(timeStr).split(':');
+    const hh = h.padStart(2, '0');
+    const mm = m.padStart(2, '0');
+    const ss = s.padStart(2, '0');
+    // Argentina no aplica horario de verano: el offset es -03:00 todo el año.
+    return new Date(`${arDateStr}T${hh}:${mm}:${ss}.000-03:00`);
+};
+
+/**
  * Bounds of a given day, strict to Argentina timezone
  */
 export const getDayBounds = (date: Date): { start: Date, end: Date } => {

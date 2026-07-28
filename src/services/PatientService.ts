@@ -38,6 +38,31 @@ const ALLOWED_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 ];
 
+const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
+
+/**
+ * Valida tamaño y tipo del archivo antes de subirlo.
+ *
+ * El navegador no siempre puede determinar el MIME: en Windows, si la extensión no
+ * tiene una asociación registrada, `file.type` llega vacío o como
+ * 'application/octet-stream'. Validar solo por MIME rechazaba PDFs legítimos, así que
+ * cuando el MIME no es concluyente se cae a la extensión del nombre.
+ */
+function assertUploadableFile(file: File): void {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`El archivo excede el límite de 5MB.`);
+  }
+
+  if (ALLOWED_MIME_TYPES.includes(file.type)) return;
+
+  const mimeIsInconclusive = !file.type || file.type === 'application/octet-stream';
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+  if (mimeIsInconclusive && ALLOWED_EXTENSIONS.includes(extension)) return;
+
+  throw new Error(`Tipo de archivo no permitido. Solo se permiten PDF, JPEG, PNG y Word.`);
+}
+
 // ─── PatientService ───────────────────────────────────────────────────────────
 
 export class PatientService {
@@ -150,12 +175,7 @@ export class PatientService {
   static async uploadConsentimiento(file: File, userId: string): Promise<string> {
     if (!userId) throw new Error('Authentication session missing or expired.');
 
-    if (file.size > MAX_FILE_SIZE) {
-      throw new Error(`El archivo excede el límite de 5MB.`);
-    }
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      throw new Error(`Tipo de archivo no permitido. Solo se permiten PDF, JPEG, PNG y Word.`);
-    }
+    assertUploadableFile(file);
 
     const fileExt = file.name.split('.').pop();
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
@@ -174,13 +194,7 @@ export class PatientService {
   static async uploadClinicalRecord(file: File, userId: string): Promise<string> {
     if (!userId) throw new Error('Authentication session missing or expired.');
 
-    // File Validation
-    if (file.size > MAX_FILE_SIZE) {
-      throw new Error(`El archivo excede el límite de 5MB.`);
-    }
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      throw new Error(`Tipo de archivo no permitido. Solo se permiten PDF, JPEG, PNG y Word.`);
-    }
+    assertUploadableFile(file);
 
     const fileExt = file.name.split('.').pop();
     const fileName = `${crypto.randomUUID()}.${fileExt}`;

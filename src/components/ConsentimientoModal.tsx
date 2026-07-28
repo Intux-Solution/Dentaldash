@@ -41,21 +41,26 @@ export default function ConsentimientoModal({ open, patient, onClose, session }:
   const [localRawUrl, setLocalRawUrl] = useState<string | null>(null);
   const [instantPreviewUrl, setInstantPreviewUrl] = useState<string | null>(null);
   const [previewKind, setPreviewKind] = useState<PreviewKind | null>(null);
+  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
 
+  // Depende del ID, no de la referencia del objeto: tras subir un archivo el provider
+  // vuelve a emitir el paciente varias veces y una dependencia por referencia reseteaba
+  // `localRawUrl` al valor stale, mostrando "No hay consentimiento adjunto" con el
+  // archivo ya guardado. Solo se re-sincroniza al abrir o al cambiar de paciente.
   useEffect(() => {
-    if (patient) {
-      setLocalRawUrl(
-        patient.consentimientoUrl ||
-        patient.consentimiento_url ||
-        ""
-      );
-      setInstantPreviewUrl(prev => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      setPreviewKind(null);
-    }
-  }, [patient, open]);
+    if (!patient) return;
+    setLocalRawUrl(
+      patient.consentimientoUrl ||
+      patient.consentimiento_url ||
+      ""
+    );
+    setInstantPreviewUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setPreviewKind(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient?.id ?? patient?._id, open]);
 
   useEffect(() => {
     let active = true;
@@ -92,6 +97,38 @@ export default function ConsentimientoModal({ open, patient, onClose, session }:
     }
 
     return () => { active = false; };
+  }, [localRawUrl, open, instantPreviewUrl]);
+
+  // Los PDF guardados se previsualizan desde un blob: same-origin en vez de embeber
+  // la URL firmada de Supabase. La firma caduca a la hora y el <iframe> queda en
+  // blanco; el blob no. Ver StorageService.downloadAsObjectUrl.
+  useEffect(() => {
+    const isStoredPdf =
+      open &&
+      !instantPreviewUrl &&
+      typeof localRawUrl === 'string' &&
+      !localRawUrl.startsWith('http') &&
+      localRawUrl.toLowerCase().endsWith('.pdf');
+
+    if (!isStoredPdf) {
+      setPdfObjectUrl(null);
+      return;
+    }
+
+    let active = true;
+    let created: string | null = null;
+
+    StorageService.downloadAsObjectUrl(localRawUrl as string).then(url => {
+      if (!url) return;
+      if (!active) { URL.revokeObjectURL(url); return; }
+      created = url;
+      setPdfObjectUrl(url);
+    });
+
+    return () => {
+      active = false;
+      if (created) URL.revokeObjectURL(created);
+    };
   }, [localRawUrl, open, instantPreviewUrl]);
 
   if (!open || !patient) return null;
@@ -236,7 +273,7 @@ export default function ConsentimientoModal({ open, patient, onClose, session }:
           ) : kind === 'pdf' ? (
             <div className="w-full h-full flex flex-col">
               {/* Desktop: inline iframe */}
-              <iframe title="Consentimiento Informado" src={displayUrl} className="flex-1 w-full border-none hidden sm:block" />
+              <iframe title="Consentimiento Informado" src={pdfObjectUrl ?? displayUrl} className="flex-1 w-full border-none hidden sm:block" />
               {/* Mobile fallback */}
               <div className="flex flex-col items-center justify-center gap-4 p-6 sm:hidden flex-1">
                 <ShieldCheck size={64} strokeWidth={1} className="text-orange-500" />

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
 import { z } from "https://esm.sh/zod@3.23.8";
+import { notifyAppointmentCreated } from "../_shared/appointment-notifications.ts";
 
 // Allowlist de origenes permitidos (CORS). Se configura via APP_URL (coma-separada).
 // Origen de produccion conocido + los configurados en APP_URL (con/sin www, etc.)
@@ -469,6 +470,10 @@ serve(async (req) => {
       } catch (e) {
         console.warn("public-booking: Google Calendar sync failed", e);
       }
+
+      // Avisar por email al paciente y al dentista. Hasta ahora una reserva desde el
+      // link publico no notificaba a nadie. No bloquea la respuesta ni puede fallarla.
+      await notifyAppointmentCreated(supabase, result.id);
 
       return json({ ok: true, appointment_id: result.id });
     }
