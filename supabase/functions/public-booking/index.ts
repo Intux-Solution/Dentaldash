@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
 import { z } from "https://esm.sh/zod@3.23.8";
 import { notifyAppointmentCreated } from "../_shared/appointment-notifications.ts";
+import { getAccessTokenForUser, getBusyIntervals } from "../_shared/google-calendar.ts";
 
 // Allowlist de origenes permitidos (CORS). Se configura via APP_URL (coma-separada).
 // Origen de produccion conocido + los configurados en APP_URL (con/sin www, etc.)
@@ -291,6 +292,20 @@ serve(async (req) => {
 
       if (apptErr) throw apptErr;
 
+      // Restar también lo ocupado en el Google Calendar del dentista (mismo patrón
+      // que chat-webhook, reusando el módulo compartido en vez de reimplementar el
+      // refresh de token). Best-effort: si falla, no bloquea la respuesta.
+      let googleBusy: { start: string; end: string }[] = [];
+      const tokenResult = await getAccessTokenForUser(supabase, user_id);
+      if ("token" in tokenResult) {
+        const busyResult = await getBusyIntervals(tokenResult.token, dayStart.toISOString(), dayEnd.toISOString());
+        if ("busy" in busyResult) {
+          googleBusy = busyResult.busy;
+        } else {
+          console.warn("public-booking get_slots: no se pudo leer Google Calendar", busyResult.detail);
+        }
+      }
+
       const nowTime = new Date();
       const minTime = addMinutes(nowTime, 30);
       const slots: string[] = [];
@@ -325,7 +340,13 @@ serve(async (req) => {
             return slotStart < aEnd && slotEnd > aStart;
           });
 
-          if (!isOccupied) {
+          const isOccupiedGoogle = googleBusy.some((b) => {
+            const bStart = new Date(b.start);
+            const bEnd = new Date(b.end);
+            return slotStart < bEnd && slotEnd > bStart;
+          });
+
+          if (!isOccupied && !isOccupiedGoogle) {
             slots.push(formatTimeAR(slotStart));
           }
 
@@ -432,6 +453,34 @@ serve(async (req) => {
 
       const startTime = new Date(Date.UTC(yStr, mStr - 1, dStr, tH, tM, 0) - AR_OFFSET_MS);
       const endTime = addMinutes(startTime, durationMins);
+
+      // Defensa en profundidad: revalidar que el horario caiga dentro de un bloque de
+      // `schedules` activo. El front ya filtra esto vía get_slots, pero nada impide
+      // invocar create_appointment directo con un horario arbitrario — el RPC solo
+      // chequea overlap contra otros turnos, no horario laboral.
+      const localNoonForDay = new Date(Date.UTC(yStr, mStr - 1, dStr, 12, 0, 0) - AR_OFFSET_MS);
+      const dayOfWeek = toARDate(localNoonForDay).getUTCDay();
+
+      const { data: daySchedules, error: schedErr2 } = await supabase
+        .from("schedules")
+        .select("start_time, end_time")
+        .eq("user_id", user_id)
+        .eq("day_of_week", dayOfWeek)
+        .eq("is_active", true);
+
+      if (schedErr2) throw schedErr2;
+
+      const fitsSchedule = (daySchedules ?? []).some((sched: any) => {
+        const [sH, sM] = sched.start_time.split(":").map(Number);
+        const [eH, eM] = sched.end_time.split(":").map(Number);
+        const rangeStart = new Date(Date.UTC(yStr, mStr - 1, dStr, sH, sM, 0) - AR_OFFSET_MS);
+        const rangeEnd = new Date(Date.UTC(yStr, mStr - 1, dStr, eH, eM, 0) - AR_OFFSET_MS);
+        return startTime >= rangeStart && endTime <= rangeEnd;
+      });
+
+      if (!fitsSchedule) {
+        return jsonErr("El horario solicitado está fuera del horario de atención.", 400);
+      }
 
       // Call the public RPC
       const { data: rpcResult, error: rpcErr } = await supabase.rpc(

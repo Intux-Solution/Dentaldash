@@ -89,24 +89,27 @@ serve(async (req) => {
     const resourceId: string | null =
       payload?.data?.id ?? url.searchParams.get("data.id") ?? null;
 
-    // 1) Registrar SIEMPRE el evento crudo para auditoria (antes de cualquier validacion)
+    // 1) Validar firma SIEMPRE, antes de tocar la base. Fail-closed: si el secreto
+    //    no está configurado, no hay forma de autenticar al llamante, así que se
+    //    rechaza todo tráfico (503) en vez de aceptarlo sin validar.
+    if (!MP_WEBHOOK_SECRET) {
+      console.error("mp-webhook: MP_WEBHOOK_SECRET no configurado. Rechazando por seguridad.");
+      return new Response("Service misconfigured", { status: 503 });
+    }
+    const validSig = await verifySignature(req, url, MP_WEBHOOK_SECRET);
+    if (!validSig) {
+      console.warn("Webhook signature invalid or missing. Rejecting request.", { topic, resourceId });
+      return new Response("Invalid signature", { status: 401 });
+    }
+
+    // 2) Registrar el evento crudo para auditoria (ya autenticado): antes cualquiera
+    //    podía spamear payment_events sin firma válida.
     await supabase.from("payment_events").insert({
       event_type: topic,
       mp_resource_id: resourceId,
       payload,
       processed: false,
     });
-
-    // 2) Validacion de firma (BLOQUEANTE si MP_WEBHOOK_SECRET esta configurado).
-    //    El evento crudo ya quedo registrado arriba para auditoria; si la firma es
-    //    invalida o falta, rechazamos sin procesar.
-    if (MP_WEBHOOK_SECRET) {
-      const validSig = await verifySignature(req, url, MP_WEBHOOK_SECRET);
-      if (!validSig) {
-        console.warn("Webhook signature invalid or missing. Rejecting request.");
-        return new Response("Invalid signature", { status: 401 });
-      }
-    }
 
     // 3) Resolver el preapproval (suscripcion) afectado segun el topic
     let preapprovalId: string | null = null;

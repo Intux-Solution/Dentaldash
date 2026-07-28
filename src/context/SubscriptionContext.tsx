@@ -11,6 +11,7 @@ interface SubscriptionContextType {
   subscription: Subscription | null;
   permissions: FeaturePermission[];
   isLoading: boolean;
+  loadError: boolean;
   isActive: boolean;
   isTrial: boolean;
   isFree: boolean;
@@ -25,6 +26,7 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   subscription: null,
   permissions: [],
   isLoading: true,
+  loadError: false,
   isActive: false,
   isTrial: false,
   isFree: false,
@@ -40,9 +42,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [permissions, setPermissions] = useState<FeaturePermission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async (userId: string) => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const [sub, perms] = await Promise.all([
         fetchSubscription(userId),
@@ -52,6 +56,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setPermissions(perms);
     } catch (err) {
       console.error('SubscriptionContext load error:', err);
+      // Falla transitoria (red, 5xx): no confundir con "no tiene suscripción".
+      // ProtectedRoute usa este flag para no expulsar a un usuario con plan
+      // activo por un error de carga puntual.
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -64,6 +72,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setSubscription(null);
       setPermissions([]);
       setIsLoading(false);
+      setLoadError(false);
     }
   }, [session?.user?.id, load]);
 
@@ -96,6 +105,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         subscription,
         permissions,
         isLoading,
+        loadError,
         isActive,
         isTrial,
         isFree,

@@ -70,3 +70,17 @@ export const getDayBounds = (date: Date): { start: Date, end: Date } => {
     const end = new Date(`${arDateStr}T23:59:59.999-03:00`);
     return { start, end };
 };
+
+/**
+ * Formatea un Date a "YYYY-MM-DD" usando los componentes LOCALES del objeto
+ * (año/mes/día del entorno de ejecución), no UTC. Para fechas construidas con
+ * `new Date(base); d.setDate(base.getDate() + i)` esto es lo correcto: el
+ * objeto ya representa un día de pared, y `toISOString()` lo corre a UTC, lo
+ * que cerca de medianoche en Argentina puede devolver el día equivocado.
+ */
+export const toLocalYMD = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};

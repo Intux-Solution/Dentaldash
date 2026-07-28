@@ -58,6 +58,25 @@ describe('ExportService.exportPatientsCSV', () => {
         // Las comillas dobles deben estar duplicadas (escape CSV)
         expect(text).toContain('""Nombre""');
     });
+
+    it('debe neutralizar celdas que empiezan con caracteres de fórmula (CSV injection)', async () => {
+        const patients = [
+            { nombre: '=1+1', dni: '111' },
+            { nombre: 'Normal', dni: '222', obraSocial: '+cmd|calc' },
+            { nombre: 'Normal2', dni: '333', antecedentes: '@SUM(A1)' },
+            { nombre: 'Normal3', dni: '444', antecedentes: '-2+3' },
+        ];
+
+        ExportService.exportPatientsCSV(patients);
+
+        const blob: Blob = createObjectURLMock.mock.calls[0][0];
+        const text = await blob.text();
+
+        expect(text).toContain("'=1+1");
+        expect(text).toContain("'+cmd|calc");
+        expect(text).toContain("'@SUM(A1)");
+        expect(text).toContain("'-2+3");
+    });
 });
 
 describe('ExportService.exportAppointmentsCSV', () => {

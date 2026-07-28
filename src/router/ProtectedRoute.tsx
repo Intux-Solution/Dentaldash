@@ -10,7 +10,7 @@ const SUBSCRIPTION_EXEMPT = ['/suscripcion', '/suscripcion/exito', '/suscripcion
 export default function ProtectedRoute() {
     const location = useLocation();
     const { session, isLoading: authLoading } = useAuth();
-    const { isAdmin, isExpired, isLoading: subLoading, subscription } = useSubscription();
+    const { isAdmin, isExpired, isLoading: subLoading, subscription, loadError } = useSubscription();
 
     if (authLoading || subLoading) {
         return (
@@ -33,6 +33,7 @@ export default function ProtectedRoute() {
     const isExempt = SUBSCRIPTION_EXEMPT.some((path) => location.pathname.startsWith(path));
     const isBlocked =
         !isExempt &&
+        !loadError &&
         (subscription === null || isExpired || subscription?.status === 'cancelled');
 
     if (isBlocked) {

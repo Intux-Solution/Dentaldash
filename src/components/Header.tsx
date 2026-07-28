@@ -26,8 +26,6 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
     role: 'Odontólogo'
   });
 
-  if (!session?.user) return null;
-
   useEffect(() => {
     if (!session?.user) return;
 
@@ -107,6 +105,8 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
     setShowUserMenu(false);
     if (onLogout) onLogout();
   };
+
+  if (!session?.user) return null;
 
   return (
     <>

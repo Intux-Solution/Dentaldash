@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import { combineDateTimeToISO } from '../utils/helpers';
+import { toLocalYMD } from '../utils/dateUtils';
 import { message } from 'antd';
 import { CreateAppointmentSchema, CreateAppointmentPayload } from '../schemas/appointment.schema';
 import { useTurnos } from './useTurnos';
@@ -193,13 +194,6 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
 
         const dates = [];
         const today = new Date();
-
-        const toLocalYMD = (d: Date) => {
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
-        };
 
         // Incluir hoy y los próximos días
         for (let i = 0; i < 14; i++) {

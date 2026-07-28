@@ -1,5 +1,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0"
+import { getAccessTokenForUser } from "../_shared/google-calendar.ts"
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -11,64 +13,43 @@ serve(async (req) => {
         return new Response('ok', { headers: corsHeaders })
     }
 
+    const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' }
+
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')?.trim()
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim()
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+        return new Response(JSON.stringify({ error: 'Server misconfiguration' }), { headers: jsonHeaders, status: 500 })
+    }
+
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+        return new Response(JSON.stringify({ error: 'Missing Authorization header' }), { headers: jsonHeaders, status: 401 })
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
     try {
-        const { refresh_token } = await req.json()
-
-        if (!refresh_token) {
-            return new Response(
-                JSON.stringify({ error: 'Missing refresh_token' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-            )
+        const token = authHeader.replace(/^Bearer\s+/, '')
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+        if (authError || !user) {
+            return new Response(JSON.stringify({ error: 'Unauthorized / Invalid Token' }), { headers: jsonHeaders, status: 401 })
         }
 
-        const clientId = Deno.env.get('GOOGLE_CLIENT_ID')
-        const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')
-
-        if (!clientId || !clientSecret) {
-            console.error("Missing Google Credentials in Env")
-            return new Response(
-                JSON.stringify({ error: 'Server misconfiguration (Missing Credentials)' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-            )
+        // El refresh token se resuelve server-side por user.id (profiles.google_refresh_token),
+        // NUNCA se acepta el que mande el cliente: antes cualquier usuario autenticado podía
+        // canjear el refresh_token de OTRO usuario simplemente mandándolo en el body.
+        const result = await getAccessTokenForUser(supabase, user.id)
+        if ('error' in result) {
+            const status = result.error === 'not_configured' ? 500 : 401
+            return new Response(JSON.stringify({ error: result.error, details: result.detail }), { headers: jsonHeaders, status })
         }
 
-        const tokenUrl = 'https://oauth2.googleapis.com/token'
-        const body = new URLSearchParams({
-            client_id: clientId,
-            client_secret: clientSecret,
-            refresh_token: refresh_token,
-            grant_type: 'refresh_token',
-        })
-
-        console.log("Requesting new access token from Google...")
-
-        const response = await fetch(tokenUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-            console.error("Google Token Error:", data)
-            return new Response(
-                JSON.stringify({ error: data.error || 'Failed to refresh token', details: data }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: response.status }
-            )
-        }
-
-        // Return the new access token and expiry
-        return new Response(
-            JSON.stringify(data),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        )
-
+        return new Response(JSON.stringify({ access_token: result.token }), { headers: jsonHeaders, status: 200 })
     } catch (error) {
-        console.error("RefreshToken Function Error:", error.message)
+        console.error("google-token-refresh error:", error.message)
         return new Response(
             JSON.stringify({ error: error.message }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+            { headers: jsonHeaders, status: 500 }
         )
     }
 })

@@ -125,9 +125,10 @@ export class GoogleCalendarService {
 
             devLog("[GoogleCalendarService] Invoking google-token-refresh edge function...");
 
-            const { data, error } = await supabase.functions.invoke('google-token-refresh', {
-                body: { refresh_token: refreshToken }
-            });
+            // El JWT viaja automático en el invoke; el refresh token se resuelve
+            // server-side por user.id (ver google-token-refresh/index.ts) — ya no
+            // se manda en el body, evita usar la app como proxy OAuth de tokens ajenos.
+            const { data, error } = await supabase.functions.invoke('google-token-refresh');
 
             if (error) {
                 // supabase-js expone el status en `context.status` (FunctionsHttpError);

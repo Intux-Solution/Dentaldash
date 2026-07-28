@@ -63,11 +63,12 @@ function isRateLimited(jid: string): boolean {
 const toolsDefinition = [
     {
         name: "get_available_slots",
-        description: "Consulta los turnos disponibles para una fecha específica. Verifica horarios de atención y turnos ocupados.",
+        description: "Consulta los turnos disponibles para una fecha específica y un servicio determinado. Verifica horarios de atención, turnos ocupados y la duración real del servicio.",
         parameters: {
             type: "object",
             properties: {
-                date: { type: "string", description: "La fecha a consultar (formato YYYY-MM-DD)" }
+                date: { type: "string", description: "La fecha a consultar (formato YYYY-MM-DD)" },
+                appointment_type: { type: "string", description: "Servicio o tratamiento a agendar (ej. Limpieza, Ortodoncia). Usa la descripción exacta de los Servicios; determina la duración real del turno si ya se conoce." }
             },
             required: ["date"]
         }
@@ -336,7 +337,7 @@ serve(async (req) => {
                     .reverse();
 
                 // Tool Implementations
-                const getAvailableSlots = async (dateStr: string) => {
+                const getAvailableSlots = async (dateStr: string, appointmentType?: string) => {
                     try {
                         const [yStr, mStr, dStr] = dateStr.split('-').map(Number);
 
@@ -391,7 +392,14 @@ serve(async (req) => {
 
                         // 4. Generate slots (rangos de cada bloque horario en hora argentina -> UTC)
                         const slotsArray: string[] = [];
-                        const slotDuration = 30; // minutes
+                        // Duración real del servicio (mismo matching que createAppointment, más
+                        // abajo); si no se especifica servicio o no matchea ninguno, cae a 30 min.
+                        const services = Array.isArray(profile?.services) ? profile.services : [];
+                        const matchedService = services.find((s: any) =>
+                            typeof s?.name === 'string' &&
+                            s.name.trim().toLowerCase() === (appointmentType || '').trim().toLowerCase()
+                        );
+                        const slotDuration = Number(matchedService?.duration) > 0 ? Number(matchedService.duration) : 30;
 
                         for (const schedule of daySchedules) {
                             const [sH, sM] = schedule.start_time.split(':').map(Number);
@@ -728,7 +736,7 @@ ${contextInfo}`;
                                 console.log(`Executing tool ${fnName} with args:`, fnArgs);
 
                                 if (fnName === "get_available_slots") {
-                                    fnResult = await getAvailableSlots(fnArgs.date);
+                                    fnResult = await getAvailableSlots(fnArgs.date, fnArgs.appointment_type);
                                 } else if (fnName === "create_appointment") {
                                     fnResult = await createAppointment(fnArgs.date, fnArgs.time, fnArgs.appointment_type || "Consulta General", fnArgs.patient_name, fnArgs.dni, fnArgs.obra_social, fnArgs.email, fnArgs.notes, fnArgs.telefono);
                                 } else {

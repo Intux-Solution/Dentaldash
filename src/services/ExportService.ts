@@ -1,7 +1,16 @@
 export class ExportService {
+  // Prefija con comilla simple las celdas que Excel/Sheets interpretarían como
+  // inicio de fórmula (CSV/Formula Injection). El prefijo desactiva la fórmula
+  // sin alterar el valor visible al abrir el archivo. Necesario porque parte
+  // de los datos exportados viene de terceros no confiables (booking público,
+  // bot de WhatsApp).
+  private static sanitizeCell(value: string): string {
+    return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  }
+
   private static downloadCsv(filename: string, rows: string[][]): void {
     const csv = rows
-      .map(r => r.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+      .map(r => r.map(cell => `"${this.sanitizeCell(String(cell ?? '')).replace(/"/g, '""')}"`).join(','))
       .join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

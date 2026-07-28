@@ -5,6 +5,7 @@ import { AppointmentService } from '../services/AppointmentService';
 import { PatientService } from '../services/PatientService';
 import { formatInTimeZone } from 'date-fns-tz';
 import { combineDateTimeToISO } from '../utils/helpers';
+import { toLocalYMD } from '../utils/dateUtils';
 import { message } from 'antd';
 import { UpdateAppointmentSchema, UpdateAppointmentPayload } from '../schemas/appointment.schema';
 import { useAuth } from '../context/AuthContext';
@@ -251,7 +252,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             const d = new Date(today);
             d.setDate(today.getDate() + i);
             const isWorkDay = activeWorkingDays.includes(d.getDay());
-            const value = d.toISOString().split('T')[0];
+            const value = toLocalYMD(d);
             if (isWorkDay || value === selectedFecha) {
                 dates.push({
                     value,

@@ -63,7 +63,18 @@ serve(async (req) => {
             return new Response(JSON.stringify({ error: "Forbidden: You don't own this profile." }), { status: 403, headers: corsHeaders });
         }
 
-        const instanceName = `instance_${tenant_id.split('-')[0]}`
+        // Reusar el nombre ya persistido: instancias creadas antes de este fix usaban
+        // solo los primeros 8 caracteres del UUID (riesgo de colisión entre tenants
+        // cuyo UUID comparte ese prefijo). Sólo se genera un nombre NUEVO —con el UUID
+        // completo, sin guiones— cuando el tenant todavía no tiene ninguna instancia
+        // guardada; `chat-webhook` hace el lookup del tenant por igualdad contra
+        // `profiles.whatsapp_instance`, así que esto es retrocompatible sin migrar nada.
+        const { data: tenantProfile } = await supabase
+            .from('profiles')
+            .select('whatsapp_instance')
+            .eq('id', tenant_id)
+            .maybeSingle();
+        const instanceName = tenantProfile?.whatsapp_instance || `instance_${tenant_id.replace(/-/g, '')}`
         const baseUrl = sanitizeUrl(EVOLUTION_URL_RAW);
         const webhookUrl = `${SUPABASE_URL}/functions/v1/chat-webhook`;
 

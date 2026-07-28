@@ -448,7 +448,7 @@ export const combineDateTimeToISO = (
 
 ---
 
-## [MEDIO] Fechas del selector en useEditTurnoModal corridas un día por usar UTC
+## [HECHO - MEDIO] Fechas del selector en useEditTurnoModal corridas un día por usar UTC
 
 - **Ubicación:** `src/hooks/useEditTurnoModal.ts` (Línea 245 a 263)
 - **Categoría:** Bug Lógico
@@ -482,8 +482,9 @@ for (let i = 0; i <= 14; i++) {
 
 ---
 
-## [MEDIO] public-booking permite crear turnos fuera del horario laboral y no consulta Google Calendar
+## [HECHO - MEDIO] public-booking permite crear turnos fuera del horario laboral y no consulta Google Calendar
 
+- **Actualización 2026-07-28:** al revisar el código, `get_slots` ya filtraba correctamente por `schedules`/`is_active` (ese sub-punto no aplicaba más). Se corrigieron los dos huecos reales: `create_appointment` ahora revalida `schedules` antes de llamar al RPC (defensa en profundidad, ya que el RPC solo chequea overlap), y `get_slots` resta los intervalos ocupados de Google Calendar reutilizando `getAccessTokenForUser`/`getBusyIntervals` de `_shared/google-calendar.ts` (sin reimplementar el refresh de token).
 - **Ubicación:** `supabase/functions/public-booking/index.ts` (Línea 428 a 450, y 254 a 337)
 - **Categoría:** Seguridad / Bug Lógico
 - **Descripción del Problema:** Dos huecos en el endpoint público (sin auth):
@@ -549,7 +550,7 @@ Para el punto 2, en `get_slots` reutilizar `getBusyIntervals` de `_shared/google
 
 ---
 
-## [MEDIO] google-token-refresh es un proxy OAuth abierto: acepta cualquier refresh_token
+## [HECHO - MEDIO] google-token-refresh es un proxy OAuth abierto: acepta cualquier refresh_token
 
 - **Ubicación:** `supabase/functions/google-token-refresh/index.ts` (Línea 9 a 49)
 - **Categoría:** Seguridad
@@ -687,8 +688,9 @@ En el frontend, `GoogleCalendarService.refreshGoogleToken` deja de enviar `body:
 
 ---
 
-## [MEDIO] Webhooks fail-open: sin secreto configurado quedan totalmente abiertos
+## [PARCIAL - MEDIO] Webhooks fail-open: sin secreto configurado quedan totalmente abiertos
 
+- **Actualización 2026-07-28:** `mp-webhook` ya quedó fail-closed (rechaza con 503 si `MP_WEBHOOK_SECRET` no está configurada, y valida la firma HMAC antes de tocar la base) — su firma no depende de que un tercero envíe un header custom, así que no había riesgo de romper nada. `chat-webhook` **queda sin tocar deliberadamente**: valida un header `x-webhook-secret` que Evolution API hoy no envía (`whatsapp-manager.setWebhook` no lo configura en el payload del webhook, y no hay evidencia de que Evolution v2.3.0 soporte headers custom ahí). Forzar fail-closed ahí apagaría el bot de WhatsApp de todos los tenants en producción. Queda pendiente: confirmar si Evolution soporta headers custom en el webhook (y agregarlo a `setWebhook` antes de activar fail-closed), o como alternativa pasar el secreto como query param en la `webhookUrl` que configura `whatsapp-manager` y leerlo desde la URL en `chat-webhook`.
 - **Ubicación:** `supabase/functions/chat-webhook/index.ts` (Línea 82 a 89) y `supabase/functions/mp-webhook/index.ts` (Línea 100 a 109)
 - **Categoría:** Seguridad
 - **Descripción del Problema:** Ambos webhooks validan el secreto **solo si la variable de entorno está configurada**. Si `WEBHOOK_SECRET` o `MP_WEBHOOK_SECRET` faltan (deploy nuevo, entorno clonado, secreto borrado por error), el código sigue funcionando sin ninguna autenticación: en `chat-webhook` un atacante que conozca la URL puede forjar mensajes de WhatsApp para cualquier instancia (crear pacientes y turnos en cualquier tenant, hacer gastar tokens de OpenAI, enviar mensajes salientes por Evolution API); en `mp-webhook` puede insertar eventos basura. Un control de seguridad que degrada en silencio es fail-open.
@@ -741,7 +743,7 @@ Nota: `whatsapp-manager` debe enviar el header `x-webhook-secret` en la configur
 
 ---
 
-## [MEDIO] Awaits de Supabase dentro del callback de onAuthStateChange (riesgo de deadlock)
+## [HECHO - MEDIO] Awaits de Supabase dentro del callback de onAuthStateChange (riesgo de deadlock)
 
 - **Ubicación:** `src/context/AuthContext.tsx` (Línea 62 a 76, callback en 27 a 60)
 - **Categoría:** Bug Lógico (cuelgue de la app)
@@ -773,8 +775,9 @@ const {
 
 ---
 
-## [MEDIO] react-router-dom con vulnerabilidades conocidas en runtime (open redirect / XSS)
+## [MEDIO - RIESGO RESIDUAL ACEPTADO] react-router-dom con vulnerabilidades conocidas en runtime (open redirect / XSS)
 
+- **Actualización 2026-07-28:** se actualizó a `6.30.4` (última patch de la rama 6.x, vía `npm update react-router-dom react-router`). `npm audit` confirma que **no existe ningún parche dentro de v6** para el advisory activo (`react-router`/`react-router-dom`, rango `6.0.0 - 7.17.0`, `fixAvailable` apunta a `react-router-dom@7.18.1`, cambio de major). Se revisó el código (`grep` de `navigate(`, `Link to=`, `location.state`) y no hay ningún uso de `location.state.from` para redirigir ni navegación con paths controlados por el usuario — hoy no hay vector de explotación identificado. Se acepta el riesgo residual del CVE y se deja la migración a React Router v7 (22 archivos afectados, cambio de superficie amplia) como epic separado, fuera de este batch de fixes.
 - **Ubicación:** `package.json` (Línea 21)
 - **Categoría:** Seguridad (dependencia vulnerable)
 - **Descripción del Problema:** `npm audit` reporta advisories **moderate** para `react-router` / `react-router-dom` en la versión instalada (6.30.3): open redirect vía URLs protocol-relative (`//evil.com`), bypass con backslash en `<Link>`/`useNavigate` (CVE-2025-68470) y open redirect que deriva en XSS. A diferencia del resto de los hallazgos de `npm audit` (todos de toolchain de desarrollo), esta librería corre en producción en el navegador del usuario. La app usa `Navigate`/`useNavigate` con datos de `location.state.from`, el vector clásico de estos advisories.
@@ -794,7 +797,7 @@ Y ejecutar `npm update react-router-dom react-router` (o `npm audit fix`), verif
 
 ---
 
-## [MEDIO] El bot de WhatsApp calcula disponibilidad con duración fija de 30 min
+## [HECHO - MEDIO] El bot de WhatsApp calcula disponibilidad con duración fija de 30 min
 
 - **Ubicación:** `supabase/functions/chat-webhook/index.ts` (Línea 373 a 374, definición de tool en 46 a 57)
 - **Categoría:** Bug Lógico
@@ -841,7 +844,7 @@ Y en el dispatcher: `fnResult = await getAvailableSlots(fnArgs.date, fnArgs.appo
 
 ---
 
-## [BAJO] Header.tsx: return condicional antes de useEffect (violación de las reglas de hooks)
+## [HECHO - BAJO] Header.tsx: return condicional antes de useEffect (violación de las reglas de hooks)
 
 - **Ubicación:** `src/components/Header.tsx` (Línea 29 a 31)
 - **Categoría:** Crash (latente)
@@ -873,7 +876,7 @@ Y en el dispatcher: `fnResult = await getAvailableSlots(fnArgs.date, fnArgs.appo
 
 ---
 
-## [BAJO] ProtectedRoute expulsa a usuarios pagos si falla la carga de la suscripción
+## [HECHO - BAJO] ProtectedRoute expulsa a usuarios pagos si falla la carga de la suscripción
 
 - **Ubicación:** `src/router/ProtectedRoute.tsx` (Línea 33 a 39) y `src/context/SubscriptionContext.tsx` (Línea 44 a 58)
 - **Categoría:** Bug Lógico
@@ -929,7 +932,7 @@ const isBlocked =
 
 ---
 
-## [BAJO] Reemplazo de archivo clínico: borra el archivo viejo antes de actualizar la DB
+## [HECHO - BAJO] Reemplazo de archivo clínico: borra el archivo viejo antes de actualizar la DB
 
 - **Ubicación:** `src/components/ClinicalRecordModal.tsx` (Línea 164 a 184) y `src/components/ConsentimientoModal.tsx` (Línea 157 a 175)
 - **Categoría:** Bug Lógico (integridad de datos)
@@ -997,7 +1000,7 @@ if (
 
 ---
 
-## [BAJO] Inyección de fórmulas CSV en las exportaciones (Excel/Sheets)
+## [HECHO - BAJO] Inyección de fórmulas CSV en las exportaciones (Excel/Sheets)
 
 - **Ubicación:** `src/services/ExportService.ts` (Línea 2 a 13)
 - **Categoría:** Seguridad
@@ -1027,7 +1030,7 @@ private static downloadCsv(filename: string, rows: string[][]): void {
 
 ---
 
-## [BAJO] mp-webhook inserta en payment_events antes de validar la firma
+## [HECHO - BAJO] mp-webhook inserta en payment_events antes de validar la firma
 
 - **Ubicación:** `supabase/functions/mp-webhook/index.ts` (Línea 92 a 109)
 - **Categoría:** Seguridad (DoS de tabla)
@@ -1078,8 +1081,9 @@ await supabase.from("payment_events").insert({
 
 ---
 
-## [BAJO] Protección de contraseñas filtradas deshabilitada en Supabase Auth
+## [PENDIENTE - BAJO] Protección de contraseñas filtradas deshabilitada en Supabase Auth
 
+- **Nota:** no requiere cambios de código, solo activar la opción en el Supabase Dashboard (ver "Solución Propuesta" abajo). Sigue pendiente porque es una acción manual fuera del alcance de este batch de fixes de código — no se puede automatizar desde el repo.
 - **Ubicación:** Supabase Dashboard → Authentication → Passwords (configuración, no código)
 - **Categoría:** Seguridad
 - **Descripción del Problema:** El advisor de seguridad del proyecto de producción reporta `auth_leaked_password_protection` deshabilitado: Supabase puede rechazar contraseñas presentes en filtraciones conocidas (HaveIBeenPwned) y hoy no lo hace. El login por email/password acepta contraseñas comprometidas de 8+ caracteres.
@@ -1100,7 +1104,7 @@ activar "Prevent use of leaked passwords".
 
 ---
 
-## [BAJO] Nombre de instancia de WhatsApp derivado de solo 8 caracteres del UUID
+## [HECHO - BAJO] Nombre de instancia de WhatsApp derivado de solo 8 caracteres del UUID
 
 - **Ubicación:** `supabase/functions/whatsapp-manager/index.ts` (Línea 66)
 - **Categoría:** Bug Lógico (colisión multitenant)

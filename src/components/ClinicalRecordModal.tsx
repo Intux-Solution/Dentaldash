@@ -166,6 +166,17 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       // while we are deleting it or uploading the new one
       setLocalRawUrl(null);
 
+      const { error: updateError } = await supabase
+        .from('patients')
+        .update({ historia_clinica_url: newPath })
+        .eq('id', patient.id)
+        .eq('user_id', userId);
+
+      if (updateError) throw new Error(`Error al guardar en base de datos: ${updateError.message}`);
+
+      // El archivo viejo se borra DESPUÉS de confirmar el update: si el delete falla
+      // (o el proceso se corta acá) el registro sigue apuntando a un archivo válido,
+      // en vez de quedar sin archivo por haber borrado el anterior antes de tiempo.
       if (oldUrl && !oldUrl.startsWith('http') && oldUrl !== 'Sin archivo' && oldUrl !== '-') {
         try {
           await StorageService.deleteFile(oldUrl, 'clinical-records');
@@ -174,14 +185,6 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
           console.warn('Could not delete old clinical record file, proceeding anyway:', deleteErr);
         }
       }
-
-      const { error: updateError } = await supabase
-        .from('patients')
-        .update({ historia_clinica_url: newPath })
-        .eq('id', patient.id)
-        .eq('user_id', userId);
-
-      if (updateError) throw new Error(`Error al guardar en base de datos: ${updateError.message}`);
 
       // Descartar el preview local ANTES de fijar el path real: así el efecto pide
       // la URL firmada (con extensión real) en vez de quedarse pegado al blob:,
