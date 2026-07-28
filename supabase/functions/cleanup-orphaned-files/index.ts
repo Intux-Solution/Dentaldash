@@ -13,6 +13,16 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  // Autorización real: verify_jwt acepta la anon key (pública), así que se exige
+  // además un secreto que solo conocen el cron job y el operador.
+  const CLEANUP_SECRET = Deno.env.get('CLEANUP_SECRET')?.trim();
+  if (!CLEANUP_SECRET || req.headers.get('x-cleanup-secret') !== CLEANUP_SECRET) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     // 1. Initialize Supabase client
     const supabaseClient = createClient(
@@ -30,14 +40,18 @@ serve(async (req) => {
     } catch (_e) {
       // Body might be empty, that's fine
     }
+    // Piso duro: nunca borrar archivos con menos de 7 días de antigüedad,
+    // para no pisar subidas en tránsito (el upload ocurre antes del INSERT en DB).
+    if (!Number.isFinite(olderThanDays) || olderThanDays < 7) {
+      olderThanDays = 7;
+    }
 
     console.log(`Starting orphaned files cleanup. Target: older than ${olderThanDays} days`);
 
     // 2. Get all clinical_records_urls currently in use by patients
     const { data: patients, error: patientsError } = await supabaseClient
       .from('patients')
-      .select('historia_clinica_url')
-      .not('historia_clinica_url', 'is', null)
+      .select('historia_clinica_url, consentimiento_url')
 
     if (patientsError) throw patientsError
 
@@ -48,7 +62,7 @@ serve(async (req) => {
 
     const activeFilePaths = new Set(
       patients
-        .map(p => p.historia_clinica_url)
+        .flatMap(p => [p.historia_clinica_url, p.consentimiento_url])
         .filter(Boolean)
         .map(url => url.startsWith(baseUrl) ? url.replace(baseUrl, '') : url) // Remove base URL if present
         .map(url => url.split('?')[0]) // Remove query params if any

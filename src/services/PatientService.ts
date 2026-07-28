@@ -90,7 +90,9 @@ export class PatientService {
       .select('*', { count: 'exact' });
 
     if (searchTerm.trim()) {
-      query = query.or(`nombre.ilike.%${searchTerm.trim()}%,dni.ilike.%${searchTerm.trim()}%`);
+      // Comillas dobles: dentro de "" las comas y paréntesis no son sintaxis PostgREST.
+      const safe = searchTerm.trim().replace(/["\\]/g, '');
+      query = query.or(`nombre.ilike."%${safe}%",dni.ilike."%${safe}%"`);
     }
 
     if (statusFilter !== 'Todos') {
@@ -118,12 +120,14 @@ export class PatientService {
   }
 
   static async searchPatients(term: string): Promise<Patient[]> {
+    // Comillas dobles: dentro de "" las comas y paréntesis no son sintaxis PostgREST.
+    const safe = term.trim().replace(/["\\]/g, '');
     const { data, error } = await supabase
       .from('patients')
       .select('*')
       .is('deleted_at', null)
       .neq('estado', 'Inactivo')
-      .or(`nombre.ilike.%${term}%,dni.ilike.%${term}%`)
+      .or(`nombre.ilike."%${safe}%",dni.ilike."%${safe}%"`)
       .order('created_at', { ascending: false })
       .limit(100);
 
@@ -285,7 +289,7 @@ export class PatientService {
           try {
             const { data: searchData, error: searchError } = await supabase
               .from('patients')
-              .select('id')
+              .select('id, deleted_at, estado, historia_clinica_url')
               .eq('dni', newPatient.dni)
               .maybeSingle();
 
@@ -310,11 +314,19 @@ export class PatientService {
       let response;
 
       if (existingPatient) {
-        // Restauración (Update)
+        const isDeleted = existingPatient.deleted_at !== null || existingPatient.estado === 'Inactivo';
+
+        if (!isDeleted) {
+          throw new Error(`Ya existe un paciente activo con el DNI ${newPatient.dni}. Editá su ficha en lugar de crear uno nuevo.`);
+        }
+
+        // Restauración (Update) de un paciente soft-deleted
         response = await supabase
           .from('patients')
           .update({
             ...newPatient,
+            // No pisar la historia clínica previa si el alta no adjuntó archivo nuevo
+            historia_clinica_url: historiaClinicaPath ?? existingPatient.historia_clinica_url,
             estado: 'Activo',
             deleted_at: null
           })

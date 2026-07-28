@@ -1,4 +1,6 @@
 // src/utils/helpers.ts
+import { parseLocalYMD, createARDateTime } from './dateUtils';
+
 export const initials = (name = '') =>
   name.split(' ').map((w: string) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
 
@@ -22,8 +24,8 @@ export const calculateAge = (fechaNacimiento: string | undefined | null): number
 
 export const combineDateTimeToISO = (dateStr: string, timeStr: string): string | null => {
   if (!dateStr || !timeStr) return null;
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const [hour, minute] = timeStr.split(':').map(Number);
-  const date = new Date(year, month - 1, day, hour, minute);
-  return date.toISOString();
+  const localDate = parseLocalYMD(dateStr);
+  if (!localDate) return null;
+  const date = createARDateTime(localDate, timeStr);
+  return isNaN(date.getTime()) ? null : date.toISOString();
 };

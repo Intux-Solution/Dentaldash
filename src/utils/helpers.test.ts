@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { calculateAge, initials, norm } from './helpers';
+import { calculateAge, initials, norm, combineDateTimeToISO } from './helpers';
 
 describe('calculateAge', () => {
     beforeEach(() => {
@@ -51,5 +51,16 @@ describe('norm', () => {
         expect(norm('Martínez')).toBe('martinez');
         expect(norm('GARCÍA')).toBe('garcia');
         expect(norm('niño')).toBe('nino');
+    });
+});
+
+describe('combineDateTimeToISO', () => {
+    it('ancla la hora a Argentina (UTC-3) sin importar la TZ local', () => {
+        expect(combineDateTimeToISO('2026-07-28', '14:30')).toBe('2026-07-28T17:30:00.000Z');
+    });
+
+    it('devuelve null si falta fecha u hora', () => {
+        expect(combineDateTimeToISO('', '14:30')).toBeNull();
+        expect(combineDateTimeToISO('2026-07-28', '')).toBeNull();
     });
 });

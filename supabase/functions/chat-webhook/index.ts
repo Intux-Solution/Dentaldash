@@ -24,6 +24,23 @@ const sanitizePhone = (jid: string) => {
     return phone;
 };
 
+// ─── Timezone helpers (Argentina, UTC-3, sin DST) ───────────────────────────
+// Mismo patrón que supabase/functions/public-booking/index.ts: toda la aritmética
+// de fechas ocurre en dominio UTC explícito, independiente del TZ local del runtime.
+const AR_OFFSET_MS = -3 * 60 * 60 * 1000;
+
+function toARDate(date: Date): Date {
+    return new Date(date.getTime() + AR_OFFSET_MS);
+}
+
+function formatTimeAR(date: Date): string {
+    const ar = toARDate(date);
+    const h = ar.getUTCHours().toString().padStart(2, "0");
+    const m = ar.getUTCMinutes().toString().padStart(2, "0");
+    return `${h}:${m}`;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ─── Rate Limiting ───────────────────────────────────────────────────────────
 // Map<jid, { count, windowStart }>  (module-level, persiste dentro del mismo isolate)
 const rateLimitMap = new Map<string, { count: number; windowStart: number }>();
@@ -212,6 +229,7 @@ serve(async (req) => {
                     .from('chat_history')
                     .select('id')
                     .eq('jid', remoteJid)
+                    .eq('whatsapp_instance', instanceName)
                     .eq('role', 'user')
                     .eq('status', 'pending')
                     .gt('created_at', insertedMsg.created_at) // Newer than current
@@ -228,6 +246,7 @@ serve(async (req) => {
                     .from('chat_history')
                     .select('*')
                     .eq('jid', remoteJid)
+                    .eq('whatsapp_instance', instanceName)
                     .eq('role', 'user')
                     .eq('status', 'pending')
                     .order('created_at', { ascending: true });
@@ -246,6 +265,7 @@ serve(async (req) => {
                 await supabase
                     .from('chat_history')
                     .update({ status: 'processed' })
+                    .eq('whatsapp_instance', instanceName)
                     .in('id', batchIds);
 
                 // ---------------------------------------------------------
@@ -318,23 +338,29 @@ serve(async (req) => {
                 // Tool Implementations
                 const getAvailableSlots = async (dateStr: string) => {
                     try {
-                        const date = new Date(dateStr);
-                        const dayOfWeek = date.getDay(); // 0 = Sun, 1 = Mon, ...
+                        const [yStr, mStr, dStr] = dateStr.split('-').map(Number);
+
+                        // Mediodía local AR ajustado a UTC (mismo patrón que public-booking) para
+                        // obtener el día de semana correcto sin depender del TZ del runtime.
+                        const localNoon = new Date(Date.UTC(yStr, mStr - 1, dStr, 12, 0, 0) - AR_OFFSET_MS);
+                        const dayOfWeek = toARDate(localNoon).getUTCDay(); // 0 = Sun, 1 = Mon, ...
 
                         // 1. Check if open this day
                         const daySchedules = schedulesRes.data?.filter((s: any) => s.day_of_week === dayOfWeek);
                         if (!daySchedules || daySchedules.length === 0) return "La clínica está cerrada este día.";
 
-                        // 2. Fetch existing appointments
-                        const startOfDay = new Date(`${dateStr}T00:00:00`).toISOString();
-                        const endOfDay = new Date(`${dateStr}T23:59:59`).toISOString();
+                        // 2. Fetch existing appointments (límites del día en hora argentina -> UTC)
+                        const dayStart = new Date(Date.UTC(yStr, mStr - 1, dStr, 0, 0, 0) - AR_OFFSET_MS);
+                        const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+                        const startOfDay = dayStart.toISOString();
+                        const endOfDay = dayEnd.toISOString();
 
                         const { data: appointments } = await supabase
                             .from('appointments')
                             .select('start_time, end_time')
                             .eq('user_id', tenant.id)
                             .gte('start_time', startOfDay)
-                            .lte('start_time', endOfDay)
+                            .lt('start_time', endOfDay)
                             .neq('status', 'cancelled');
 
                         // Fetch Google Google Calendar Events
@@ -361,27 +387,26 @@ serve(async (req) => {
 
                         // 3. Time buffer: filter out slots that are in the past or < 30 min from now
                         const nowTime = new Date();
-                        // Ajustar al timezone correspondiente si fuera estrictamente necesario,
-                        // asumiendolo corre localmente / server está en UTC y la clínica en un TZ.
-                        // Como Vercel/Supabase corren en UTC, usaremos new Date(), pero lo compararemos
-                        // con slotStart que también es UTC. Sin embargo, slotStart aquí se arma con `${dateStr}T${schedule.start_time}`,
-                        // lo que en JS toma el TZ local de la Edge Function (UTC).
-                        // Para simplificar, comparamos el timestamp actual + 30m.
                         const minTimeForAppt = new Date(nowTime.getTime() + 30 * 60000);
 
-                        // 4. Generate slots
+                        // 4. Generate slots (rangos de cada bloque horario en hora argentina -> UTC)
                         const slotsArray: string[] = [];
                         const slotDuration = 30; // minutes
 
                         for (const schedule of daySchedules) {
-                            let currentTime = new Date(`${dateStr}T${schedule.start_time}`);
-                            const endTime = new Date(`${dateStr}T${schedule.end_time}`);
+                            const [sH, sM] = schedule.start_time.split(':').map(Number);
+                            const [eH, eM] = schedule.end_time.split(':').map(Number);
 
-                            while (currentTime < endTime) {
+                            const rangeStart = new Date(Date.UTC(yStr, mStr - 1, dStr, sH, sM, 0) - AR_OFFSET_MS);
+                            const rangeEnd = new Date(Date.UTC(yStr, mStr - 1, dStr, eH, eM, 0) - AR_OFFSET_MS);
+
+                            let currentTime = new Date(rangeStart);
+
+                            while (currentTime < rangeEnd) {
                                 const slotStart = currentTime;
                                 const slotEnd = new Date(currentTime.getTime() + slotDuration * 60000);
 
-                                if (slotEnd > endTime) break;
+                                if (slotEnd > rangeEnd) break;
 
                                 // Excluir si el slot es antes del tiempo mínimo permitido
                                 if (slotStart < minTimeForAppt) {
@@ -417,7 +442,7 @@ serve(async (req) => {
                                 });
 
                                 if (!isOccupied && !isOccupiedGoogle) {
-                                    slotsArray.push(slotStart.toTimeString().substring(0, 5));
+                                    slotsArray.push(formatTimeAR(slotStart));
                                 }
                                 currentTime = slotEnd;
                             }
