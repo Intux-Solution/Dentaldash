@@ -3,16 +3,94 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
 
 import { buildCors } from "../_shared/cors.ts";
 
+const MP_API = "https://api.mercadopago.com";
+// Sin timeout, una llamada colgada a MercadoPago agota el wall time de la Edge
+// Function y el usuario recibe un 546 del gateway en vez de un error nuestro.
+const MP_TIMEOUT_MS = 15_000;
+
+interface MpResult {
+  ok: boolean;
+  httpStatus?: number;
+  body?: string;
+  detail?: string;
+  /** El request nunca llego a MercadoPago (DNS, timeout, TLS). */
+  networkError?: boolean;
+}
+
+// Unico punto de salida hacia MercadoPago. Nunca lanza: un fallo de red devuelve
+// networkError en vez de reventar en el catch global, donde seria indistinguible
+// de un error de Supabase y saldria como 500 "Error interno del servidor.".
+async function mpFetch(url: string, init: RequestInit): Promise<MpResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MP_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    const body = await res.text();
+    if (res.ok) return { ok: true, httpStatus: res.status, body };
+    return { ok: false, httpStatus: res.status, body, detail: body };
+  } catch (err: any) {
+    return { ok: false, networkError: true, detail: String(err?.message ?? err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+interface PreapprovalState {
+  /** true = pudimos determinar el estado (incluye el 404). */
+  ok: boolean;
+  status?: string | null;
+  /** El preapproval no existe en MercadoPago. */
+  missing?: boolean;
+  detail?: string;
+  networkError?: boolean;
+}
+
+// Estados sobre los que MercadoPago rechaza cualquier modificacion con
+// 400 "You can not modify a cancelled preapproval."
+const DEAD_PREAPPROVAL_STATUSES = new Set(["cancelled", "finished"]);
+
+// Consulta el estado del preapproval. Se llama ANTES de cualquier PUT: modificar
+// uno cancelado es un 400 seguro, y hasta ahora ese 400 salia como 502 opaco.
+async function getPreapproval(token: string, preapprovalId: string): Promise<PreapprovalState> {
+  const res = await mpFetch(`${MP_API}/preapproval/${preapprovalId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.ok) {
+    try {
+      const parsed = JSON.parse(res.body ?? "{}");
+      return { ok: true, status: typeof parsed?.status === "string" ? parsed.status : null };
+    } catch {
+      return { ok: true, status: null };
+    }
+  }
+  // Un preapproval borrado o de otra cuenta es tan inservible como uno cancelado.
+  if (res.httpStatus === 404) return { ok: true, status: null, missing: true };
+  return { ok: false, detail: res.detail, networkError: res.networkError };
+}
+
+function isPreapprovalDead(state: PreapprovalState): boolean {
+  if (state.missing) return true;
+  return typeof state.status === "string" &&
+    DEAD_PREAPPROVAL_STATUSES.has(state.status.toLowerCase());
+}
+
+// Red de seguridad para la carrera: el preapproval puede cancelarse entre el GET
+// y el PUT (o desde el panel de MercadoPago mientras corre este request).
+function isCancelledPreapprovalError(detail: string | undefined): boolean {
+  if (!detail) return false;
+  return /can\s*not\s+modify\s+a\s+cancell?ed\s+preapproval/i.test(detail);
+}
+
 // Actualiza el monto de la cuota de un preapproval ya autorizado.
 // La cuota del periodo en curso ya se cobro, asi que MercadoPago aplica el
 // monto nuevo recien en la proxima fecha de recurrencia.
-async function updatePreapprovalAmount(
+function updatePreapprovalAmount(
   token: string,
   preapprovalId: string,
   amount: number,
   currency: string,
-): Promise<{ ok: boolean; detail?: string }> {
-  const res = await fetch(`https://api.mercadopago.com/preapproval/${preapprovalId}`, {
+): Promise<MpResult> {
+  return mpFetch(`${MP_API}/preapproval/${preapprovalId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -25,16 +103,11 @@ async function updatePreapprovalAmount(
       },
     }),
   });
-  if (res.ok) return { ok: true };
-  return { ok: false, detail: await res.text() };
 }
 
 // Cancela un preapproval en MercadoPago. Devuelve el detalle del error si falla.
-async function cancelPreapproval(
-  token: string,
-  preapprovalId: string,
-): Promise<{ ok: boolean; detail?: string }> {
-  const res = await fetch(`https://api.mercadopago.com/preapproval/${preapprovalId}`, {
+function cancelPreapproval(token: string, preapprovalId: string): Promise<MpResult> {
+  return mpFetch(`${MP_API}/preapproval/${preapprovalId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -42,8 +115,6 @@ async function cancelPreapproval(
     },
     body: JSON.stringify({ status: "cancelled" }),
   });
-  if (res.ok) return { ok: true };
-  return { ok: false, detail: await res.text() };
 }
 
 // Deja rastro en payment_events de una operacion que MercadoPago rechazo.
@@ -90,7 +161,23 @@ function mpErrorMessage(detail: string | undefined): string | undefined {
   } catch {
     // MercadoPago no siempre responde JSON (ej: un HTML de su gateway).
   }
-  return detail.slice(0, 200);
+  // Sin un mensaje reconocible no se devuelve el payload crudo: puede traer HTML
+  // del gateway o ids internos. El detalle completo queda en payment_events.
+  return "MercadoPago rechazó la operación.";
+}
+
+// Respuesta de error unificada para cualquier fallo de MercadoPago: distingue el
+// corte de comunicacion (no sabemos que paso del otro lado) del rechazo explicito.
+// El front arma el mensaje como "<error> — <detail>" (SubscriptionService.ts).
+function mpFailureResponse(
+  jsonHeaders: Record<string, string>,
+  message: string,
+  result: { detail?: string; networkError?: boolean },
+): Response {
+  const body = result.networkError
+    ? { error: "No pudimos comunicarnos con MercadoPago. Intentá de nuevo en unos minutos." }
+    : { error: message, detail: mpErrorMessage(result.detail) };
+  return new Response(JSON.stringify(body), { status: 502, headers: jsonHeaders });
 }
 
 serve(async (req) => {
@@ -166,6 +253,14 @@ serve(async (req) => {
       currentPlan = data as typeof currentPlan;
     }
 
+    // Estado del preapproval actual en MercadoPago, consultado a lo sumo una vez
+    // por request (solo hay un mercadopago_sub_id por usuario).
+    let cachedState: PreapprovalState | null = null;
+    const readPreapprovalState = async (preapprovalId: string): Promise<PreapprovalState> => {
+      if (!cachedState) cachedState = await getPreapproval(MP_ACCESS_TOKEN, preapprovalId);
+      return cachedState;
+    };
+
     // ── Accion: revertir un downgrade programado ─────────────────────────────
     if (action === "cancel_scheduled_change") {
       if (!existingSub?.pending_plan_id) {
@@ -182,29 +277,63 @@ serve(async (req) => {
       }
 
       // Restaurar el monto original en MercadoPago antes de tocar la DB.
+      // Si el preapproval ya no cobra, no hay monto que restaurar: se limpia el
+      // cambio programado igual, para no dejar al usuario sin poder revertirlo.
+      let restoreSkipped = false;
       if (existingSub.mercadopago_sub_id) {
-        const restore = await updatePreapprovalAmount(
-          MP_ACCESS_TOKEN,
-          existingSub.mercadopago_sub_id,
-          Number(currentPlan.price_monthly),
-          currentPlan.currency ?? "ARS",
-        );
-        if (!restore.ok) {
-          console.error("MercadoPago restore amount error:", restore.detail);
+        const state = await readPreapprovalState(existingSub.mercadopago_sub_id);
+        if (!state.ok) {
+          console.error("MercadoPago preapproval lookup error:", state.detail);
+          return mpFailureResponse(
+            jsonHeaders,
+            "No pudimos verificar tu suscripción en MercadoPago. Intentá de nuevo en unos minutos.",
+            state,
+          );
+        }
+
+        if (isPreapprovalDead(state)) {
+          restoreSkipped = true;
           await logMpFailure(
             supabase,
-            "preapproval_restore_failed",
+            "preapproval_dead_on_change",
             user.id,
             existingSub.mercadopago_sub_id,
-            restore.detail ?? "",
+            `cancel_scheduled_change sobre un preapproval ${state.missing ? "inexistente" : state.status}`,
           );
-          return new Response(
-            JSON.stringify({
-              error: "No se pudo restaurar el monto en MercadoPago.",
-              detail: mpErrorMessage(restore.detail),
-            }),
-            { status: 502, headers: jsonHeaders }
+        } else {
+          const restore = await updatePreapprovalAmount(
+            MP_ACCESS_TOKEN,
+            existingSub.mercadopago_sub_id,
+            Number(currentPlan.price_monthly),
+            currentPlan.currency ?? "ARS",
           );
+          if (!restore.ok) {
+            // El preapproval se cancelo entre el GET y el PUT: mismo caso que arriba.
+            if (isCancelledPreapprovalError(restore.detail)) {
+              restoreSkipped = true;
+              await logMpFailure(
+                supabase,
+                "preapproval_dead_on_change",
+                user.id,
+                existingSub.mercadopago_sub_id,
+                restore.detail ?? "",
+              );
+            } else {
+              console.error("MercadoPago restore amount error:", restore.detail);
+              await logMpFailure(
+                supabase,
+                "preapproval_restore_failed",
+                user.id,
+                existingSub.mercadopago_sub_id,
+                restore.detail ?? "",
+              );
+              return mpFailureResponse(
+                jsonHeaders,
+                "No se pudo restaurar el monto en MercadoPago.",
+                restore,
+              );
+            }
+          }
         }
       }
 
@@ -226,7 +355,12 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ cancelled: true }),
+        JSON.stringify({
+          cancelled: true,
+          warning: restoreSkipped
+            ? "Tu suscripción ya no está activa en MercadoPago. Se canceló el cambio programado, pero vas a tener que contratar un plan de nuevo."
+            : undefined,
+        }),
         { status: 200, headers: jsonHeaders }
       );
     }
@@ -244,25 +378,38 @@ serve(async (req) => {
       // el cobro en MercadoPago le sigue debitando al usuario un servicio que ya no
       // ve. Si MP rechaza, se aborta la cancelacion entera y se avisa.
       if (existingSub.mercadopago_sub_id) {
-        const cancelled = await cancelPreapproval(
-          MP_ACCESS_TOKEN,
-          existingSub.mercadopago_sub_id,
-        );
-        if (!cancelled.ok) {
-          console.error("MercadoPago cancel subscription error:", cancelled.detail);
-          await logOrphanPreapproval(
-            supabase,
-            user.id,
+        const state = await readPreapprovalState(existingSub.mercadopago_sub_id);
+        if (!state.ok) {
+          console.error("MercadoPago preapproval lookup error:", state.detail);
+          return mpFailureResponse(
+            jsonHeaders,
+            "No pudimos verificar tu suscripción en MercadoPago. Intentá de nuevo en unos minutos.",
+            state,
+          );
+        }
+
+        // Un preapproval ya cancelado hace que el PUT devuelva 400 y dejaba al
+        // usuario sin poder cancelar nunca. La cancelacion es idempotente: si ya
+        // no cobra, el objetivo esta cumplido y solo falta marcar la fila.
+        if (!isPreapprovalDead(state)) {
+          const cancelled = await cancelPreapproval(
+            MP_ACCESS_TOKEN,
             existingSub.mercadopago_sub_id,
-            cancelled.detail ?? "",
           );
-          return new Response(
-            JSON.stringify({
-              error: "No se pudo cancelar el cobro automático en MercadoPago. Intentá de nuevo en unos minutos.",
-              detail: mpErrorMessage(cancelled.detail),
-            }),
-            { status: 502, headers: jsonHeaders }
-          );
+          if (!cancelled.ok && !isCancelledPreapprovalError(cancelled.detail)) {
+            console.error("MercadoPago cancel subscription error:", cancelled.detail);
+            await logOrphanPreapproval(
+              supabase,
+              user.id,
+              existingSub.mercadopago_sub_id,
+              cancelled.detail ?? "",
+            );
+            return mpFailureResponse(
+              jsonHeaders,
+              "No se pudo cancelar el cobro automático en MercadoPago. Intentá de nuevo en unos minutos.",
+              cancelled,
+            );
+          }
         }
       }
 
@@ -316,13 +463,6 @@ serve(async (req) => {
       );
     }
 
-    if (existingSub?.status === "active" && existingSub.plan_id === plan_id) {
-      return new Response(
-        JSON.stringify({ error: "Ya tenés este plan activo." }),
-        { status: 400, headers: jsonHeaders }
-      );
-    }
-
     // ── Downgrade: sin cobro nuevo, efectivo al vencer el periodo pagado ─────
     // Solo aplica si hay una suscripcion activa en MercadoPago con periodo
     // vigente y el plan destino es mas barato que el actual.
@@ -330,7 +470,10 @@ serve(async (req) => {
       ? new Date(existingSub.current_period_end)
       : null;
 
-    const isDowngrade =
+    // Candidato a downgrade segun la DB. Falta confirmar contra MercadoPago que
+    // el preapproval sigue vivo: programar una baja de monto sobre uno cancelado
+    // es el 400 "You can not modify a cancelled preapproval.".
+    const isDowngradeCandidate =
       existingSub?.status === "active" &&
       !!existingSub.mercadopago_sub_id &&
       !!currentPlan &&
@@ -338,7 +481,53 @@ serve(async (req) => {
       periodEndsAt.getTime() > Date.now() &&
       Number(plan.price_monthly) < Number(currentPlan.price_monthly);
 
-    if (isDowngrade) {
+    // Un preapproval cancelado/inexistente ya no cobra: no hay nada que reprogramar
+    // y el camino correcto es contratar uno nuevo (rama de mas abajo).
+    let deadPreapproval = false;
+    if (existingSub?.mercadopago_sub_id) {
+      const state = await readPreapprovalState(existingSub.mercadopago_sub_id);
+      if (state.ok) {
+        deadPreapproval = isPreapprovalDead(state);
+        if (deadPreapproval) {
+          console.warn(
+            "Preapproval inutilizable, se contratara uno nuevo:",
+            { preapproval: existingSub.mercadopago_sub_id, status: state.status ?? "missing" },
+          );
+          // La DB puede seguir diciendo 'active' (webhook de cancelacion perdido).
+          // No se toca el status aca: mp-webhook y el cron son la fuente de verdad,
+          // y cortarle el acceso dentro del periodo pagado seria peor. Solo se audita.
+          await logMpFailure(
+            supabase,
+            "preapproval_dead_on_change",
+            user.id,
+            existingSub.mercadopago_sub_id,
+            `preapproval ${state.missing ? "inexistente" : state.status} al cambiar de plan`,
+          );
+        }
+      } else if (isDowngradeCandidate) {
+        // Ibamos a modificarlo y no sabemos en que estado esta: abortar sin tocar
+        // la DB ni crear cobros nuevos.
+        console.error("MercadoPago preapproval lookup error:", state.detail);
+        return mpFailureResponse(
+          jsonHeaders,
+          "No pudimos verificar tu suscripción en MercadoPago. Intentá de nuevo en unos minutos.",
+          state,
+        );
+      }
+      // Si no es downgrade, un lookup fallido no bloquea: el unico uso pendiente
+      // del preapproval viejo es cancelarlo, y eso ya es no fatal.
+    }
+
+    // Se chequea despues del lookup: si el preapproval murio, la fila puede seguir
+    // en 'active' con este mismo plan y el usuario tiene que poder recontratarlo.
+    if (existingSub?.status === "active" && existingSub.plan_id === plan_id && !deadPreapproval) {
+      return new Response(
+        JSON.stringify({ error: "Ya tenés este plan activo." }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
+
+    if (isDowngradeCandidate && !deadPreapproval) {
       // Bajar el monto de las proximas cuotas. Fatal: si MP rechaza, no tocamos
       // la DB para no prometer un cambio que el cobro no va a respetar.
       const update = await updatePreapprovalAmount(
@@ -347,7 +536,77 @@ serve(async (req) => {
         Number(plan.price_monthly),
         plan.currency ?? "ARS",
       );
-      if (!update.ok) {
+
+      if (update.ok) {
+        // plan_id, status y feature_permissions quedan intactos: el usuario sigue
+        // usando el plan actual hasta pending_plan_effective_at.
+        const { error: scheduleError } = await supabase
+          .from("subscriptions")
+          .update({
+            pending_plan_id: plan_id,
+            pending_plan_effective_at: existingSub!.current_period_end,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user.id);
+
+        if (scheduleError) {
+          console.error("Supabase schedule downgrade error:", scheduleError.message);
+          // El monto ya bajo en MercadoPago. Sin registro en la DB el usuario pagaria
+          // el precio del plan barato conservando el plan caro para siempre, asi que
+          // hay que devolver el monto a su valor original.
+          const rollback = await updatePreapprovalAmount(
+            MP_ACCESS_TOKEN,
+            existingSub!.mercadopago_sub_id!,
+            Number(currentPlan!.price_monthly),
+            currentPlan!.currency ?? "ARS",
+          );
+          if (!rollback.ok) {
+            console.error(
+              "CRITICAL: monto bajado en MercadoPago sin registro en DB y rollback fallido.",
+              { preapproval: existingSub!.mercadopago_sub_id, detail: rollback.detail },
+            );
+            await logMpFailure(
+              supabase,
+              "preapproval_amount_rollback_failed",
+              user.id,
+              existingSub!.mercadopago_sub_id!,
+              rollback.detail ?? "",
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              error: "No se pudo programar el cambio de plan. Volvé a intentarlo en unos minutos.",
+              detail: rollback.ok
+                ? undefined
+                : "El monto quedó modificado en MercadoPago; ya avisamos al equipo.",
+            }),
+            { status: 500, headers: jsonHeaders }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            scheduled: true,
+            effective_at: existingSub!.current_period_end,
+            plan_name: plan.name,
+          }),
+          { status: 200, headers: jsonHeaders }
+        );
+      }
+
+      if (isCancelledPreapprovalError(update.detail)) {
+        // Carrera: se cancelo entre el GET y el PUT. Mismo desenlace que si lo
+        // hubieramos visto muerto desde el principio: se contrata uno nuevo.
+        console.warn("Preapproval cancelado durante el downgrade, se contratara uno nuevo.");
+        deadPreapproval = true;
+        await logMpFailure(
+          supabase,
+          "preapproval_dead_on_change",
+          user.id,
+          existingSub!.mercadopago_sub_id!,
+          update.detail ?? "",
+        );
+      } else {
         console.error("MercadoPago downgrade error:", update.detail);
         await logMpFailure(
           supabase,
@@ -356,64 +615,12 @@ serve(async (req) => {
           existingSub!.mercadopago_sub_id!,
           update.detail ?? "",
         );
-        return new Response(
-          JSON.stringify({
-            error: "No se pudo programar el cambio de plan en MercadoPago.",
-            detail: mpErrorMessage(update.detail),
-          }),
-          { status: 502, headers: jsonHeaders }
+        return mpFailureResponse(
+          jsonHeaders,
+          "No se pudo programar el cambio de plan en MercadoPago.",
+          update,
         );
       }
-
-      // plan_id, status y feature_permissions quedan intactos: el usuario sigue
-      // usando el plan actual hasta pending_plan_effective_at.
-      const { error: scheduleError } = await supabase
-        .from("subscriptions")
-        .update({
-          pending_plan_id: plan_id,
-          pending_plan_effective_at: existingSub!.current_period_end,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", user.id);
-
-      if (scheduleError) {
-        console.error("Supabase schedule downgrade error:", scheduleError.message);
-        // El monto ya bajo en MercadoPago. Sin registro en la DB el usuario pagaria
-        // el precio del plan barato conservando el plan caro para siempre, asi que
-        // hay que devolver el monto a su valor original.
-        const rollback = await updatePreapprovalAmount(
-          MP_ACCESS_TOKEN,
-          existingSub!.mercadopago_sub_id!,
-          Number(currentPlan!.price_monthly),
-          currentPlan!.currency ?? "ARS",
-        );
-        if (!rollback.ok) {
-          console.error(
-            "CRITICAL: monto bajado en MercadoPago sin registro en DB y rollback fallido.",
-            { preapproval: existingSub!.mercadopago_sub_id, detail: rollback.detail },
-          );
-          await logMpFailure(
-            supabase,
-            "preapproval_amount_rollback_failed",
-            user.id,
-            existingSub!.mercadopago_sub_id!,
-            rollback.detail ?? "",
-          );
-        }
-        return new Response(
-          JSON.stringify({ error: "Failed to schedule plan change." }),
-          { status: 500, headers: jsonHeaders }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          scheduled: true,
-          effective_at: existingSub!.current_period_end,
-          plan_name: plan.name,
-        }),
-        { status: 200, headers: jsonHeaders }
-      );
     }
 
     // ── Alta / upgrade / reactivacion: checkout con cobro inmediato ──────────
@@ -437,7 +644,7 @@ serve(async (req) => {
       status: "pending",
     };
 
-    const mpRes = await fetch("https://api.mercadopago.com/preapproval", {
+    const mpRes = await mpFetch(`${MP_API}/preapproval`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -447,45 +654,57 @@ serve(async (req) => {
     });
 
     if (!mpRes.ok) {
-      const mpError = await mpRes.text();
-      console.error("MercadoPago error:", mpError);
+      console.error("MercadoPago error:", mpRes.detail);
       // Todavia no hay preapproval, asi que no hay mp_resource_id que registrar.
-      await logMpFailure(supabase, "preapproval_create_failed", user.id, null, mpError);
+      await logMpFailure(supabase, "preapproval_create_failed", user.id, null, mpRes.detail ?? "");
+      return mpFailureResponse(
+        jsonHeaders,
+        "No se pudo crear la suscripción en MercadoPago.",
+        mpRes,
+      );
+    }
+
+    let mpData: any;
+    try {
+      mpData = JSON.parse(mpRes.body ?? "{}");
+    } catch {
+      mpData = {};
+    }
+    const { id: mpSubId, init_point } = mpData;
+
+    if (!mpSubId) {
+      console.error("MercadoPago devolvio un preapproval sin id:", mpRes.body?.slice(0, 500));
+      await logMpFailure(supabase, "preapproval_create_failed", user.id, null, mpRes.body ?? "");
       return new Response(
         JSON.stringify({
-          error: "No se pudo crear la suscripción en MercadoPago.",
-          detail: mpErrorMessage(mpError),
+          error: "MercadoPago devolvió una respuesta inesperada. Intentá de nuevo en unos minutos.",
         }),
         { status: 502, headers: jsonHeaders }
       );
     }
 
-    const mpData = await mpRes.json();
-    const { id: mpSubId, init_point } = mpData;
-
     // Recien ahora cancelamos la preapproval anterior: si el POST de arriba
     // hubiera fallado, el usuario conserva la suscripcion que ya tenia.
-    if (existingSub?.mercadopago_sub_id && existingSub.mercadopago_sub_id !== mpSubId) {
-      try {
-        const cancelRes = await cancelPreapproval(
-          MP_ACCESS_TOKEN,
-          existingSub.mercadopago_sub_id,
-        );
-        if (!cancelRes.ok) {
-          const detail = cancelRes.detail ?? "";
-          console.warn("MercadoPago cancel warning (non-fatal):", detail);
-          // No es fatal (el preapproval nuevo ya existe), pero deja al usuario con dos
-          // suscripciones activas cobrando en paralelo. Queda auditable para revisarlo.
+    // Si ya sabemos que esta cancelada, el PUT seria un 400 seguro y ensuciaria
+    // payment_events con un huerfano inexistente.
+    if (
+      existingSub?.mercadopago_sub_id &&
+      existingSub.mercadopago_sub_id !== mpSubId &&
+      !deadPreapproval
+    ) {
+      const cancelRes = await cancelPreapproval(
+        MP_ACCESS_TOKEN,
+        existingSub.mercadopago_sub_id,
+      );
+      if (!cancelRes.ok) {
+        const detail = cancelRes.detail ?? "";
+        console.warn("MercadoPago cancel warning (non-fatal):", detail);
+        // No es fatal (el preapproval nuevo ya existe). Solo se registra si el viejo
+        // pudo haber quedado cobrando: si el rechazo es "ya esta cancelado", no hay
+        // doble cobro que auditar.
+        if (!isCancelledPreapprovalError(detail)) {
           await logOrphanPreapproval(supabase, user.id, existingSub.mercadopago_sub_id, detail);
         }
-      } catch (cancelErr) {
-        console.warn("MercadoPago cancel exception (non-fatal):", cancelErr);
-        await logOrphanPreapproval(
-          supabase,
-          user.id,
-          existingSub.mercadopago_sub_id,
-          String(cancelErr),
-        );
       }
     }
 

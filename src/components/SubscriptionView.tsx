@@ -67,8 +67,9 @@ export default function SubscriptionView() {
   const handleRevertChange = async () => {
     setRevertingChange(true);
     try {
-      await cancelScheduledPlanChange();
-      toast.success('Cambio de plan cancelado. Seguís con tu plan actual.');
+      const { warning } = await cancelScheduledPlanChange();
+      if (warning) toast(warning, { icon: '⚠️', duration: 6000 });
+      else toast.success('Cambio de plan cancelado. Seguís con tu plan actual.');
       refresh();
     } catch (err: any) {
       toast.error(err.message ?? 'Error al cancelar el cambio de plan');

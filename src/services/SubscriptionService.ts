@@ -102,12 +102,20 @@ async function callCreateCheckout(
     }
   );
 
-  const json = await res.json();
-  if (!res.ok) {
-    const detail = json.detail ? ` — ${json.detail}` : '';
-    throw new Error((json.error ?? fallbackError) + detail);
+  // Un 502/546 del gateway de Supabase no devuelve JSON: sin esta guarda el
+  // usuario ve un "SyntaxError: Unexpected token" en vez del mensaje de error.
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch {
+    json = null;
   }
-  return json;
+
+  if (!res.ok) {
+    const detail = json?.detail ? ` — ${json.detail}` : '';
+    throw new Error((json?.error ?? fallbackError) + detail);
+  }
+  return json ?? {};
 }
 
 /**
@@ -118,9 +126,13 @@ export async function createCheckout(planId: string): Promise<CheckoutResult> {
   return callCreateCheckout({ plan_id: planId }, 'Error al crear el checkout.');
 }
 
-/** Revierte un downgrade programado y restaura el monto original en MercadoPago. */
-export async function cancelScheduledPlanChange(): Promise<void> {
-  await callCreateCheckout(
+/**
+ * Revierte un downgrade programado y restaura el monto original en MercadoPago.
+ * Devuelve un `warning` cuando el preapproval ya no estaba activo en MercadoPago:
+ * el cambio se cancela igual, pero no hay cobro recurrente que restaurar.
+ */
+export async function cancelScheduledPlanChange(): Promise<{ warning?: string }> {
+  return callCreateCheckout(
     { action: 'cancel_scheduled_change' },
     'Error al cancelar el cambio programado.'
   );
