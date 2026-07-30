@@ -3,25 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
 import { z } from "https://esm.sh/zod@3.23.8";
 import { notifyAppointmentCreated } from "../_shared/appointment-notifications.ts";
 import { getAccessTokenForUser, getBusyIntervals } from "../_shared/google-calendar.ts";
-
-// Allowlist de origenes permitidos (CORS). Se configura via APP_URL (coma-separada).
-// Origen de produccion conocido + los configurados en APP_URL (con/sin www, etc.)
-const ALLOWED_ORIGINS = [
-  "https://dashboard.dentaldash.cloud",
-  ...(Deno.env.get("APP_URL") ?? "").split(",").map((s) => s.trim().replace(/\/+$/, "")),
-].filter(Boolean);
-
-function buildCors(origin: string | null): Record<string, string> {
-  const allow = origin && ALLOWED_ORIGINS.includes(origin)
-    ? origin
-    : (ALLOWED_ORIGINS[0] ?? "");
-  return {
-    "Access-Control-Allow-Origin": allow,
-    "Vary": "Origin",
-    "Access-Control-Allow-Headers": "content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
-}
+import { buildCors } from "../_shared/cors.ts";
 
 // Validacion server-side de la reserva publica (no confiar solo en el front).
 const CreateAppointmentSchema = z.object({
@@ -148,7 +130,8 @@ async function syncToGoogleCalendar(
 }
 
 serve(async (req) => {
-  const corsHeaders = buildCors(req.headers.get("origin"));
+  // Endpoint público: el front no manda Authorization ni apikey.
+  const corsHeaders = buildCors(req.headers.get("origin"), "content-type");
   const json = (data: unknown, status = 200) =>
     new Response(JSON.stringify(data), {
       status,

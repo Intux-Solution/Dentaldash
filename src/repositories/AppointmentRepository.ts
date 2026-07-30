@@ -1,16 +1,19 @@
 import { supabase } from '../config/supabaseClient';
-import { Session } from '@supabase/supabase-js';
 
 export class AppointmentRepository {
     static async getAppointments(fromISO: string, toISO: string) {
+        // Solapamiento con la ventana, no contención: `start >= from AND end <= to`
+        // exigía que el turno entrara COMPLETO en el rango, así que uno de 23:45 a
+        // 00:15 no aparecía en ninguno de los dos días. Es la misma convención que
+        // usan `getAppointmentsForDay` y la Edge Function `public-booking`.
         const { data, error } = await supabase
             .from('appointments')
             .select(`
                 *,
                 patient:patients (nombre, dni, telefono, email)
             `)
-            .gte('start_time', fromISO)
-            .lte('end_time', toISO);
+            .lte('start_time', toISO)
+            .gte('end_time', fromISO);
 
         if (error) throw error;
         return data;

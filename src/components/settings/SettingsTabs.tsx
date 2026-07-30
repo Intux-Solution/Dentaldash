@@ -1,5 +1,5 @@
 // src/components/settings/SettingsTabs.tsx
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 
 export interface SettingsTab {

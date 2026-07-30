@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { User } from 'lucide-react';
 import { initials } from '../utils/helpers';
 import { avatarColor } from '../utils/avatar';

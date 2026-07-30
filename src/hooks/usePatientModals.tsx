@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useCallback, useMemo, useState, useRef } from 'react';
+import { createContext, useContext, useCallback, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePatients } from './usePatients';
 import { useAuth } from '../context/AuthContext';
 import { PatientService } from '../services/PatientService';
+import { queryKeys } from '../lib/queryKeys';
 
 const PatientModalsContext = createContext<any>(null);
 
@@ -10,12 +12,13 @@ export function PatientModalsProvider({
     patients = [],
     addPatient,
     updatePatient,
-    refreshPatients,
 }: any) {
     const { session } = useAuth();
     const { deletePatient } = usePatients(session);
+    const queryClient = useQueryClient();
 
-    const [selectedPatient, setSelectedPatient] = useState<any>(null);
+    /** Paciente elegido en la UI. La versión fresca la trae la query de abajo. */
+    const [selectedPatientBase, setSelectedPatient] = useState<any>(null);
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -85,75 +88,51 @@ export function PatientModalsProvider({
     const onSavedPatient = useCallback(async (updatedPatientData: any) => {
         try {
             if (typeof updatePatient === 'function') await updatePatient(updatedPatientData);
-            if (typeof refreshPatients === 'function') refreshPatients();
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
+            // Por prefijo: alcanza las listas paginadas y el detalle del modal.
+            queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
             setShowEditModal(false);
             setSelectedPatient(null);
         } catch (errUnknown: unknown) {
             const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             alert(`Error: ${err.message || 'No se pudo actualizar el paciente'}`);
         }
-    }, [updatePatient, refreshPatients]);
+    }, [updatePatient, queryClient]);
 
     const onCreatedPatient = useCallback(async (patientData: any) => {
         try {
             const res = typeof addPatient === 'function' ? await addPatient(patientData) : null;
             setShowAddModal(false);
-            if (typeof refreshPatients === 'function') refreshPatients();
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
+            queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
             return res;
         } catch (errUnknown: unknown) {
             const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             alert(`Error: ${err.message || 'No se pudo crear el paciente'}`);
             throw err;
         }
-    }, [addPatient, refreshPatients]);
+    }, [addPatient, queryClient]);
 
-    const selectedPatientRef = useRef<any>(null);
-    React.useEffect(() => {
-        selectedPatientRef.current = selectedPatient;
-    }, [selectedPatient]);
-
-    // Propaga al modal abierto los cambios que lleguen por la lista de React Query.
+    // El paciente abierto en un modal es una query propia, no estado local copiado
+    // de la lista. Un `invalidateQueries(['patients'])` alcanza a esta key por
+    // prefijo, así que la fila del modal se refresca junto con la tabla.
     //
-    // Depende SOLO de `patients`: si tambien dependiera de `selectedPatient`, cada vez
-    // que `handleRefresh` trae la fila fresca desde el servidor este efecto volveria a
-    // correr contra la lista todavia stale (el invalidate no resolvio) y la pisaria con
-    // la version vieja. Eso borraba el consentimiento/historia recien subidos de la UI.
-    React.useEffect(() => {
-        const current = selectedPatientRef.current;
-        if (!current || !Array.isArray(patients)) return;
+    // Esto reemplaza a ~45 líneas: un listener de `patients:refresh` que hacía su
+    // propio `getPatientById`, un ref para leer el paciente sin re-suscribirse, y un
+    // efecto que copiaba desde la lista con un merge defensivo sobre las cuatro URLs
+    // de documentos para que una lista stale no borrara el archivo recién subido.
+    const selectedPatientId: string | null = selectedPatientBase?.id ?? selectedPatientBase?._id ?? null;
 
-        const updated = patients.find(
-            (p: any) => (p.id || p._id) === (current.id || current._id)
-        );
-        if (!updated || JSON.stringify(current) === JSON.stringify(updated)) return;
+    const { data: fetchedPatient } = useQuery({
+        queryKey: queryKeys.patients.detail(selectedPatientId ?? ''),
+        queryFn: () => PatientService.getPatientById(selectedPatientId!),
+        enabled: !!selectedPatientId,
+    });
 
-        // Las URLs de documentos nunca retroceden a vacio por una lista stale: el
-        // borrado real de un adjunto siempre reemplaza el path, no lo deja en null.
-        setSelectedPatient({
-            ...updated,
-            historia_clinica_url: updated.historia_clinica_url ?? current.historia_clinica_url,
-            historiaClinicaUrl: updated.historiaClinicaUrl ?? current.historiaClinicaUrl,
-            consentimiento_url: updated.consentimiento_url ?? current.consentimiento_url,
-            consentimientoUrl: updated.consentimientoUrl ?? current.consentimientoUrl,
-        });
-    }, [patients]);
-
-    React.useEffect(() => {
-        const handleRefresh = async () => {
-            if (typeof refreshPatients === 'function') refreshPatients();
-            const current = selectedPatientRef.current;
-            if (current?.id) {
-                try {
-                    const updated = await PatientService.getPatientById(current.id);
-                    if (updated) setSelectedPatient(updated);
-                } catch (_) {}
-            }
-        };
-        window.addEventListener('patients:refresh', handleRefresh);
-        return () => window.removeEventListener('patients:refresh', handleRefresh);
-    }, [refreshPatients]);
+    // La versión del servidor manda, pero se preservan los overrides que inyecta
+    // `onOpenRecord` (p. ej. `historiaUrl` normalizada) mientras la query resuelve.
+    const selectedPatient = useMemo(() => {
+        if (!selectedPatientBase) return null;
+        return fetchedPatient ? { ...selectedPatientBase, ...fetchedPatient } : selectedPatientBase;
+    }, [selectedPatientBase, fetchedPatient]);
 
     const value = useMemo(() => ({
         selectedPatient,

@@ -21,7 +21,6 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
         handleSubmit,
         setValue,
         watch,
-        trigger,
         formState: { errors, isSubmitting, isValid },
         reset
     } = useForm<CreateAppointmentPayload>({
@@ -92,7 +91,7 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
                         hiddenSubmitRef.current?.click();
                     }
                 } catch {
-                    try { hiddenSubmitRef.current?.click(); } catch { }
+                    try { hiddenSubmitRef.current?.click(); } catch { /* submit oculto ya desmontado */ }
                 }
             });
         }
@@ -145,7 +144,6 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
                 setPatientNotice('Paciente nuevo: se creará automáticamente al confirmar.');
             }
         } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             setPatientNotice('Error al buscar paciente');
             setPatientFound(false);
         } finally {
@@ -181,7 +179,6 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
                 setSelectedHora('');
             }
         } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             setAvailableSlots([]);
         } finally {
             setLoadingAvailability(false);
@@ -250,9 +247,8 @@ export function useBookingForm(onSuccess?: () => void, setFormSubmit?: (submitFn
             setTimeout(() => {
                 if (onSuccess) onSuccess();
             }, 2000);
-        } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
-            const msg = err.message || 'Error al crear el turno. Intenta nuevamente.';
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al crear el turno. Intenta nuevamente.';
             setError(msg);
             message.error(msg);
         }

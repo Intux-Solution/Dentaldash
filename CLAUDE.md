@@ -255,12 +255,16 @@ Log de eventos de MercadoPago. **Sin RLS** - auditoria.
 ### `whatsapp-manager`
 Gestiona la instancia de WhatsApp via Evolution API.
 
-Acciones: `create`, `get_qr`, `logout`, `sync_webhook`, `debug_instance`.
+Acciones: `create`, `get_qr`, `logout`, `sync_webhook`, `debug_instance`, `sync_webhook_all`.
 
-Requiere JWT. Variables de entorno: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`.
+`sync_webhook_all` es una accion **global de admin** (validada contra `admin_users`, no lleva `tenant_id`): re-registra el webhook de todas las instancias con `whatsapp_instance` no nulo. Se usa al rotar `CHAT_WEBHOOK_SECRET` o al cambiar la URL del webhook, para que ningun tenant quede con una URL vieja que `chat-webhook` rechace con 401.
+
+Requiere JWT. Variables de entorno: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `CHAT_WEBHOOK_SECRET` (obligatoria: sin ella la funcion devuelve 500, porque registraria un webhook que `chat-webhook` rechazaria).
 
 ### `chat-webhook`
 Recibe mensajes de WhatsApp (no requiere JWT - endpoint publico para Evolution API).
+
+**Autenticacion (fail-closed):** el unico control de acceso es el secreto `CHAT_WEBHOOK_SECRET`. Sin la env var la funcion responde `503`; con secreto incorrecto o ausente, `401`. El secreto viaja como **query param `?s=`** en la URL que `whatsapp-manager` registra en Evolution API (Evolution self-hosted v2 no soporta headers custom en el webhook); tambien se acepta el header `x-webhook-secret` para pruebas manuales.
 
 Flujo:
 1. Recibe payload de Evolution API
@@ -272,7 +276,9 @@ Flujo:
 7. Envia respuesta por WhatsApp
 8. Persiste respuesta en `chat_history`
 
-Variables de entorno: `OPENAI_API_KEY`, `GEMINI_API_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+Variables de entorno: `CHAT_WEBHOOK_SECRET` (obligatoria), `OPENAI_API_KEY`, `GEMINI_API_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+
+**Orden de deploy al rotar `CHAT_WEBHOOK_SECRET`** (para que el bot no se caiga): 1) setear el secreto; 2) deploy de `whatsapp-manager`; 3) invocar `sync_webhook_all` con JWT de admin; 4) deploy de `chat-webhook` (`--no-verify-jwt`).
 
 ### `cleanup-orphaned-files`
 Limpieza programada de archivos huerfanos en Supabase Storage. Elimina archivos en `clinical-records` que no esten referenciados por ningun paciente y sean mayores a N dias (default: 30). La dispara un cron job de pg_cron (`cleanup-orphaned-files`, domingos 03:00 UTC) via `net.http_post` con el anon key — debe mantenerse con `verify_jwt=true`.
@@ -440,7 +446,7 @@ Los `feature_keys` de cada plan se guardan en `subscription_plans.feature_keys t
 - Los servicios del perfil son `jsonb` (array de objetos `{name, duration, price}`).
 - Las obras sociales aceptadas en el perfil son `text[]`.
 - Los tipos de turno en el cliente vienen de `src/config/appointments.ts`.
-- El `chat-webhook` no verifica JWT porque Evolution API no puede enviar tokens de usuario.
+- El `chat-webhook` no verifica JWT porque Evolution API no puede enviar tokens de usuario: su unico control de acceso es `CHAT_WEBHOOK_SECRET` en la query string (`?s=`), fail-closed.
 - Los `feature_keys` de cada plan viven en `subscription_plans.feature_keys` (DB), NO hardcodeados en Edge Functions.
 - `PublicBookingView` no usa `useAuth()` ni `useSubscription()`. Es completamente standalone.
 - El RPC `confirm_public_appointment_safe` tiene `SECURITY DEFINER` y acepta `p_user_id` explicito (para uso sin sesion de auth).

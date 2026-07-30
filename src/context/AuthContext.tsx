@@ -67,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Nos suscribimos a cambios
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            (event, currentSession) => {
+            (_event, currentSession) => {
                 // Diferido: handleSession hace awaits reales a Supabase (SELECT/UPDATE
                 // a profiles). Ejecutarlos directo acá corre mientras supabase-js retiene
                 // el lock interno de auth, lo que puede deadlockear el cliente si alguna

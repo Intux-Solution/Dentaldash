@@ -1,4 +1,3 @@
-import React from 'react';
 import { Trash2, Plus } from 'lucide-react';
 import { ScheduleData } from './useSettings'; // Import type from useSettings
 

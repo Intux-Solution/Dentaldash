@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ExportService } from './ExportService';
 
 // Mock DOM APIs not available in jsdom
-const createObjectURLMock = vi.fn(() => 'blob:mock-url');
+// El parámetro tipado no es decorativo: sin él, `mock.calls[0][0]` es una tupla
+// vacía y los asserts sobre el Blob no compilan.
+const createObjectURLMock = vi.fn((_blob: Blob) => 'blob:mock-url');
 const revokeObjectURLMock = vi.fn();
 
 Object.defineProperty(globalThis, 'URL', {

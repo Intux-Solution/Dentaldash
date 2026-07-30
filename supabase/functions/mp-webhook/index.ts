@@ -1,20 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
-
-// Todas las feature keys posibles
-const ALL_FEATURES = [
-  "appointments",
-  "odontogram",
-  "clinical_records",
-  "consent_forms",
-  "patients_unlimited",
-  "insurance_management",
-  "services_config",
-  "export_data",
-  "whatsapp_bot",
-  "google_calendar",
-  "faqs_config",
-];
+import { buildPermissionRows } from "../_shared/feature-keys.ts";
 
 // Valida la firma x-signature de MercadoPago. Devuelve true/false.
 // No lanza: si algo falla, devuelve false para que el caller decida.
@@ -273,16 +259,12 @@ serve(async (req) => {
 
       const enabledFeatures: string[] = (plan as any)?.feature_keys ?? [];
 
-      const permissionsUpsert = ALL_FEATURES.map((key) => ({
-        user_id: userId,
-        feature_key: key,
-        enabled: enabledFeatures.includes(key),
-        updated_at: now.toISOString(),
-      }));
-
       const { error: permError } = await supabase
         .from("feature_permissions")
-        .upsert(permissionsUpsert, { onConflict: "user_id,feature_key" });
+        .upsert(
+          buildPermissionRows(userId, enabledFeatures, now.toISOString()),
+          { onConflict: "user_id,feature_key" }
+        );
 
       if (permError) {
         console.error("Error upserting feature_permissions:", permError.message);

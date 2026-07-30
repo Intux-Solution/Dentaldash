@@ -1,12 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { FolderOpen, Upload, X, AlertTriangle, Image as ImageIcon, FileText } from 'lucide-react';
+import { FolderOpen, Upload, X, AlertTriangle, FileText, ExternalLink } from 'lucide-react';
 import { StorageService } from "../services/StorageService";
-import { PatientService } from "../services/PatientService";
 import { supabase } from "../config/supabaseClient";
 import ModalShell from "./ModalShell";
 import { Patient } from "../types/database.types";
 import { Session } from "@supabase/supabase-js";
 import { toast } from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from "../lib/queryKeys";
+import {
+  PATIENT_DOCUMENTS_BUCKET,
+  type PatientDocumentColumn,
+  type PatientDocumentConfig,
+} from "../config/patientDocuments";
 
 type PreviewKind = 'pdf' | 'doc' | 'image';
 
@@ -28,35 +34,54 @@ function kindFromUrl(...urls: (string | null | undefined)[]): PreviewKind {
   return 'image';
 }
 
-export interface ClinicalRecordModalProps {
-  open: boolean;
-  patient: Patient | null | any; // Falling back to any if patient schema in use differs
-  onClose: () => void;
-  session: Session | null;
+/** Primer campo con un string no vacío, respetando el orden de `fields`. */
+function resolveRawUrl(patient: Record<string, unknown>, fields: readonly string[]): string {
+  for (const field of fields) {
+    const value = patient?.[field];
+    if (typeof value === 'string' && value !== '') return value;
+  }
+  return '';
 }
 
-export default function ClinicalRecordModal({ open, patient, onClose, session }: ClinicalRecordModalProps) {
+export interface PatientDocumentModalProps {
+  open: boolean;
+  // `any` a propósito: los pacientes llegan con distintos shapes según el camino
+  // (fila cruda, mapeada a camelCase, o con overrides inyectados por el provider).
+  patient: Patient | null | any;
+  onClose: () => void;
+  session: Session | null;
+  config: PatientDocumentConfig;
+}
+
+/**
+ * Modal de un documento adjunto del paciente (historia clínica, consentimiento).
+ *
+ * Reemplaza a `ClinicalRecordModal` y `ConsentimientoModal`, que eran el mismo
+ * componente duplicado (345 y 323 líneas): mismos helpers, mismos cuatro efectos,
+ * mismo `handleFileChange` y mismo bloque de preview. Todo lo que difería está en
+ * `config` (ver `src/config/patientDocuments.ts`).
+ */
+export default function PatientDocumentModal({ open, patient, onClose, session, config }: PatientDocumentModalProps) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [localRawUrl, setLocalRawUrl] = useState<string | null>(null);
   const [instantPreviewUrl, setInstantPreviewUrl] = useState<string | null>(null);
   const [previewKind, setPreviewKind] = useState<PreviewKind | null>(null);
   const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  // Sincronizar prop patient con estado local al abrir o cambiar de paciente.
-  // Depende del ID y no de la referencia del objeto: ver la nota equivalente en
-  // ConsentimientoModal (una dependencia por referencia borraba el archivo recien subido).
+  const EmptyIcon = config.emptyIcon;
+  const PdfMobileIcon = config.pdfMobileIcon ?? config.emptyIcon;
+
+  // Sincronizar la prop `patient` con el estado local al abrir o cambiar de paciente.
+  //
+  // Depende del ID y NO de la referencia del objeto: tras subir un archivo el
+  // provider vuelve a emitir el paciente varias veces, y una dependencia por
+  // referencia reseteaba `localRawUrl` al valor stale — mostrando el estado vacío
+  // con el archivo ya guardado.
   useEffect(() => {
     if (!patient) return;
-    setLocalRawUrl(
-      patient.historiaUrl ||
-      patient.odontogramaUrl ||
-      patient.odontograma ||
-      patient.historiaClinica ||
-      patient.historiaClinicaUrl ||
-      patient.historia_clinica_url ||
-      ""
-    );
+    setLocalRawUrl(resolveRawUrl(patient, config.urlFields));
     // Limpiar preview temporal al cambiar de paciente
     setInstantPreviewUrl(prev => {
       if (prev) URL.revokeObjectURL(prev);
@@ -64,9 +89,9 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     });
     setPreviewKind(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patient?.id ?? patient?._id, open]);
+  }, [patient?.id ?? patient?._id, open, config.id]);
 
-  // Fetch signed URL if it's a path, or use it directly if it's a public URL
+  // Resolver la URL firmada si es un path, o usarla directo si ya es pública
   useEffect(() => {
     let active = true;
 
@@ -75,9 +100,8 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
         if (active) setLoading(true);
         const url = await StorageService.getValidRecordUrl(localRawUrl as string);
         if (active) setSignedUrl(url);
-      } catch (errUnknown: unknown) {
-        const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
-        toast.error("Error al cargar el archivo de la historia clínica.");
+      } catch (err) {
+        toast.error(config.loadErrorMessage);
         console.error("Error fetching signed URL:", err);
       } finally {
         if (active) setLoading(false);
@@ -86,7 +110,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
 
     if (open) {
       if (instantPreviewUrl) {
-        // If we are showing a local preview, DO NOT fetch from supabase
+        // Con un preview local en pantalla NO se consulta a Supabase
         setSignedUrl(instantPreviewUrl);
       } else if (localRawUrl && localRawUrl !== 'Sin archivo' && localRawUrl !== '-') {
         fetchUrl();
@@ -103,6 +127,7 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     }
 
     return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localRawUrl, open, instantPreviewUrl]);
 
   // Los PDF guardados se previsualizan desde un blob: same-origin en vez de embeber
@@ -137,13 +162,11 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     };
   }, [localRawUrl, open, instantPreviewUrl]);
 
-  if (!open || !patient) return null;
-
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Visualizar inmediatamente para UX perfecta e inmune a tiempos de red
+    // Visualizar inmediatamente: la UX no depende de los tiempos de red
     const objectUrl = URL.createObjectURL(file);
     setInstantPreviewUrl(objectUrl);
     setPreviewKind(kindFromMime(file.type));
@@ -155,20 +178,17 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       const userId = session?.user?.id;
       if (!userId) throw new Error("No hay sesión activa");
 
-      const newPath = await PatientService.uploadClinicalRecord(file, userId);
-
-      if (!newPath) {
-        throw new Error("No se pudo obtener la ruta del archivo subido");
-      }
+      const newPath = await config.upload(file, userId);
+      if (!newPath) throw new Error("No se pudo obtener la ruta del archivo subido");
 
       const oldUrl = localRawUrl;
-      // Immediately clear the old raw URL so the useEffect doesn't try to fetch it
-      // while we are deleting it or uploading the new one
+      // Limpiar el path viejo ya: si no, el efecto de arriba pediría la URL
+      // firmada de un archivo que estamos por borrar.
       setLocalRawUrl(null);
 
       const { error: updateError } = await supabase
         .from('patients')
-        .update({ historia_clinica_url: newPath })
+        .update({ [config.dbColumn]: newPath } as Partial<Record<PatientDocumentColumn, string>>)
         .eq('id', patient.id)
         .eq('user_id', userId);
 
@@ -179,10 +199,9 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       // en vez de quedar sin archivo por haber borrado el anterior antes de tiempo.
       if (oldUrl && !oldUrl.startsWith('http') && oldUrl !== 'Sin archivo' && oldUrl !== '-') {
         try {
-          await StorageService.deleteFile(oldUrl, 'clinical-records');
-        } catch (deleteErrUnknown: unknown) {
-          const deleteErr = deleteErrUnknown instanceof Error ? deleteErrUnknown : new Error(String(deleteErrUnknown) || "Ocurrió un error inesperado.");
-          console.warn('Could not delete old clinical record file, proceeding anyway:', deleteErr);
+          await StorageService.deleteFile(oldUrl, PATIENT_DOCUMENTS_BUCKET);
+        } catch (deleteErr) {
+          console.warn(`No se pudo borrar el archivo previo de ${config.title}:`, deleteErr);
         }
       }
 
@@ -193,12 +212,14 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       setInstantPreviewUrl(null);
       setPreviewKind(null);
       setLocalRawUrl(newPath);
-      window.dispatchEvent(new CustomEvent('patients:refresh'));
+      // Refresca la lista y el detalle del paciente (la key `detail` cuelga del
+      // mismo prefijo), para que la fila muestre el documento recién subido.
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
       e.target.value = '';
-      toast.success("Archivo subido exitosamente");
+      toast.success(config.uploadSuccessMessage);
     } catch (errUnknown: unknown) {
       const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
-      // Revert if upload fails
+      // Revertir si la subida falla
       URL.revokeObjectURL(objectUrl);
       setInstantPreviewUrl(null);
       setPreviewKind(null);
@@ -214,13 +235,17 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     }
   };
 
+  if (!open || !patient) return null;
+
   const displayUrl = signedUrl;
+  // Un `historia_clinica_url` legacy puede ser un link de Drive sin extensión, que
+  // `kindFromUrl` clasificaría como imagen y renderizaría con un <img> roto.
   const isGoogleDrive = typeof localRawUrl === 'string' && localRawUrl.includes('drive.google.com');
   const kind: PreviewKind = previewKind ?? kindFromUrl(localRawUrl, displayUrl);
 
   return (
     <ModalShell
-      title="Historia Clínica"
+      title={config.title}
       onClose={onClose}
       maxWidth="max-w-2xl"
       footer={
@@ -228,13 +253,13 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
           <button
             onClick={() => displayUrl && window.open(displayUrl, '_blank')}
             disabled={!displayUrl || loading}
-            className="flex-1 h-12 flex items-center justify-center gap-2 px-4 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 font-semibold hover:bg-teal-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className={`flex-1 h-12 flex items-center justify-center gap-2 px-4 rounded-xl border font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all ${config.accent.openButton}`}
           >
             <FolderOpen size={18} />
             <span>Abrir</span>
           </button>
 
-          <label className="flex-1 h-12 flex items-center justify-center gap-2 px-4 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 cursor-pointer transition-all">
+          <label className={`flex-1 h-12 flex items-center justify-center gap-2 px-4 rounded-xl text-white font-semibold cursor-pointer transition-all ${config.accent.uploadButton}`}>
             <Upload size={18} />
             <span>{localRawUrl ? 'Modificar' : 'Adjuntar Nuevo'}</span>
             <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf,.doc,.docx" />
@@ -251,17 +276,17 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
       }
     >
       <div className="flex flex-col gap-6">
-        {/* Preview Area */}
+        {/* Preview */}
         <div className="w-full aspect-[4/3] bg-gray-50 rounded-2xl border border-dashed border-gray-300 overflow-hidden flex items-center justify-center relative group">
           {loading ? (
             <div className="flex flex-col items-center gap-3">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600"></div>
+              <div className={`animate-spin rounded-full h-10 w-10 border-b-2 ${config.accent.spinner}`}></div>
               <span className="text-sm text-gray-500 font-medium">Cargando documento...</span>
             </div>
           ) : !localRawUrl ? (
             <div className="flex flex-col items-center gap-4 text-gray-400">
-              <ImageIcon size={64} strokeWidth={1} />
-              <span className="text-sm font-medium">No hay archivo seleccionado</span>
+              <EmptyIcon size={64} strokeWidth={1} />
+              <span className="text-sm font-medium">{config.emptyLabel}</span>
             </div>
           ) : !displayUrl ? (
             <div className="flex flex-col items-center gap-3 text-amber-500">
@@ -286,36 +311,30 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
             </div>
           ) : kind === 'pdf' || isGoogleDrive ? (
             <div className="w-full h-full flex flex-col">
-              {/* Desktop: inline iframe */}
-              <iframe title="Historia Clínica" src={pdfObjectUrl ?? displayUrl} className="flex-1 w-full border-none hidden sm:block" />
-              {/* Mobile fallback: iframe often fails silently on iOS/Android */}
+              {/* Desktop: iframe embebido */}
+              <iframe title={config.title} src={pdfObjectUrl ?? displayUrl} className="flex-1 w-full border-none hidden sm:block" />
+              {/* Mobile: el iframe falla en silencio en iOS/Android */}
               <div className="flex flex-col items-center justify-center gap-4 p-6 sm:hidden flex-1">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-16 h-16 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                </svg>
+                <PdfMobileIcon size={64} strokeWidth={1} className={config.accent.mobileIcon} />
                 <p className="text-sm text-gray-500 text-center font-medium">Los PDF no se pueden previsualizar en dispositivos móviles.</p>
                 <a
                   href={displayUrl ?? undefined}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2 px-6 py-3 bg-teal-600 text-white font-semibold rounded-xl hover:bg-teal-700 transition-all shadow-sm"
+                  className={`flex items-center gap-2 px-6 py-3 text-white font-semibold rounded-xl transition-all shadow-sm ${config.accent.mobileCta}`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                  </svg>
+                  <ExternalLink size={18} />
                   Abrir PDF en nueva pestaña
                 </a>
               </div>
-              {/* Desktop: also show subtle link below iframe for convenience */}
+              {/* Desktop: link discreto bajo el iframe */}
               <a
                 href={displayUrl ?? undefined}
                 target="_blank"
                 rel="noreferrer"
-                className="hidden sm:flex items-center justify-center gap-1.5 py-2 text-xs text-teal-600 hover:text-teal-800 font-medium transition-colors"
+                className={`hidden sm:flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${config.accent.desktopLink}`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                </svg>
+                <ExternalLink size={14} />
                 Abrir en nueva pestaña
               </a>
             </div>
@@ -327,12 +346,11 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
               className="w-full h-full flex items-center justify-center cursor-zoom-in"
               title="Abrir imagen en pestaña nueva"
             >
-              <img src={displayUrl} alt="Historia Clínica" className="w-full h-full object-contain" />
+              <img src={displayUrl} alt={config.title} className="w-full h-full object-contain" />
             </a>
           )}
         </div>
 
-        {/* Info or helper text if needed */}
         {!localRawUrl && (
           <p className="text-center text-sm text-gray-500 italic">
             Sube un archivo (Imagen, PDF o Word) para verlo aquí.
@@ -342,4 +360,3 @@ export default function ClinicalRecordModal({ open, patient, onClose, session }:
     </ModalShell>
   );
 }
-

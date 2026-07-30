@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,7 +12,7 @@ import { PublicBookingSchema, PublicBookingData } from '../schemas/publicBooking
 function getNextDays(activeDays: number[], count = 30): string[] {
   const dates: string[] = [];
   const today = new Date();
-  let d = new Date(today);
+  const d = new Date(today);
   d.setDate(d.getDate() + 1);
   while (dates.length < count) {
     if (activeDays.includes(d.getDay())) {
@@ -37,7 +37,8 @@ export default function PublicBookingView() {
 
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<PublicDentistProfile | null>(null);
-  const [workingDays, setWorkingDays] = useState<number[]>([]);
+  // Solo se usa el setter: los días laborales se consumen ya expandidos en `availableDates`.
+  const [, setWorkingDays] = useState<number[]>([]);
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState('');

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Loader2, ArrowLeft } from 'lucide-react';
 import { fetchPublicPlans, createCheckout, SubscriptionPlan } from '../services/SubscriptionService';
 import { useAuth } from '../context/AuthContext';
@@ -128,7 +128,7 @@ export default function PricingView() {
         </div>
       ) : (
         <div className="max-w-5xl mx-auto px-6 pb-20 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-          {plans.map((plan, idx) => {
+          {plans.map((plan) => {
             const isPro = plan.name === 'Asistente IA';
             const isBusy = checkoutLoading === plan.id;
             const action = actionFor(plan);

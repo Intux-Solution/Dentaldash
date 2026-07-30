@@ -55,8 +55,7 @@ export function useOdontogramView(id: string | undefined) {
             setPatient(pData);
             setOdontogramData(oData?.data || {});
             setHistory(hData || []);
-        } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
+        } catch (err) {
             console.error('Error loading data:', err);
             setError('Error al cargar la información.');
         } finally {
@@ -69,10 +68,8 @@ export function useOdontogramView(id: string | undefined) {
         try {
             setSaving(true);
             await OdontogramService.saveOdontogram(id, odontogramData);
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
             message.success('Odontograma guardado correctamente');
-        } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
+        } catch (err) {
             console.error('Error saving:', err);
             message.error('Error al guardar el odontograma');
         } finally {
@@ -91,12 +88,10 @@ export function useOdontogramView(id: string | undefined) {
                 ...newNote,
                 tooth_number: newNote.tooth_number ? parseInt(newNote.tooth_number) : null
             });
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
             setHistory([entry, ...history] as any);
             setNewNote({ tooth_number: '', procedure_type: '', description: '' });
             message.success('Registro añadido correctamente');
-        } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
+        } catch (err) {
             console.error('Error adding history:', err);
             message.error('Error al añadir registro');
         } finally {
@@ -108,11 +103,9 @@ export function useOdontogramView(id: string | undefined) {
         if (!window.confirm('¿Eliminar este registro del historial?')) return;
         try {
             await EvolutionService.deleteEntry(historyId);
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
             setHistory((prev: any[]) => prev.filter(h => h.id !== historyId) as any);
             message.success('Registro eliminado');
         } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             message.error('Error al eliminar');
         }
     };
@@ -145,10 +138,8 @@ export function useOdontogramView(id: string | undefined) {
             // Actualizar la lista localmente
             setHistory((prev: any[]) => prev.map(item => item.id === historyId ? updatedEntry : item) as any);
             setEditingId(null);
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
             message.success('Cambios guardados con éxito');
-        } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
+        } catch (err) {
             console.error('Error updating history:', err);
             message.error('Error al guardar los cambios');
         } finally {

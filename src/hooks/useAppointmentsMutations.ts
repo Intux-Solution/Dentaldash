@@ -39,7 +39,7 @@ export function useAppointmentsMutations(fromDate: string | null = null, toDate:
             // Return context object with the snapshotted value
             return { previousTurnos };
         },
-        onError: (err, newAppointment, context) => {
+        onError: (err, _newAppointment, context) => {
             // Rollback to the previous value if mutation fails
             if (context?.previousTurnos) {
                 queryClient.setQueryData(currentQueryKey, context.previousTurnos);
@@ -78,7 +78,7 @@ export function useAppointmentsMutations(fromDate: string | null = null, toDate:
 
             return { previousTurnos };
         },
-        onError: (err, variables, context) => {
+        onError: (err, _variables, context) => {
             if (context?.previousTurnos) {
                 queryClient.setQueryData(currentQueryKey, context.previousTurnos);
             }
@@ -103,7 +103,7 @@ export function useAppointmentsMutations(fromDate: string | null = null, toDate:
 
             return { previousTurnos };
         },
-        onError: (err, id, context) => {
+        onError: (err, _id, context) => {
             if (context?.previousTurnos) {
                 queryClient.setQueryData(currentQueryKey, context.previousTurnos);
             }

@@ -1,5 +1,5 @@
 // src/components/SettingsView.jsx - UPDATED 2026-02-21 (Refactored)
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { message } from 'antd';
 import { useSettings } from './settings/useSettings';
@@ -83,7 +83,7 @@ export default function SettingsView() {
         profile, tenant, schedules, faqs, loading, saving,
         googleAvatar, avatarPreview, qrCodeData, instanceStatus, pollingActive,
         googleConnected, googleDisconnecting,
-        setProfile, setTenant, setFaqs,
+        setFaqs,
         handleProfileChange, handleAutoSaveProfile, handleAvatarChange,
         handleConnectWhatsApp, handleDisconnectWhatsApp,
         handleConnectGoogle, handleDisconnectGoogle,

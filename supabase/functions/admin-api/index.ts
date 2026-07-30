@@ -1,38 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0";
-
-// Allowlist de origenes permitidos (CORS). Se configura via APP_URL (coma-separada).
-// Origen de produccion conocido + los configurados en APP_URL (con/sin www, etc.)
-const ALLOWED_ORIGINS = [
-  "https://dashboard.dentaldash.cloud",
-  ...(Deno.env.get("APP_URL") ?? "").split(",").map((s) => s.trim().replace(/\/+$/, "")),
-].filter(Boolean);
-
-function buildCors(origin: string | null): Record<string, string> {
-  const allow = origin && ALLOWED_ORIGINS.includes(origin)
-    ? origin
-    : (ALLOWED_ORIGINS[0] ?? "");
-  return {
-    "Access-Control-Allow-Origin": allow,
-    "Vary": "Origin",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
-}
-
-const ALL_FEATURES = [
-  "appointments",
-  "odontogram",
-  "clinical_records",
-  "consent_forms",
-  "patients_unlimited",
-  "insurance_management",
-  "services_config",
-  "export_data",
-  "whatsapp_bot",
-  "google_calendar",
-  "faqs_config",
-];
+import { buildCors } from "../_shared/cors.ts";
+import { ALL_FEATURES, buildPermissionRows } from "../_shared/feature-keys.ts";
 
 serve(async (req) => {
   const corsHeaders = buildCors(req.headers.get("origin"));
@@ -190,15 +159,12 @@ serve(async (req) => {
       // Actualizar feature_permissions segun el nuevo plan (lee feature_keys de la DB)
       if (plan) {
         const enabledFeatures: string[] = (plan as any).feature_keys ?? [];
-        const perms = ALL_FEATURES.map((key) => ({
-          user_id: target_user_id,
-          feature_key: key,
-          enabled: enabledFeatures.includes(key),
-          updated_at: new Date().toISOString(),
-        }));
         await supabase
           .from("feature_permissions")
-          .upsert(perms, { onConflict: "user_id,feature_key" });
+          .upsert(
+            buildPermissionRows(target_user_id, enabledFeatures),
+            { onConflict: "user_id,feature_key" }
+          );
       }
 
       return json({ ok: true });
@@ -345,16 +311,13 @@ serve(async (req) => {
 
       if (subError) throw subError;
 
-      // Habilitar todas las features
-      const perms = ALL_FEATURES.map((key) => ({
-        user_id: target_user_id,
-        feature_key: key,
-        enabled: true,
-        updated_at: now,
-      }));
+      // Habilitar todas las features (acceso de cortesía)
       const { error: permError } = await supabase
         .from("feature_permissions")
-        .upsert(perms, { onConflict: "user_id,feature_key" });
+        .upsert(
+          buildPermissionRows(target_user_id, ALL_FEATURES, now),
+          { onConflict: "user_id,feature_key" }
+        );
 
       if (permError) throw permError;
       return json({ ok: true });
@@ -514,12 +477,7 @@ serve(async (req) => {
         if (userIds.length > 0) {
           const now = new Date().toISOString();
           const perms = userIds.flatMap((uid: string) =>
-            ALL_FEATURES.map((key) => ({
-              user_id: uid,
-              feature_key: key,
-              enabled: enabledFeatures.includes(key),
-              updated_at: now,
-            }))
+            buildPermissionRows(uid, enabledFeatures, now)
           );
           const { error: permError } = await supabase
             .from("feature_permissions")

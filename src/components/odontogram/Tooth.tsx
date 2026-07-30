@@ -1,5 +1,5 @@
 import React from 'react';
-import { ToothData, SurfaceStatus } from '../../schemas/odontogram.schema';
+import { ToothData } from '../../schemas/odontogram.schema';
 
 interface ToothProps {
     number: number;

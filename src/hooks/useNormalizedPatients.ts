@@ -9,7 +9,7 @@ function parseFechaToMs(raw: unknown) {
     const iso = Date.parse(raw);
     if (!Number.isNaN(iso)) return iso;
     const m = raw.match(
-      /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+      /^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
     );
     if (m) {
       const d = parseInt(m[1], 10);

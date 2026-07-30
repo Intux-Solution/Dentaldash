@@ -1,12 +1,11 @@
-import React from 'react';
 import { usePatientModals } from '../hooks/usePatientModals';
 import { useAppointmentModals } from '../hooks/useAppointmentModals';
 
 import PatientProfileModal from './PatientProfileModal';
 import EditPatientModal from './EditPatientModal';
 import AddPatientModal from './AddPatientModal';
-import ClinicalRecordModal from './ClinicalRecordModal';
-import ConsentimientoModal from './ConsentimientoModal';
+import PatientDocumentModal from './PatientDocumentModal';
+import { CLINICAL_RECORD_DOC, CONSENT_DOC } from '../config/patientDocuments';
 import BookingModal from './BookingModal';
 import TurnoDetailsModal from './TurnoDetailsModal';
 import EditTurnoModal from './EditTurnoModal';
@@ -83,14 +82,16 @@ export default function ModalsRoot() {
         onCreate={onCreatedPatient}
       />
 
-      <ClinicalRecordModal
+      <PatientDocumentModal
+        config={CLINICAL_RECORD_DOC}
         open={showRecordModal}
         patient={selectedPatient}
         onClose={closeRecordModal}
         session={session}
       />
 
-      <ConsentimientoModal
+      <PatientDocumentModal
+        config={CONSENT_DOC}
         open={showConsentModal}
         patient={selectedPatient}
         onClose={closeConsentModal}

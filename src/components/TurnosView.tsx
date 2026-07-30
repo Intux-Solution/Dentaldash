@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Calendar, RefreshCcw, Plus, Eye, List } from 'lucide-react';
-import { useModals } from '../hooks/useModals';
+import { useAppointmentModals } from '../hooks/useAppointmentModals';
 import { useTurnosView, formatDateForInput } from '../hooks/useTurnosView';
 import { ExportService } from '../services/ExportService';
 import { useSubscription } from '../context/SubscriptionContext';
@@ -25,7 +25,7 @@ function buildMonthGrid(year: number, month: number): (Date | null)[] {
 }
 
 export default function TurnosView() {
-    const { openBookingModal: onOpenBooking, onViewTurno } = useModals();
+    const { openBookingModal: onOpenBooking, onViewTurno } = useAppointmentModals();
     const { canUse } = useSubscription();
     const [currentPage, setCurrentPage] = useState(1);
     const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
@@ -61,7 +61,9 @@ export default function TurnosView() {
     const countByDay = useMemo(() => {
         const map: Record<string, number> = {};
         for (const ev of events) {
-            const d = new Date(ev.start || ev.start_time || '');
+            // `start_time` es el nombre crudo de la columna: llega en turnos que no
+            // pasaron por el mapeo del repositorio.
+            const d = new Date(ev.start || (ev as { start_time?: string }).start_time || '');
             if (isNaN(d.getTime())) continue;
             const key = formatDateForInput(d);
             map[key] = (map[key] || 0) + 1;

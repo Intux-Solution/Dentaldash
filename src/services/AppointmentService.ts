@@ -5,13 +5,17 @@ import { NotificationService } from './NotificationService';
 import { CreateAppointmentSchema, UpdateAppointmentSchema } from '../schemas/appointment.schema';
 import { addMinutes } from 'date-fns';
 import { Session } from '@supabase/supabase-js';
+import { devLog } from '../utils/devLog';
 import * as z from 'zod';
+
+/** Turnos rezagados que se sincronizan como máximo por pasada de `syncPendingAppointments`. */
+const PENDING_SYNC_BATCH_SIZE = 10;
 
 export type CreateAppointmentInput = z.infer<typeof CreateAppointmentSchema> & { patient_id?: string; email?: string };
 export type UpdateAppointmentInput = z.infer<typeof UpdateAppointmentSchema> & { email?: string; status?: string };
 
 export class AppointmentService {
-    static async getAppointments(fromISO: string, toISO: string, session: Session | null = null) {
+    static async getAppointments(fromISO: string, toISO: string, _session: Session | null = null) {
         try {
             const data = await AppointmentRepository.getAppointments(fromISO, toISO);
             return data.map((app: any) => ({
@@ -90,9 +94,11 @@ ${data.notas || 'Sin notas adicionales'}
 
                 if (existingPatient?.id) {
                     patientId = existingPatient.id;
-                    console.log(`[AppointmentService] Found existing patient by DNI ${cleanDni} -> ID: ${patientId}`);
+                    // Sin el DNI en el mensaje: es un dato personal y la consola
+                    // del consultorio suele quedar abierta en un equipo compartido.
+                    devLog(`[AppointmentService] Paciente existente encontrado -> ID: ${patientId}`);
                 } else {
-                    console.log(`[AppointmentService] No existing patient found for DNI ${cleanDni}, creating new one.`);
+                    devLog('[AppointmentService] Paciente no encontrado, creando uno nuevo.');
                     const newPatient = await AppointmentRepository.createPatient({
                         dni: cleanDni,
                         nombre: validatedData.nombre?.trim(),
@@ -230,7 +236,9 @@ ${data.notas || 'Sin notas adicionales'}
             const pending = await AppointmentRepository.getPendingGoogleSync(new Date().toISOString());
             if (!pending || pending.length === 0) return;
 
-            for (const appt of pending) {
+            // Tope por pasada: el resto se reintenta en la siguiente. Un backlog
+            // grande encadenaba decenas de llamadas seguidas a la Edge Function.
+            for (const appt of pending.slice(0, PENDING_SYNC_BATCH_SIZE)) {
                 // `push_appointment` no lanza y ya resuelve por su cuenta si la
                 // integración está conectada, así que un turno que falle no frena
                 // a los siguientes.

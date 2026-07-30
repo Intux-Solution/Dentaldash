@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlertTriangle, Clock, XCircle } from 'lucide-react';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useNavigate } from 'react-router-dom';

@@ -1,5 +1,4 @@
 // src/components/PrivacyPolicy.jsx
-import React from 'react';
 import { Shield, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 

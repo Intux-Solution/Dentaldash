@@ -5,14 +5,25 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { resolveAvatarUrl } from '../../utils/avatar';
 import { GOOGLE_OAUTH_SCOPES } from '../../config/google';
 import { GoogleCalendarService } from '../../services/GoogleCalendarService';
+import { queryKeys } from '../../lib/queryKeys';
 
 // Interface definitions (Partial based on usage)
+/** Servicio/tratamiento ofrecido. Vive en `profiles.services` (jsonb). */
+export interface Service {
+    id: string;
+    name: string;
+    /** Duración estimada en minutos; determina el largo del slot. */
+    duration: number;
+    price?: number;
+}
+
 export interface ProfileData {
     full_name: string;
     avatar_url: string | null;
     user_id: string | null;
     accepted_insurances: string[];
-    services: string[];
+    /** jsonb: array de objetos, no de strings. */
+    services: Service[];
     contact_phone: string;
     business_name: string;
     whatsapp_instance: string | null;
@@ -60,7 +71,7 @@ export function useSettings(session: any = null) {
         isLoading: loading,
         error: queryError,
     } = useQuery({
-        queryKey: ['settings', userId],
+        queryKey: queryKeys.settings.detail(userId ?? ''),
         queryFn: async () => {
             if (!userId) throw new Error("No user ID");
 
@@ -172,9 +183,11 @@ export function useSettings(session: any = null) {
             return updates;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['settings', userId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
+            // El Header lee el perfil por su propia key: invalidar ambas reemplaza al
+            // `CustomEvent('profile:updated')` que había acá.
+            queryClient.invalidateQueries({ queryKey: queryKeys.profile.detail(userId ?? '') });
             message.success('Perfil actualizado correctamente');
-            window.dispatchEvent(new CustomEvent('profile:updated'));
         },
         onError: (err: any) => {
             console.error('Profile update error:', err);
@@ -202,10 +215,10 @@ export function useSettings(session: any = null) {
             return fileName;
         },
         onSuccess: (fileName) => {
-            queryClient.invalidateQueries({ queryKey: ['settings', userId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
+            queryClient.invalidateQueries({ queryKey: queryKeys.profile.detail(userId ?? '') });
             setAvatarPreview(resolveAvatarUrl(fileName));
             message.success('Avatar actualizado');
-            window.dispatchEvent(new CustomEvent('profile:updated'));
         },
         onError: (err: any) => {
             console.error('Avatar update error:', err);
@@ -227,7 +240,7 @@ export function useSettings(session: any = null) {
             setPollingActive(true);
             setInstanceStatus('connecting');
             if (data?.instance?.instanceName) {
-                queryClient.setQueryData(['settings', userId], (oldData: any) => {
+                queryClient.setQueryData(queryKeys.settings.detail(userId ?? ''), (oldData: any) => {
                     if (!oldData) return oldData;
                     return {
                         ...oldData,
@@ -260,7 +273,7 @@ export function useSettings(session: any = null) {
             setInstanceStatus('disconnected');
             setPollingActive(false);
             setQrCodeData(null);
-            queryClient.setQueryData(['settings', userId], (oldData: any) => {
+            queryClient.setQueryData(queryKeys.settings.detail(userId ?? ''), (oldData: any) => {
                 if (!oldData) return oldData;
                 return {
                     ...oldData,
@@ -305,7 +318,7 @@ export function useSettings(session: any = null) {
             // Sin esto la app seguiría usando el access token cacheado en memoria
             // hasta el próximo F5, aunque el usuario ya haya desconectado.
             GoogleCalendarService.clearTokenCache();
-            queryClient.invalidateQueries({ queryKey: ['settings', userId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
             message.success('Google Calendar desconectado correctamente.');
         },
         onError: (err: any) => {
@@ -324,7 +337,7 @@ export function useSettings(session: any = null) {
             return { slotId, updates };
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['settings', userId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
             message.success('Horario actualizado');
         },
         onError: (err: any) => {
@@ -358,7 +371,7 @@ export function useSettings(session: any = null) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['settings', userId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
             message.success('Horario agregado');
         },
         onError: (err: any) => {
@@ -376,7 +389,7 @@ export function useSettings(session: any = null) {
             return slotId;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['settings', userId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
             message.success('Horario eliminado');
         },
         onError: (err: any) => {
@@ -417,7 +430,7 @@ export function useSettings(session: any = null) {
 
                 // Update profile in DB to reflect connected status
                 await supabase.from('profiles').update({ whatsapp_status: 'connected' }).eq('id', userId);
-                queryClient.invalidateQueries({ queryKey: ['settings', userId] });
+                queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
             }
         } catch (errUnknown: unknown) {
             const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
@@ -441,7 +454,7 @@ export function useSettings(session: any = null) {
 
     const handleProfileChange = useCallback((field: string, value: any) => {
         // Optimistic local state update for form responsiveness
-        queryClient.setQueryData(['settings', userId], (oldData: any) => {
+        queryClient.setQueryData(queryKeys.settings.detail(userId ?? ''), (oldData: any) => {
             if (!oldData) return oldData;
             return {
                 ...oldData,
@@ -539,7 +552,7 @@ export function useSettings(session: any = null) {
         addSchedule: (dayId: number) => addScheduleMutation.mutate(dayId),
         deleteSchedule: (slotId: number) => deleteScheduleMutation.mutate(slotId),
         setFaqs: (updater: any) => {
-            queryClient.setQueryData(['settings', userId], (oldData: any) => {
+            queryClient.setQueryData(queryKeys.settings.detail(userId ?? ''), (oldData: any) => {
                 if (!oldData) return oldData;
                 return {
                     ...oldData,
@@ -548,7 +561,7 @@ export function useSettings(session: any = null) {
             });
         },
         setProfile: (updater: any) => {
-            queryClient.setQueryData(['settings', userId], (oldData: any) => {
+            queryClient.setQueryData(queryKeys.settings.detail(userId ?? ''), (oldData: any) => {
                 if (!oldData) return oldData;
                 return {
                     ...oldData,
@@ -557,7 +570,7 @@ export function useSettings(session: any = null) {
             });
         },
         setTenant: (updater: any) => {
-            queryClient.setQueryData(['settings', userId], (oldData: any) => {
+            queryClient.setQueryData(queryKeys.settings.detail(userId ?? ''), (oldData: any) => {
                 if (!oldData) return oldData;
                 return {
                     ...oldData,

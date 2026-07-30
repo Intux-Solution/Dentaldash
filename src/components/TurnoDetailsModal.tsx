@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Calendar, Clock, User, Phone, CreditCard, MapPin, FileText, Edit, Trash2, Loader, AlertCircle } from 'lucide-react';
 import { PatientService } from '../services/PatientService';
 
@@ -11,8 +11,9 @@ interface TurnoDetailsModalProps {
 }
 
 export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDelete }: TurnoDetailsModalProps) {
-  if (!open || !turno) return null;
-
+  // Todos los hooks van antes del early return: un `return null` previo los
+  // llamaría condicionalmente y rompería el orden entre renders. Por eso los
+  // accesos a `turno` de acá para abajo son opcionales (`turno?.`).
   const [showConfirm, setShowConfirm] = useState(false);
   const [patientLoading, setPatientLoading] = useState(false);
   const [patientError, setPatientError] = useState('');
@@ -37,7 +38,7 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
   };
 
   const getDuration = () => {
-    if (!turno.start || !turno.end) return null;
+    if (!turno?.start || !turno?.end) return null;
     const start = new Date(turno.start);
     const end = new Date(turno.end);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
@@ -49,19 +50,19 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
     return minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`;
   };
 
-  const { date, time } = formatDateTime(turno.start || turno.startTime);
+  const { date, time } = formatDateTime(turno?.start || turno?.startTime);
   const duration = getDuration();
 
   // Extract DNI from event data (field or description text)
   const dni = useMemo(() => {
     // Prefer explicit fields from the event
-    const explicit = turno.patientDni || turno.dni;
+    const explicit = turno?.patientDni || turno?.dni;
     if (explicit) return String(explicit).replace(/\D/g, '');
 
     // Robust parsing from description
-    const text = String(turno.description || '');
+    const text = String(turno?.description || '');
     // 1) Look for "dni: 12.345.678" or "dni 12345678" (case-insensitive)
-    const m1 = text.match(/dni\s*[:\-]?\s*([0-9\.\s]+)/i);
+    const m1 = text.match(/dni\s*[:-]?\s*([0-9.\s]+)/i);
     if (m1 && m1[1]) {
       const onlyDigits = String(m1[1]).replace(/\D/g, '');
       if (onlyDigits.length >= 7 && onlyDigits.length <= 9) return onlyDigits;
@@ -75,9 +76,9 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
 
   // Extract patient name from description as a fallback (e.g., "Paciente: Juan Pérez Dni: ...")
   const nameFromDescription = useMemo(() => {
-    const text = String(turno.description || '');
+    const text = String(turno?.description || '');
     // Try to capture between "Paciente:" and "DNI"/"Dni" or end of string
-    const m = text.match(/Paciente\s*[:\-]?\s*(.+?)(?=\s*(DNI|Dni|dni)\b|$)/);
+    const m = text.match(/Paciente\s*[:-]?\s*(.+?)(?=\s*(DNI|Dni|dni)\b|$)/);
     if (m && m[1]) return m[1].trim();
     return '';
   }, [turno]);
@@ -100,7 +101,6 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
           setPatient(patientData);
         }
       } catch (errUnknown: unknown) {
-      const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
         if (!aborted) {
           setPatientError('No se pudo obtener el paciente');
           setPatient(null);
@@ -121,19 +121,21 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
       name: safe(
         patient?.nombre ||
         patient?.name ||
-        turno.patientName ||
-        turno.paciente ||
+        turno?.patientName ||
+        turno?.paciente ||
         nameFromDescription
       ),
-      phone: safe(patient?.telefono || patient?.phone || turno.patientPhone),
-      email: safe(patient?.email || turno.patientEmail || turno.email),
+      phone: safe(patient?.telefono || patient?.phone || turno?.patientPhone),
+      email: safe(patient?.email || turno?.patientEmail || turno?.email),
       dni: safe(dni),
-      obraSocial: safe(patient?.obraSocial || patient?.insurance || turno.obraSocial),
-      numeroAfiliado: safe(patient?.numeroAfiliado || patient?.affiliateNumber || turno.numeroAfiliado),
-      alergias: safe(patient?.alergias || patient?.allergies || turno.alergias),
-      antecedentes: safe(patient?.antecedentes || patient?.background || turno.antecedentes),
+      obraSocial: safe(patient?.obraSocial || patient?.insurance || turno?.obraSocial),
+      numeroAfiliado: safe(patient?.numeroAfiliado || patient?.affiliateNumber || turno?.numeroAfiliado),
+      alergias: safe(patient?.alergias || patient?.allergies || turno?.alergias),
+      antecedentes: safe(patient?.antecedentes || patient?.background || turno?.antecedentes),
     };
   }, [patient, turno, dni, nameFromDescription]);
+
+  if (!open || !turno) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -344,7 +346,7 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
                 Volver
               </button>
               <button
-                onClick={() => { setShowConfirm(false); onDelete && onDelete(turno); }}
+                onClick={() => { setShowConfirm(false); onDelete?.(turno); }}
                 className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
               >
                 Cancelar turno

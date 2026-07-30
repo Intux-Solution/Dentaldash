@@ -1,17 +1,18 @@
 import React, { createContext, useContext, useCallback, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTurnos } from './useTurnos';
 import { useAuth } from '../context/AuthContext';
+import { queryKeys } from '../lib/queryKeys';
 
 const AppointmentModalsContext = createContext<any>(null);
 
 export function AppointmentModalsProvider({
     children,
     turnos = [],
-    refreshTurnos,
-    refreshPatients,
 }: any) {
     const { session } = useAuth();
     const { deleteTurno } = useTurnos(null, null, session);
+    const queryClient = useQueryClient();
 
     const [selectedTurno, setSelectedTurno] = useState<any>(null);
     const [showBookingModal, setShowBookingModal] = useState(false);
@@ -42,25 +43,32 @@ export function AppointmentModalsProvider({
         setSelectedTurno(null);
     }, []);
 
+    // Invalidar por prefijo en vez de llamar a `refreshTurnos`: ese refetch solo
+    // alcanza la key `['turnos', null, null]` de AuthedApp, no la que observa
+    // TurnosView (que lleva el rango de fechas seleccionado).
+    const invalidateTurnos = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.turnos.all });
+    }, [queryClient]);
+
     const onBookingSuccess = useCallback(() => {
-        if (typeof refreshTurnos === 'function') refreshTurnos();
-        if (typeof refreshPatients === 'function') refreshPatients();
-        window.dispatchEvent(new CustomEvent('patients:refresh'));
+        invalidateTurnos();
+        // Reservar puede crear un paciente nuevo: la lista también cambia.
+        queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
         closeBookingModal();
-    }, [refreshTurnos, refreshPatients, closeBookingModal]);
+    }, [invalidateTurnos, queryClient, closeBookingModal]);
 
     const onTurnoSaved = useCallback(() => {
-        if (typeof refreshTurnos === 'function') refreshTurnos();
+        invalidateTurnos();
         setShowEditTurnoModal(false);
         setSelectedTurno(null);
-    }, [refreshTurnos]);
+    }, [invalidateTurnos]);
 
-    const onTurnoDeleted = useCallback((deletedTurno: any) => {
-        if (typeof refreshTurnos === 'function') refreshTurnos();
+    const onTurnoDeleted = useCallback((_deletedTurno: any) => {
+        invalidateTurnos();
         setShowEditTurnoModal(false);
         setShowTurnoDetailsModal(false);
         setSelectedTurno(null);
-    }, [refreshTurnos]);
+    }, [invalidateTurnos]);
 
     const onDeleteTurnoFromDetails = useCallback(async (turno: any) => {
         const id = turno?.id || turno?.eventId || turno?._id;

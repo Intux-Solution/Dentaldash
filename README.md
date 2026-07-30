@@ -45,10 +45,11 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 
 ```bash
 npm run dev        # Servidor de desarrollo
-npm run build      # Build de producción
+npm run build      # Build de producción (corre `tsc --noEmit` antes de compilar)
 npm run preview    # Preview del build
-npm run test       # Tests (vitest)
+npm run lint       # ESLint sobre src/
 npm run typecheck  # Verificación de tipos (tsc --noEmit)
+npm run test       # Tests (vitest)
 ```
 
 ---
@@ -77,15 +78,41 @@ npm run typecheck  # Verificación de tipos (tsc --noEmit)
 
 ### Edge Functions (Supabase Deno)
 
-| Función | Descripción |
-|---|---|
-| `chat-webhook` | Recibe mensajes de WhatsApp, genera respuesta con IA y ejecuta function calling (slots/turnos) |
-| `whatsapp-manager` | Gestiona instancias de WhatsApp via Evolution API (QR, logout, sync) |
-| `create-checkout` | Crea sesiones de pago en MercadoPago |
-| `mp-webhook` | Procesa notificaciones de pago de MercadoPago y activa suscripciones |
-| `admin-api` | API privada del panel super-admin |
-| `google-token-refresh` | Renueva tokens de Google Calendar |
-| `cleanup-orphaned-files` | Limpieza programada de archivos huérfanos en Storage |
+| Función | JWT | Descripción |
+|---|---|---|
+| `chat-webhook` | no | Recibe mensajes de WhatsApp, genera respuesta con IA y ejecuta function calling (slots/turnos). Se autentica con `CHAT_WEBHOOK_SECRET` en el query param `?s=` |
+| `whatsapp-manager` | sí | Gestiona instancias de WhatsApp via Evolution API (QR, logout, sync) |
+| `create-checkout` | sí | Crea sesiones de pago en MercadoPago |
+| `mp-webhook` | no | Procesa notificaciones de pago de MercadoPago y activa suscripciones |
+| `admin-api` | sí | API privada del panel super-admin |
+| `public-booking` | no | Endpoint del formulario público de reservas (`/agendar/:slug`) |
+| `calendar-sync` | sí | Sincronización con Google Calendar (push, delete, freeBusy) |
+| `notify-appointment` | sí | Email de confirmación de turno (Resend) |
+| `google-token-refresh` | sí | Renueva tokens de Google Calendar |
+| `cleanup-orphaned-files` | sí | Limpieza programada de archivos huérfanos en Storage (la dispara pg_cron con la anon key) |
+
+Código compartido entre funciones en `supabase/functions/_shared/`: `cors.ts` (allowlist de orígenes),
+`feature-keys.ts` (claves de funcionalidad), `google-calendar.ts`, `email.ts`, `appointment-notifications.ts`.
+
+### Deploy
+
+```bash
+# Migraciones
+supabase db push
+
+# Funciones sin verificación de JWT (webhooks y endpoints públicos)
+supabase functions deploy chat-webhook --no-verify-jwt
+supabase functions deploy mp-webhook --no-verify-jwt
+supabase functions deploy public-booking --no-verify-jwt
+
+# El resto
+supabase functions deploy admin-api create-checkout calendar-sync notify-appointment \
+                          whatsapp-manager google-token-refresh cleanup-orphaned-files
+```
+
+> Al rotar `CHAT_WEBHOOK_SECRET` el orden es obligatorio o se cae el bot:
+> 1) setear el secreto, 2) deploy de `whatsapp-manager`, 3) invocar `sync_webhook_all` con
+> un JWT de admin, 4) deploy de `chat-webhook`.
 
 ### Migraciones
 

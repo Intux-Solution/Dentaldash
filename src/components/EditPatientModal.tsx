@@ -38,7 +38,6 @@ export default function EditPatientModal({ open, patient, onClose, onSaved, onBa
     handleSubmit,
     control,
     reset,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(UpdatePatientSchema),

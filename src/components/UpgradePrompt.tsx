@@ -1,4 +1,3 @@
-import React from 'react';
 import { Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 

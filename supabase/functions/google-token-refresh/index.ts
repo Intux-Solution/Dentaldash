@@ -2,13 +2,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0"
 import { getAccessTokenForUser } from "../_shared/google-calendar.ts"
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { buildCors } from "../_shared/cors.ts"
 
 serve(async (req) => {
+    // La llama el navegador autenticado: misma allowlist que el resto de la app.
+    const corsHeaders = buildCors(req.headers.get('origin'))
+
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }

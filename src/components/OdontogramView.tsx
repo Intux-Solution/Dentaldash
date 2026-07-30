@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft,
@@ -7,7 +7,6 @@ import {
     AlertCircle,
     History as HistoryIcon,
     Plus,
-    ChevronRight,
     Trash2,
     Calendar,
     Hash,
@@ -15,8 +14,6 @@ import {
     X,
     Eye
 } from 'lucide-react';
-import { message } from 'antd';
-import { PatientService } from '../services/PatientService';
 import { useOdontogramView } from '../hooks/useOdontogramView';
 import Odontogram from './Odontogram';
 import ErrorBoundary from './ErrorBoundary';
@@ -197,7 +194,7 @@ export default function OdontogramView() {
                                     <p className="text-sm text-gray-400">Sin registros de evolución aún.</p>
                                 </div>
                             ) : (
-                                history.map((entry, idx) => (
+                                history.map((entry) => (
                                     <div key={entry.id} className="relative pl-6 pb-2 border-l-2 border-teal-100 last:border-l-0 last:pb-0">
                                         {/* Punto del timeline */}
                                         <div className="absolute left-[-9px] top-1 w-4 h-4 rounded-full bg-teal-500 border-4 border-white shadow-sm" />

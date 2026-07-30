@@ -1,11 +1,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0"
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { buildCors } from "../_shared/cors.ts"
 
 /**
  * Saneamiento de URL para evitar fallos por espacios o saltos de línea.
@@ -16,12 +12,17 @@ const sanitizeUrl = (url: string) => {
 };
 
 serve(async (req) => {
+    // La llama el navegador autenticado: misma allowlist que el resto de la app,
+    // en vez del `*` que tenía antes.
+    const corsHeaders = buildCors(req.headers.get('origin'));
+
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')?.trim();
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim();
     const EVOLUTION_URL_RAW = Deno.env.get('EVOLUTION_API_URL')?.trim();
     const EVOLUTION_KEY = Deno.env.get('EVOLUTION_API_KEY')?.trim();
+    const CHAT_WEBHOOK_SECRET = Deno.env.get('CHAT_WEBHOOK_SECRET')?.trim();
 
     // ── Fail-fast env validation ──────────────────────────────────────────────
     // Any missing critical variable returns a 500 immediately with a clear
@@ -35,6 +36,11 @@ serve(async (req) => {
     if (!EVOLUTION_KEY) {
         return new Response(JSON.stringify({ error: "Missing environment variable: EVOLUTION_API_KEY is required but was not set." }), { status: 500, headers: corsHeaders });
     }
+    // Sin el secreto no se puede registrar un webhook que `chat-webhook` acepte
+    // (esa función es fail-closed): mejor fallar acá que dejar instancias mudas.
+    if (!CHAT_WEBHOOK_SECRET) {
+        return new Response(JSON.stringify({ error: "Missing environment variable: CHAT_WEBHOOK_SECRET is required but was not set." }), { status: 500, headers: corsHeaders });
+    }
     // ─────────────────────────────────────────────────────────────────────────
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -42,7 +48,10 @@ serve(async (req) => {
     try {
         const body = await req.json();
         const { action, tenant_id } = body;
-        if (!action || !tenant_id) throw new Error('Missing action or tenant_id');
+        // `sync_webhook_all` es una acción global de admin: no lleva tenant_id.
+        const isBulkSync = action === 'sync_webhook_all';
+        if (!action) throw new Error('Missing action');
+        if (!isBulkSync && !tenant_id) throw new Error('Missing action or tenant_id');
 
         // Extract and validate Auth Token from Authorization header
         const authHeader = req.headers.get('Authorization');
@@ -59,8 +68,21 @@ serve(async (req) => {
 
         // Validate that the request maker actually has access to the target tenant
         // Since it's a 1:1 user-to-profile setup, we just check if tenant_id matches user.id
-        if (tenant_id !== user.id) {
+        if (!isBulkSync && tenant_id !== user.id) {
             return new Response(JSON.stringify({ error: "Forbidden: You don't own this profile." }), { status: 403, headers: corsHeaders });
+        }
+
+        // La acción global sólo la puede ejecutar un admin (mismo patrón que admin-api).
+        if (isBulkSync) {
+            const { data: adminRow } = await supabase
+                .from('admin_users')
+                .select('id')
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+            if (!adminRow) {
+                return new Response(JSON.stringify({ error: "Forbidden: admin only." }), { status: 403, headers: corsHeaders });
+            }
         }
 
         // Reusar el nombre ya persistido: instancias creadas antes de este fix usaban
@@ -69,14 +91,21 @@ serve(async (req) => {
         // completo, sin guiones— cuando el tenant todavía no tiene ninguna instancia
         // guardada; `chat-webhook` hace el lookup del tenant por igualdad contra
         // `profiles.whatsapp_instance`, así que esto es retrocompatible sin migrar nada.
-        const { data: tenantProfile } = await supabase
-            .from('profiles')
-            .select('whatsapp_instance')
-            .eq('id', tenant_id)
-            .maybeSingle();
-        const instanceName = tenantProfile?.whatsapp_instance || `instance_${tenant_id.replace(/-/g, '')}`
+        let instanceName = '';
+        if (!isBulkSync) {
+            const { data: tenantProfile } = await supabase
+                .from('profiles')
+                .select('whatsapp_instance')
+                .eq('id', tenant_id)
+                .maybeSingle();
+            instanceName = tenantProfile?.whatsapp_instance || `instance_${tenant_id.replace(/-/g, '')}`;
+        }
         const baseUrl = sanitizeUrl(EVOLUTION_URL_RAW);
-        const webhookUrl = `${SUPABASE_URL}/functions/v1/chat-webhook`;
+        // El secreto viaja en la query string porque Evolution API self-hosted v2 no
+        // soporta headers custom en el webhook. `chat-webhook` lo valida fail-closed.
+        const webhookUrl = `${SUPABASE_URL}/functions/v1/chat-webhook?s=${encodeURIComponent(CHAT_WEBHOOK_SECRET)}`;
+        // Versión segura para devolver al cliente / loguear, sin filtrar el secreto.
+        const webhookUrlMasked = `${SUPABASE_URL}/functions/v1/chat-webhook?s=***`;
 
         // baseUrl is guaranteed non-empty here (validated above), but keep the guard for safety
         if (!baseUrl) throw new Error("EVOLUTION_API_URL resolved to an empty string after sanitization.");
@@ -107,14 +136,17 @@ serve(async (req) => {
 
         const setWebhook = async (name: string) => {
             // Estructura requerida específicamente para Evolution API v2.3.0
-            const webhookPayload = JSON.stringify({
+            const buildPayload = (url: string) => JSON.stringify({
                 webhook: {
-                    url: webhookUrl,
+                    url,
                     enabled: true,
                     webhookByEvents: false,
                     events: ["MESSAGES_UPSERT"]
                 }
             });
+            const webhookPayload = buildPayload(webhookUrl);
+            // Nunca escribir el secreto en debug_payloads.
+            const webhookPayloadMasked = buildPayload(webhookUrlMasked);
 
             // Prioridad v2 endpoint
             const urlV2 = `${baseUrl}/webhook/set/${name}`;
@@ -123,7 +155,7 @@ serve(async (req) => {
                 headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
                 body: webhookPayload
             });
-            logFetch(urlV2, { method: 'POST', body: webhookPayload }, resV2);
+            logFetch(urlV2, { method: 'POST', body: webhookPayloadMasked }, resV2);
 
             if (resV2.ok) return resV2;
 
@@ -134,9 +166,47 @@ serve(async (req) => {
                 headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
                 body: webhookPayload
             });
-            logFetch(urlAlt, { method: 'POST', body: webhookPayload }, resAlt);
+            logFetch(urlAlt, { method: 'POST', body: webhookPayloadMasked }, resAlt);
             return resAlt;
         };
+
+        // Re-registra el webhook de TODAS las instancias existentes. Se usa después de
+        // rotar CHAT_WEBHOOK_SECRET o al migrar la URL del webhook, para que ningún
+        // tenant quede con una URL vieja que `chat-webhook` rechace con 401.
+        if (isBulkSync) {
+            const { data: profiles, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, whatsapp_instance')
+                .not('whatsapp_instance', 'is', null);
+
+            if (profilesError) throw profilesError;
+
+            const failed: { instance: string; status: number }[] = [];
+            let ok = 0;
+
+            for (const row of profiles ?? []) {
+                const name = row.whatsapp_instance as string;
+                try {
+                    const res = await setWebhook(name);
+                    if (res.ok) ok++;
+                    else failed.push({ instance: name, status: res.status });
+                } catch (e: any) {
+                    console.error(`sync_webhook_all failed for ${name}:`, e?.message);
+                    failed.push({ instance: name, status: 0 });
+                }
+            }
+
+            await Promise.allSettled(logPromises);
+            return new Response(JSON.stringify({
+                total: profiles?.length ?? 0,
+                ok,
+                failed,
+                webhookUrl: webhookUrlMasked
+            }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+            });
+        }
 
         if (action === 'sync_webhook') {
             const res = await setWebhook(instanceName);
@@ -146,7 +216,7 @@ serve(async (req) => {
                 status: res.ok ? 'success' : 'fail',
                 evolutionStatus: res.status,
                 evolutionResponse: resData,
-                webhookUrl
+                webhookUrl: webhookUrlMasked
             }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: res.ok ? 200 : res.status,
@@ -238,11 +308,22 @@ serve(async (req) => {
                 fetch(`${baseUrl}/webhook/instance/${instanceName}`, { headers: { 'apikey': EVOLUTION_KEY } })
             ]);
 
+            // La config que devuelve Evolution incluye la URL completa del webhook
+            // (con el secreto en la query string): se redacta antes de exponerla.
+            const redactSecret = (value: unknown): unknown =>
+                typeof value === 'string'
+                    ? value.replace(/([?&]s=)[^&]*/g, '$1***')
+                    : value;
+            const webhooksRaw = await webRes.json().catch(() => 'error');
+            const webhooksSafe = JSON.parse(
+                JSON.stringify(webhooksRaw ?? null, (_k, v) => redactSecret(v))
+            );
+
             await Promise.allSettled(logPromises);
             return new Response(JSON.stringify({
                 instance: await instRes.json().catch(() => 'error'),
-                webhooks: await webRes.json().catch(() => 'error'),
-                config: { baseUrl, webhookUrl }
+                webhooks: webhooksSafe,
+                config: { baseUrl, webhookUrl: webhookUrlMasked }
             }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 200,

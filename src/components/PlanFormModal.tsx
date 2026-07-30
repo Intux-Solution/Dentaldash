@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
+import { z } from 'zod';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Select } from 'antd';
@@ -33,7 +34,10 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<PlanFormData>({
+    // `PlanFormSchema` usa `z.coerce.number()`, así que el tipo de ENTRADA del form
+    // (lo que escribe el usuario: strings) no es el de SALIDA (`PlanFormData`, ya
+    // coercionado). Hay que declarar ambos o el resolver no tipa.
+  } = useForm<z.input<typeof PlanFormSchema>, unknown, PlanFormData>({
     resolver: zodResolver(PlanFormSchema),
     defaultValues: { name: '', description: '', price_monthly: 0, price_yearly: undefined, features: [], feature_keys: [], sort_order: 0, trial_days: undefined },
   });
@@ -210,20 +214,24 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
           <Controller
             name="feature_keys"
             control={control}
-            render={({ field }) => (
+            render={({ field }) => {
+              // El `.default([])` del schema aplica a la SALIDA; en la entrada del
+              // form el valor puede llegar undefined antes del primer reset.
+              const selected: string[] = field.value ?? [];
+              return (
               <div className="grid grid-cols-1 gap-2 bg-gray-50 rounded-xl p-3">
                 {ALL_FEATURE_KEYS.map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       className="w-4 h-4 rounded text-teal-600 accent-teal-600"
-                      checked={field.value.includes(key)}
+                      checked={selected.includes(key)}
                       disabled={isSubmitting}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          field.onChange([...field.value, key]);
+                          field.onChange([...selected, key]);
                         } else {
-                          field.onChange(field.value.filter((k: string) => k !== key));
+                          field.onChange(selected.filter((k: string) => k !== key));
                         }
                       }}
                     />
@@ -232,7 +240,8 @@ export default function PlanFormModal({ open, plan, onClose, onSaved }: PlanForm
                   </label>
                 ))}
               </div>
-            )}
+              );
+            }}
           />
         </div>
 

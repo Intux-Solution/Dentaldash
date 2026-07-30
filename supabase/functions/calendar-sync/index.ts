@@ -7,6 +7,7 @@ import {
   getBusyIntervals,
   updateCalendarEvent,
 } from "../_shared/google-calendar.ts";
+import { buildCors } from "../_shared/cors.ts";
 
 // Sincronizacion de Google Calendar para la app autenticada.
 //
@@ -20,23 +21,6 @@ import {
 //   push_appointment  { appointment_id, description?, attendee_email? }
 //   delete_event      { google_event_id }
 //   busy              { time_min, time_max }
-
-const ALLOWED_ORIGINS = [
-  "https://dashboard.dentaldash.cloud",
-  ...(Deno.env.get("APP_URL") ?? "").split(",").map((s) => s.trim().replace(/\/+$/, "")),
-].filter(Boolean);
-
-function buildCors(origin: string | null): Record<string, string> {
-  const allow = origin && ALLOWED_ORIGINS.includes(origin)
-    ? origin
-    : (ALLOWED_ORIGINS[0] ?? "");
-  return {
-    "Access-Control-Allow-Origin": allow,
-    "Vary": "Origin",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
-}
 
 serve(async (req) => {
   const corsHeaders = buildCors(req.headers.get("origin"));

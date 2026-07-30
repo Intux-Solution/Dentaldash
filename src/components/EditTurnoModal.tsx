@@ -1,8 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { Calendar, Clock, User, CreditCard, Phone, AlertCircle, CheckCircle, Loader, X, ArrowLeft } from 'lucide-react';
-import { message } from 'antd';
 import { useEditTurnoModal } from '../hooks/useEditTurnoModal';
 
 interface EditTurnoModalProps {
@@ -19,7 +15,6 @@ export default function EditTurnoModal({ open, turno, onClose, onSaved, onDelete
     register,
     handleSubmit,
     errors,
-    isValid,
     isSubmitting,
     deleting,
     checkingPatient,

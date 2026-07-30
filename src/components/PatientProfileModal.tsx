@@ -113,21 +113,6 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
     </div>
   );
 
-  // Render link label for Historia Clínica (avoid long URL overflow)
-  const historiaClinicaValue = (() => {
-    const url = historiaClinicaUrl;
-    const hasFile = url && url !== '-' && url !== 'Sin archivo';
-
-    return (
-      <button
-        onClick={() => onOpenRecord && onOpenRecord(patient)}
-        className={`${hasFile ? 'text-emerald-600 hover:text-emerald-700' : 'text-orange-600 hover:text-orange-700'} underline font-bold text-left`}
-      >
-        {hasFile ? 'Ver Historia Clínica' : 'Subir Historia Clínica'}
-      </button>
-    );
-  })();
-
   if (showConfirm) {
     return (
       <ModalShell title="Confirmar Eliminación" onClose={() => setShowConfirm(false)}>
@@ -315,7 +300,7 @@ export default function PatientProfileModal({ open, patient, onClose, onEdit, on
             value={
               <button
                 onClick={() => {
-                  onClose && onClose();
+                  onClose?.();
                   navigate(`/pacientes/${patient.id}/odontograma`);
                 }}
                 className="text-teal-600 underline hover:text-teal-700 font-medium"

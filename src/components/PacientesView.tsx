@@ -1,22 +1,45 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { norm } from '../utils/helpers';
 import SearchInput from './SearchInput';
 import PatientTable from './PatientTable';
-import { PatientService } from '../services/PatientService';
 import { ExportService } from '../services/ExportService';
 import { usePatients } from '../hooks/usePatients';
-import { useModals } from '../hooks/useModals';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { usePatientModals } from '../hooks/usePatientModals';
+import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 
+/**
+ * Ventana de resultados. Con el filtrado resuelto en el servidor el tope aplica
+ * por filtro, no sobre el total de pacientes del consultorio.
+ */
+const PAGE_SIZE = 300;
+
 export default function PacientesView() {
-    const { patients, loading: patientsLoading, deletePatient } = usePatients();
-    const { openAddPatient, onViewPatient, onOpenRecord } = useModals();
+    const { session } = useAuth();
+    const { openAddPatient, onViewPatient, onOpenRecord, handleDeletePatient } = usePatientModals();
     const { canUse } = useSubscription();
 
     const [searchParams, setSearchParams] = useSearchParams();
     const searchTerm = searchParams.get('q') || '';
     const statusFilter = searchParams.get('status') || 'Todos';
+
+    // Solo se retrasa el valor que alimenta el queryKey: la URL y el input se
+    // actualizan en cada tecla. `statusFilter` viene de un <select>, donde cada
+    // cambio es una intención completa y no necesita debounce.
+    const debouncedSearch = useDebouncedValue(searchTerm, 400);
+
+    // El filtrado (búsqueda por nombre/DNI y estado) lo resuelve el servidor en
+    // `PatientService.fetchPatientsPaginated`. Antes se hacía dos veces —una en la
+    // DB y otra en el cliente— con criterios distintos, lo que hacía imposible,
+    // por ejemplo, encontrar un paciente inactivo.
+    const { patients, loading, isFetching, pagination } = usePatients(
+        session,
+        1,
+        PAGE_SIZE,
+        debouncedSearch.trim(),
+        statusFilter
+    );
 
     const setSearchTerm = (term: string) => {
         setSearchParams(prev => {
@@ -36,44 +59,12 @@ export default function PacientesView() {
 
     const collator = useMemo(() => new Intl.Collator('es', { sensitivity: 'base' }), []);
 
-    const [localPatients, setLocalPatients] = useState<any[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
-
-    useEffect(() => {
-        if (!searchTerm) {
-            setLocalPatients(Array.isArray(patients) ? patients : []);
-            return;
-        }
-
-        const delayDebounceFn = setTimeout(async () => {
-            setIsSearching(true);
-            try {
-                const results = await PatientService.searchPatients(searchTerm);
-                setLocalPatients(results);
-            } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
-                console.error("Error searching patients:", err);
-            } finally {
-                setIsSearching(false);
-            }
-        }, 400);
-
-        return () => clearTimeout(delayDebounceFn);
-    }, [searchTerm, patients]);
-
-    const filteredPacientes = useMemo(() => {
-        const term = norm(searchTerm || '');
-        return localPatients
-            .filter((p) => {
-                const matchesSearch = term ? (norm(p?.nombre || '').includes(term) || norm(String(p?.dni || '')).includes(term)) : true;
-                const matchesStatus = statusFilter === 'Todos'
-                    ? (p?.estado !== 'Inactivo')
-                    : (p?.estado === statusFilter);
-                return matchesSearch && matchesStatus;
-            })
-            .slice()
-            .sort((a, b) => collator.compare(a?.nombre || '', b?.nombre || ''));
-    }, [searchTerm, statusFilter, localPatients, collator]);
+    // Único trabajo que queda del lado del cliente: el servidor ordena por
+    // `created_at desc`, que no es un orden útil para una tabla de nombres.
+    const sortedPacientes = useMemo(
+        () => [...patients].sort((a, b) => collator.compare(a?.nombre || '', b?.nombre || '')),
+        [patients, collator]
+    );
 
     return (
         <div className="p-4 lg:p-8 bg-gray-50 min-h-screen">
@@ -101,8 +92,8 @@ export default function PacientesView() {
                         />
                         {canUse('export_data') && (
                             <button
-                                onClick={() => ExportService.exportPatientsCSV(filteredPacientes)}
-                                disabled={patientsLoading || filteredPacientes.length === 0}
+                                onClick={() => ExportService.exportPatientsCSV(sortedPacientes)}
+                                disabled={loading || sortedPacientes.length === 0}
                                 className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed border border-gray-200"
                             >
                                 Exportar CSV
@@ -110,7 +101,7 @@ export default function PacientesView() {
                         )}
                         <button
                             onClick={openAddPatient}
-                            disabled={patientsLoading || isSearching}
+                            disabled={loading}
                             className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Agregar
@@ -118,19 +109,32 @@ export default function PacientesView() {
                     </div>
                 </div>
 
-                {(patientsLoading || isSearching) ? (
+                {/*
+                  Solo la carga inicial reemplaza la tabla por el spinner. Los
+                  refetches (cambio de filtro, invalidación tras una mutación)
+                  atenúan la tabla pero no la desmontan: `PatientTable` guarda en
+                  estado local el diálogo de confirmación de borrado.
+                */}
+                {loading && sortedPacientes.length === 0 ? (
                     <div className="p-8 text-center">
                         <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
                         <p className="mt-2 text-gray-500">Cargando pacientes...</p>
                     </div>
                 ) : (
-                    <PatientTable
-                        patients={filteredPacientes}
-                        onView={onViewPatient}
-                        onOpenRecord={onOpenRecord}
-                        onDelete={deletePatient}
-                        showActions={false}
-                    />
+                    <div className={isFetching ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+                        <PatientTable
+                            patients={sortedPacientes}
+                            onView={onViewPatient}
+                            onOpenRecord={onOpenRecord}
+                            onDelete={handleDeletePatient}
+                            showActions={false}
+                        />
+                        {pagination.total > sortedPacientes.length && (
+                            <p className="px-4 py-3 text-xs text-gray-500 border-t">
+                                Mostrando {sortedPacientes.length} de {pagination.total}. Refiná la búsqueda para ver el resto.
+                            </p>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

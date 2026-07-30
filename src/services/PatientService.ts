@@ -1,7 +1,8 @@
 import { supabase } from '../config/supabaseClient';
 import { StorageService } from './StorageService';
-import { Patient, PatientPayload, ClinicalRecord, DbPatientRow, PaginatedResult } from '../types/database.types';
+import { Patient, PatientPayload, ClinicalRecord, DbPatientRow } from '../types/database.types';
 import { AddPatientSchema, UpdatePatientSchema } from '../schemas/patient.schema';
+import { norm } from '../utils/helpers';
 
 // ─── Helper: Normalizar DNI ───────────────────────────────────────────────────
 /**
@@ -9,7 +10,7 @@ import { AddPatientSchema, UpdatePatientSchema } from '../schemas/patient.schema
  * Ejemplo: "12.345-678 A" → "12345678A"
  */
 const sanitizeDni = (dni: string): string =>
-  dni.replace(/[\.\-\s]/g, '').trim();
+  dni.replace(/[.\-\s]/g, '').trim();
 
 // ─── Helper: mapDbPatient ─────────────────────────────────────────────────────
 
@@ -92,7 +93,11 @@ export class PatientService {
     if (searchTerm.trim()) {
       // Comillas dobles: dentro de "" las comas y paréntesis no son sintaxis PostgREST.
       const safe = searchTerm.trim().replace(/["\\]/g, '');
-      query = query.or(`nombre.ilike."%${safe}%",dni.ilike."%${safe}%"`);
+      // El nombre se busca contra `nombre_norm` (columna generada: minúsculas y sin
+      // acentos) aplicando la MISMA normalización al término. Así "perez" encuentra
+      // a "Pérez", que con `ilike` sobre `nombre` no pasaba.
+      const safeNorm = norm(safe);
+      query = query.or(`nombre_norm.ilike."%${safeNorm}%",dni.ilike."%${safe}%"`);
     }
 
     if (statusFilter !== 'Todos') {
@@ -117,22 +122,6 @@ export class PatientService {
       pageSize,
       totalPages: Math.ceil(total / pageSize),
     };
-  }
-
-  static async searchPatients(term: string): Promise<Patient[]> {
-    // Comillas dobles: dentro de "" las comas y paréntesis no son sintaxis PostgREST.
-    const safe = term.trim().replace(/["\\]/g, '');
-    const { data, error } = await supabase
-      .from('patients')
-      .select('*')
-      .is('deleted_at', null)
-      .neq('estado', 'Inactivo')
-      .or(`nombre.ilike."%${safe}%",dni.ilike."%${safe}%"`)
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    if (error) throw error;
-    return (data ?? []).map(mapDbPatient);
   }
 
   /**

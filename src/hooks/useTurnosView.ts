@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useTurnos } from './useTurnos';
 import { useAuth } from '../context/AuthContext';
 
@@ -96,11 +96,11 @@ export function useTurnosView() {
         setDateTo(def.to);
     };
 
-    useEffect(() => {
-        const handler = () => refreshTurnos();
-        window.addEventListener('turnos:refresh', handler);
-        return () => window.removeEventListener('turnos:refresh', handler);
-    }, [refreshTurnos, dateFrom, dateTo]);
+    // Acá había un listener de `turnos:refresh` que llamaba a este mismo
+    // `refreshTurnos`. Era un duplicado exacto del que registraba
+    // `useAppointmentsQuery` sobre la MISMA instancia del hook: dos listeners para
+    // un solo refetch. La invalidación ahora la hace `useEditTurnoModal` sobre la
+    // key `['turnos']`, que alcanza todos los rangos por prefijo.
 
     return {
         events,

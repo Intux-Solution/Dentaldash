@@ -1,10 +1,8 @@
-// src/config/appointments.js
-// Tipos de turno y días laborales centralizados
+// src/config/appointments.ts
+//
+// Los horarios laborales reales viven en la tabla `schedules` (por usuario y día),
+// y los tipos de turno en `profiles.services`. Acá solo queda la granularidad con
+// la que se generan los slots que se le ofrecen al paciente.
 
-export const WORK_HOURS = {
-  start: 9,
-  end: 18,
-  interval: 30, // minutes
-};
-
-
+/** Paso entre inicios de slot, en minutos. */
+export const SLOT_INTERVAL_MINUTES = 30;

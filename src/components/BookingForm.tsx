@@ -1,6 +1,3 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { Calendar, Clock, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import PatientInfoFields from './form/PatientInfoFields';
 import TimeSlotGrid from './form/TimeSlotGrid';
@@ -18,7 +15,6 @@ export default function BookingForm({ onSuccess, hideHeader = false, hideInterna
     register,
     handleSubmit,
     setValue,
-    watch,
     errors,
     isSubmitting,
     isValid,

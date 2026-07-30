@@ -74,6 +74,8 @@ export interface PatientPayload {
     notas?: string;
     estado?: string;
     historiaClinicaFile?: File;
+    /** Alias camelCase del path; `null` explícito = borrar el archivo adjunto. */
+    historiaClinica?: string | null;
     historia_clinica_url?: string | null;
 }
 

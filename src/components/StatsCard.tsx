@@ -1,4 +1,3 @@
-import React from 'react';
 
 export default function StatsCard({ title, value, color }: { title: string; value: string | number; color: string }) {
   return (

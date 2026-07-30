@@ -1,6 +1,6 @@
 import { AppointmentRepository } from '../repositories/AppointmentRepository';
 import { CalendarSyncService } from './CalendarSyncService';
-import { WORK_HOURS } from '../config/appointments';
+import { SLOT_INTERVAL_MINUTES } from '../config/appointments';
 import { addMinutes, isBefore } from 'date-fns';
 import { createLocalMidday, getDayBounds, formatTimeAR, isSlotWithinRange, createARDateTime } from '../utils/dateUtils';
 
@@ -90,7 +90,7 @@ export class AppointmentBusinessLogic {
 
                     if (!isSlotWithinRange(slotStart, slotEnd, rangeEnd)) break;
                     if (isBefore(slotStart, minTimeForAppt)) {
-                        current = addMinutes(current, WORK_HOURS.interval);
+                        current = addMinutes(current, SLOT_INTERVAL_MINUTES);
                         continue;
                     }
 
@@ -109,7 +109,7 @@ export class AppointmentBusinessLogic {
                         slots.push(formatTimeAR(slotStart));
                     }
 
-                    current = addMinutes(current, WORK_HOURS.interval);
+                    current = addMinutes(current, SLOT_INTERVAL_MINUTES);
                 }
             }
 

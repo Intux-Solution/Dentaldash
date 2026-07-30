@@ -9,9 +9,12 @@ import { toLocalYMD } from '../utils/dateUtils';
 import { message } from 'antd';
 import { UpdateAppointmentSchema, UpdateAppointmentPayload } from '../schemas/appointment.schema';
 import { useAuth } from '../context/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
 
 export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void, onSaved?: (saved: any) => void, onDeleted?: (deleted: any) => void) {
     const { session } = useAuth();
+    const queryClient = useQueryClient();
     const {
         register,
         handleSubmit,
@@ -104,7 +107,6 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
                 return prev;
             });
         } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             setAvailableSlots([]);
         } finally {
             setLoadingAvailability(false);
@@ -141,7 +143,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             let dniInicial = turno.patientDni || turno.dni || '';
             if (!dniInicial) {
                 const text = String(turno.description || '');
-                const m1 = text.match(/dni\s*[:\-]?\s*([0-9\.\s]+)/i);
+                const m1 = text.match(/dni\s*[:-]?\s*([0-9.\s]+)/i);
                 if (m1 && m1[1]) {
                     dniInicial = String(m1[1]).replace(/\D/g, '');
                 } else {
@@ -155,7 +157,7 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             // Nombre desde descripción como fallback
             const nombreDesdeDescripcion = (() => {
                 const text = String(turno.description || '');
-                const m = text.match(/Paciente\s*[:\-]?\s*(.+?)(?=\s*(DNI|Dni|dni)\b|$)/);
+                const m = text.match(/Paciente\s*[:-]?\s*(.+?)(?=\s*(DNI|Dni|dni)\b|$)/);
                 return m && m[1] ? m[1].trim() : '';
             })();
 
@@ -234,7 +236,6 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
                 setPatientFound(false);
             }
         } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             setError('Error al consultar paciente.');
             setPatientFound(false);
         } finally {
@@ -318,12 +319,15 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
             }
 
             if (onSaved) onSaved(saved);
-            window.dispatchEvent(new Event('turnos:refresh'));
+            // Invalidar por PREFIJO `['turnos']`: el `refreshTurnos` de `onSaved`
+            // solo refetchea la key `['turnos', null, null]` de AuthedApp, que no es
+            // la que observa TurnosView (esa lleva el rango de fechas). El evento
+            // global lograba esto de casualidad; acá es explícito.
+            queryClient.invalidateQueries({ queryKey: queryKeys.turnos.all });
             message.success('Turno guardado con éxito');
             onClose();
-        } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
-            const msg = err.message || 'Error al actualizar el turno. Intenta nuevamente.';
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al actualizar el turno. Intenta nuevamente.';
             setError(msg);
             message.error(msg);
         }
@@ -335,12 +339,11 @@ export function useEditTurnoModal(open: boolean, turno: any, onClose: () => void
         try {
             await AppointmentService.deleteAppointment(watch('id'), session);
             if (onDeleted) onDeleted(turno);
-            window.dispatchEvent(new Event('turnos:refresh'));
+            queryClient.invalidateQueries({ queryKey: queryKeys.turnos.all });
             message.success('Turno cancelado correctamente');
             onClose();
-        } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
-            const msg = err.message || 'Error al cancelar el turno. Intenta nuevamente.';
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Error al cancelar el turno. Intenta nuevamente.';
             setError(msg);
             message.error(msg);
         } finally {

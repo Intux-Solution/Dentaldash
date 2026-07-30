@@ -1,9 +1,9 @@
 // src/components/Header.tsx - UPDATED 2026-02-16 - FINAL VERSION
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Settings, LogOut, ChevronDown, LifeBuoy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../config/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useProfile } from '../hooks/useProfile';
 import { resolveAvatarUrl } from '../utils/avatar';
 import Avatar from './Avatar';
 import SupportMessageModal from './SupportMessageModal';
@@ -19,86 +19,24 @@ export default function Header({ title, setSidebarOpen, onLogout }: HeaderProps)
   const { session } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
-  const [userData, setUserData] = useState<{ name: string; avatar: string | null; email: string; role: string }>({
-    name: 'Usuario',
-    avatar: null,
-    email: '',
-    role: 'Odontólogo'
-  });
 
-  useEffect(() => {
-    if (!session?.user) return;
+  // El perfil viene de React Query. Reemplaza al fetch propio + listener de
+  // `profile:updated` + canal de realtime sobre `profiles` que había acá: ese canal
+  // nunca disparaba porque la tabla no está en la publicación `supabase_realtime`.
+  // `useSettings` invalida `queryKeys.profile.detail(userId)` al guardar.
+  const { data: profile } = useProfile(session?.user?.id);
 
-    window.addEventListener('profile:updated', fetchUserData);
-    fetchUserData();
-
-    const userId = session.user.id;
-    const profileSubscription = supabase
-      .channel(`header_profile_${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${userId}`
-        },
-        () => {
-          fetchUserData();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      window.removeEventListener('profile:updated', fetchUserData);
-      // Small delay prevents "WebSocket is closed before the connection is established"
-      // if React unmounts immediately during StrictMode or rapid auth changes.
-      setTimeout(() => {
-        supabase.removeChannel(profileSubscription);
-      }, 500);
-    };
-  }, [session?.user?.id]);
-
-  const fetchUserData = async () => {
-    try {
-      if (!session) {
-        return;
-      }
-
-      const user = session.user;
-
-      // Query the flat profiles table
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_url')
-        .eq('id', user.id)
-        .maybeSingle(); // Use maybeSingle to handle cases where no profile exists
-
-      if (profileError) {
-        console.error('Header: Error fetching profile:', profileError);
-        // Continue with default or metadata values if profile fetch fails
-      }
-
-      let name = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
-      let avatar = resolveAvatarUrl(user.user_metadata?.avatar_url || user.user_metadata?.picture);
-
-      if (profileData) {
-        if (profileData.full_name) name = profileData.full_name;
-
-        const profileAvatar = resolveAvatarUrl(profileData.avatar_url);
-        if (profileAvatar) avatar = profileAvatar;
-      }
-
-      setUserData({
-        name: name || 'Usuario',
-        avatar: avatar ?? null,
-        email: user.email ?? '',
-        role: 'Odontólogo'
-      });
-    } catch (errUnknown: unknown) {
-            const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
-      console.error('Error fetching header user data:', err);
-    }
+  const user = session?.user;
+  // Fallback a `user_metadata` mientras el perfil carga o si no existe la fila
+  // (usuario recién creado por OAuth antes de que corra el trigger).
+  const userData = {
+    name: profile?.full_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || 'Usuario',
+    avatar:
+      resolveAvatarUrl(profile?.avatar_url) ??
+      resolveAvatarUrl(user?.user_metadata?.avatar_url || user?.user_metadata?.picture) ??
+      null,
+    email: user?.email ?? '',
+    role: 'Odontólogo',
   };
 
   const handleLogout = () => {

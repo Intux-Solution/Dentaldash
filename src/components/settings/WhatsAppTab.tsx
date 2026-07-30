@@ -1,4 +1,3 @@
-import React from 'react';
 import { MessageSquare } from 'lucide-react';
 import { QRCode } from 'antd';
 import { ProfileData } from './useSettings';

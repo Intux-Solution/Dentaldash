@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import Sidebar from './Sidebar';
@@ -33,8 +33,8 @@ export default function AuthedApp({ onLogout }: AuthedAppProps) {
   const showOnboarding = !authLoading && profile !== null && !profile.business_name;
 
   // ─── Datos ────────────────────────────────────────────────────────────────
-  const { patients, loading, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
-  const { turnos, refreshTurnos } = useTurnos(null, null, session);
+  const { patients, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
+  const { turnos } = useTurnos(null, null, session);
   const { normalizedPatients } = useNormalizedPatients(patients);
 
   const headerTitle = titleByPath(location.pathname);
@@ -45,13 +45,13 @@ export default function AuthedApp({ onLogout }: AuthedAppProps) {
       patients={normalizedPatients}
       addPatient={addPatient}
       updatePatient={updatePatient}
-      refreshPatients={refreshPatients}
     >
-      <AppointmentModalsProvider
-        turnos={turnos}
-        refreshTurnos={refreshTurnos}
-        refreshPatients={refreshPatients}
-      >
+      {/*
+        Ya no se pasan `refreshTurnos`/`refreshPatients`: los providers invalidan
+        las keys directamente. Esos callbacks refetcheaban solo la instancia de
+        AuthedApp (`['turnos', null, null]`), no la que observa la vista abierta.
+      */}
+      <AppointmentModalsProvider turnos={turnos}>
         <div className="flex h-screen bg-gray-100">
           <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} onLogout={onLogout} />
 

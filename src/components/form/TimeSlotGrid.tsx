@@ -1,4 +1,3 @@
-import React from 'react';
 import { Clock, Loader } from 'lucide-react';
 
 interface TimeSlotGridProps {

@@ -52,13 +52,13 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate }: A
   // ─── Manejo de archivo (fuera del esquema Zod) ──────────────────────────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setHistoriaClinicaFile(e.target.files?.[0] || null);
-    try { attachBtnRef.current?.focus({ preventScroll: true }); } catch { }
+    try { attachBtnRef.current?.focus({ preventScroll: true }); } catch { /* focus best-effort */ }
   };
 
   const handleClearFile = () => {
-    try { if (fileInputRef.current) fileInputRef.current.value = ''; } catch { }
+    try { if (fileInputRef.current) fileInputRef.current.value = ''; } catch { /* input ya desmontado */ }
     setHistoriaClinicaFile(null);
-    try { attachBtnRef.current?.focus({ preventScroll: true }); } catch { }
+    try { attachBtnRef.current?.focus({ preventScroll: true }); } catch { /* focus best-effort */ }
   };
 
   // ─── Cierre/reset ────────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ export default function AddPatientModal({ open: openFlag, onClose, onCreate }: A
                     type="file"
                     accept=".pdf,image/*"
                     onChange={handleFileChange}
-                    onFocus={(e) => { try { e.target.blur(); } catch { } }}
+                    onFocus={(e) => { try { e.target.blur(); } catch { /* blur best-effort */ } }}
                     className="hidden"
                     disabled={isSubmitting}
                   />

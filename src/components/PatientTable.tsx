@@ -65,7 +65,7 @@ export default React.memo(function PatientTable({ patients, onView, onOpenRecord
                   <button
                     type="button"
                     onClick={() => onView && onView(paciente)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView && onView(paciente); } }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView?.(paciente); } }}
                     className="p-0 m-0 bg-transparent text-left text-gray-900 hover:underline focus:outline-none focus:ring-2 focus:ring-teal-500 rounded-sm cursor-pointer"
                     aria-label={`Ver perfil de ${paciente.nombre}`}
                   >

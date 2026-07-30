@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Building2, Check, Search, X } from 'lucide-react';
 import { InsuranceService } from '../services/InsuranceService';
 

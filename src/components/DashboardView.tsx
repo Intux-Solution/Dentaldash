@@ -1,7 +1,8 @@
 import React, { useCallback } from 'react';
 import { Eye, ArrowRight, Calendar, RefreshCcw, User } from 'lucide-react';
 import { useDashboardData } from '../hooks/useDashboardData';
-import { useModals } from '../hooks/useModals';
+import { usePatientModals } from '../hooks/usePatientModals';
+import { useAppointmentModals } from '../hooks/useAppointmentModals';
 import { useAppStore } from '../store/useAppStore';
 import { useTurnos } from '../hooks/useTurnos';
 import { useAuth } from '../context/AuthContext';
@@ -12,13 +13,10 @@ import PatientTable from './PatientTable';
 import { Link } from 'react-router-dom';
 
 export default function DashboardView() {
-    const {
-        openAddPatient,
-        onViewPatient,
-        onOpenRecord,
-        openBookingModal,
-        onViewTurno
-    } = useModals();
+    // Hooks específicos en vez del `useModals` combinado: este componente ya no se
+    // re-renderiza cuando cambia un modal que no consume.
+    const { openAddPatient, onViewPatient, onOpenRecord } = usePatientModals();
+    const { openBookingModal, onViewTurno } = useAppointmentModals();
 
     const dashboardSearchTerm = useAppStore(state => state.dashboardSearchTerm);
     const setDashboardSearchTerm = useAppStore(state => state.setDashboardSearchTerm);
@@ -29,7 +27,7 @@ export default function DashboardView() {
     const { turnos, loading: turnosIsLoading, error: turnosError } = useTurnos(null, null, session);
 
     const { patients: latestPatients, loading: patientsLoading } = usePatients(
-        null,
+        session,
         1,
         4,
         dashboardSearchTerm,

@@ -1,5 +1,4 @@
 // src/components/Sidebar.jsx - UPDATED 2026-02-16 - FINAL VERSION
-import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { X, Home, Calendar, Users, Settings, LogOut, ShieldCheck, CreditCard } from 'lucide-react';
 import { useSubscription } from '../context/SubscriptionContext';

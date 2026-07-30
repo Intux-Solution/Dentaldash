@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import BookingForm from './BookingForm';
 
@@ -9,15 +9,16 @@ interface BookingModalProps {
 }
 
 export default function BookingModal({ open, onClose, onSuccess }: BookingModalProps) {
-  if (!open) return null;
-
   const handleSuccess = () => {
     if (onSuccess) onSuccess();
     onClose();
   };
 
-  // Bloquear scroll del body mientras el modal está abierto
+  // Bloquear scroll del body mientras el modal está abierto.
+  // El efecto va ANTES del early return: un hook después de un `return null`
+  // se llama condicionalmente y rompe el orden de hooks entre renders.
   useEffect(() => {
+    if (!open) return;
     const originalOverflow = document.body.style.overflow;
     const originalPaddingRight = document.body.style.paddingRight;
     const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
@@ -29,7 +30,9 @@ export default function BookingModal({ open, onClose, onSuccess }: BookingModalP
       document.body.style.overflow = originalOverflow;
       document.body.style.paddingRight = originalPaddingRight;
     };
-  }, []);
+  }, [open]);
+
+  if (!open) return null;
 
   return (
     // El contenedor externo no debe scrollear: el scroll va dentro del modal

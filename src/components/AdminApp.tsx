@@ -1,4 +1,3 @@
-import React from 'react';
 import { ShieldCheck, LogOut } from 'lucide-react';
 import AdminView from './AdminView';
 

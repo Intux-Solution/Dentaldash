@@ -1,4 +1,3 @@
-import React from 'react';
 import { CreditCard, X } from 'lucide-react';
 
 export default function InsurancesTab({ profile, handleProfileChange, handleAutoSaveProfile }: { [key: string]: any }) {

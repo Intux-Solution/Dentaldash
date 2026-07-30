@@ -5,10 +5,10 @@ import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.1.0"
 import OpenAI from "https://esm.sh/openai"
 import { notifyAppointmentCreated } from "../_shared/appointment-notifications.ts"
 
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+// Server-to-server: la llama Evolution API, no un navegador. No hay Origin ni
+// preflight, así que los headers de CORS no aportan nada — y un `*` solo restaba
+// una capa de defensa. Se mantiene la constante porque las respuestas la esparcen.
+const corsHeaders: Record<string, string> = {}
 
 const sanitizeUrl = (url: string) => {
     if (!url) return "";
@@ -40,6 +40,15 @@ function formatTimeAR(date: Date): string {
     return `${h}:${m}`;
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Comparación en tiempo constante: evita filtrar el secreto carácter a carácter
+// mediante medición de latencia.
+function timingSafeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return diff === 0;
+}
 
 // ─── Rate Limiting ───────────────────────────────────────────────────────────
 // Map<jid, { count, windowStart }>  (module-level, persiste dentro del mismo isolate)
@@ -97,13 +106,21 @@ const toolsDefinition = [
 serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-    // ── Validación de secreto de webhook (opcional, si WEBHOOK_SECRET está configurado) ──
-    const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET')?.trim();
-    if (WEBHOOK_SECRET) {
-        const providedSecret = req.headers.get('x-webhook-secret');
-        if (providedSecret !== WEBHOOK_SECRET) {
-            return new Response('Unauthorized', { status: 401 });
-        }
+    // ── Autenticación del webhook (OBLIGATORIA, fail-closed) ──────────────────
+    // La función se despliega con --no-verify-jwt (Evolution API no puede mandar
+    // un JWT de usuario), así que este secreto es el ÚNICO control de acceso.
+    // Evolution self-hosted v2 no soporta headers custom en el webhook, por eso el
+    // secreto viaja en la query string de la URL que registra `whatsapp-manager`.
+    // El header se acepta además para invocaciones manuales y pruebas.
+    const CHAT_WEBHOOK_SECRET = Deno.env.get('CHAT_WEBHOOK_SECRET')?.trim();
+    if (!CHAT_WEBHOOK_SECRET) {
+        console.error('CHAT_WEBHOOK_SECRET no configurado: rechazando todos los requests.');
+        return new Response('Server misconfigured', { status: 503 });
+    }
+    const providedSecret =
+        new URL(req.url).searchParams.get('s') ?? req.headers.get('x-webhook-secret') ?? '';
+    if (!timingSafeEqual(providedSecret, CHAT_WEBHOOK_SECRET)) {
+        return new Response('Unauthorized', { status: 401 });
     }
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')?.trim();

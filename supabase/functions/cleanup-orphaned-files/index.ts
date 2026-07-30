@@ -1,11 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-// CORS headers for browser calls (though this will mostly be called by pg_cron)
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+// Server-to-server: la dispara el cron job de pg_cron vía net.http_post, no un
+// navegador. No hay Origin ni preflight, así que los headers de CORS no aportan
+// nada. Se mantiene la constante porque las respuestas la esparcen.
+const corsHeaders: Record<string, string> = {}
 
 serve(async (req) => {
   // Handle CORS preflight request

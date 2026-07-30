@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 import { PatientService } from '../services/PatientService';
 import type { Patient, PatientPayload, PaginatedResult } from '../types/database.types';
@@ -17,7 +16,10 @@ interface NormalizedPatient extends Patient {
 /** Resultado de usePatients compatible con la API anterior del hook */
 interface UsePatientsResult {
     patients: NormalizedPatient[];
+    /** Carga inicial o mutación en curso. No usar para desmontar la tabla: ver nota abajo. */
     loading: boolean;
+    /** `true` durante cualquier refetch, incluso con datos previos ya en pantalla. */
+    isFetching: boolean;
     error: string | null;
     pagination: {
         total: number;
@@ -72,7 +74,10 @@ const normalizePatient = (p: Patient): NormalizedPatient => {
  * @param statusFilter - Filtro de estado server-side
  */
 export function usePatients(
-    session: Session | null = null,
+    // Sin default: `session` es lo que habilita las mutaciones. Con un `null`
+    // implícito, `addPatient`/`deletePatient` fallan recién al ejecutarse, con un
+    // "No hay sesión activa" que aparece en runtime y no al escribir el llamador.
+    session: Session | null,
     page = 1,
     pageSize = 300,
     searchTerm = '',
@@ -86,23 +91,25 @@ export function usePatients(
         queryClient.invalidateQueries({ queryKey: PATIENTS_KEY });
     };
 
-    // ── Evento global → invalidación (lo despachan los modales tras mutaciones) ──
-    useEffect(() => {
-        window.addEventListener('patients:refresh', invalidate);
-        return () => {
-            window.removeEventListener('patients:refresh', invalidate);
-        };
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Acá había un listener de `patients:refresh`. Los consumidores ahora llaman
+    // directo a `queryClient.invalidateQueries({ queryKey: queryKeys.patients.all })`,
+    // que es tipado, deduplicado y rastreable — a diferencia de un bus de
+    // CustomEvents donde había que buscar strings por todo el repo para saber
+    // quién refrescaba qué.
 
     // ── useQuery: carga y caché ───────────────────────────────────────────────
     const {
         data: paginatedResult,
         isLoading,
+        isFetching,
         isError,
         error: queryError,
     } = useQuery<PaginatedResult<Patient>, Error>({
         queryKey: [...PATIENTS_KEY, page, pageSize, searchTerm, statusFilter],
         queryFn: () => PatientService.fetchPatientsPaginated(page, pageSize, searchTerm, statusFilter),
+        // Mantiene en pantalla el resultado del filtro anterior mientras llega el
+        // nuevo: sin esto, cada tecla de la búsqueda vacía la tabla.
+        placeholderData: keepPreviousData,
         select: (result): PaginatedResult<NormalizedPatient> => ({
             ...result,
             data: result.data.map(normalizePatient),
@@ -115,43 +122,18 @@ export function usePatients(
             if (!userId) throw new Error("No hay sesión activa para crear paciente");
             return PatientService.createPatient(data, userId);
         },
-        onMutate: async (newPatientData) => {
-            // Cancelar peticiones en vuelo para no pisar la data optimista
-            await queryClient.cancelQueries({ queryKey: PATIENTS_KEY });
-
-            // Guardar el snapshot de la data actual para un posible rollback
-            const previousData = queryClient.getQueryData<PaginatedResult<Patient>>([...PATIENTS_KEY, page, pageSize]);
-
-            // Crear un paciente optimista temporal
-            const optimisticPatient = {
-                ...newPatientData,
-                id: `temp_${Date.now()}`,
-                estado: newPatientData.estado || 'Activo',
-            } as unknown as Patient;
-
-            // Inyectar el paciente directamente en la caché de la UI
-            queryClient.setQueryData<PaginatedResult<Patient>>([...PATIENTS_KEY, page, pageSize], (old) => {
-                if (!old) return old;
-                return {
-                    ...old,
-                    data: [optimisticPatient, ...old.data],
-                    total: old.total + 1
-                };
-            });
-
-            return { previousData };
-        },
-        onError: (err, newPatient, context) => {
-            // Si falla la DB, restauramos la caché original (Rollback)
-            if (context?.previousData) {
-                queryClient.setQueryData([...PATIENTS_KEY, page, pageSize], context.previousData);
-            }
+        // Sin update optimista: la lista es paginada, filtrada y ordenada
+        // server-side, así que una fila inyectada a mano puede no pertenecer al
+        // set que el servidor va a devolver. `placeholderData: keepPreviousData`
+        // ya evita el parpadeo, que era lo único que el optimista aportaba.
+        onError: (err) => {
             console.error("Error creando paciente:", err);
         },
         onSettled: () => {
-            // Sincronización final obligatoria
+            // Sincronización final obligatoria. El `dispatchEvent('patients:refresh')`
+            // que acompañaba a esta línea era un auto-dispatch: este mismo hook
+            // escuchaba el evento y volvía a invalidar la misma key.
             queryClient.invalidateQueries({ queryKey: PATIENTS_KEY });
-            window.dispatchEvent(new CustomEvent('patients:refresh'));
         },
     });
 
@@ -176,6 +158,10 @@ export function usePatients(
 
     // ── API pública ───────────────────────────────────────────────────────────
     const patients = (paginatedResult as PaginatedResult<NormalizedPatient> | undefined)?.data ?? [];
+    // OJO: `loading` incluye las mutaciones, así que sirve para deshabilitar
+    // botones pero NO para decidir si se renderiza la tabla — un borrado la
+    // desmontaría a mitad de camino y el diálogo de confirmación de
+    // `PatientTable` (estado local) desaparecería solo.
     const loading =
         isLoading ||
         addMutation.isPending ||
@@ -202,6 +188,7 @@ export function usePatients(
     return {
         patients,
         loading,
+        isFetching,
         error,
         pagination: {
             total: paginatedResult?.total ?? 0,
