@@ -46,22 +46,51 @@ async function cancelPreapproval(
   return { ok: false, detail: await res.text() };
 }
 
-// Deja rastro de un preapproval que quedo activo en MercadoPago sin poder cancelarse.
-// Sin esto el doble cobro es invisible hasta que el usuario reclama.
-async function logOrphanPreapproval(
+// Deja rastro en payment_events de una operacion que MercadoPago rechazo.
+// Sin esto el motivo del rechazo solo vive en console.error, que no es consultable
+// por SQL: el usuario ve un 502 opaco y no hay forma de saber que paso.
+async function logMpFailure(
   supabase: ReturnType<typeof createClient>,
+  eventType: string,
   userId: string,
-  preapprovalId: string,
+  preapprovalId: string | null,
   detail: string,
 ): Promise<void> {
   const { error } = await supabase.from("payment_events").insert({
-    event_type: "preapproval_cancel_failed",
+    event_type: eventType,
     mp_resource_id: preapprovalId,
     user_id: userId,
     payload: { detail },
     processed: false,
   });
-  if (error) console.error("No se pudo registrar el preapproval huerfano:", error.message);
+  if (error) console.error(`No se pudo registrar ${eventType}:`, error.message);
+}
+
+// Deja rastro de un preapproval que quedo activo en MercadoPago sin poder cancelarse.
+// Sin esto el doble cobro es invisible hasta que el usuario reclama.
+function logOrphanPreapproval(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  preapprovalId: string,
+  detail: string,
+): Promise<void> {
+  return logMpFailure(supabase, "preapproval_cancel_failed", userId, preapprovalId, detail);
+}
+
+// Extrae el motivo legible del cuerpo de error de MercadoPago para mostrarselo al
+// usuario. El payload crudo (que puede incluir ids internos y el detalle del request)
+// queda solo en payment_events, no viaja al navegador.
+function mpErrorMessage(detail: string | undefined): string | undefined {
+  if (!detail) return undefined;
+  try {
+    const parsed = JSON.parse(detail);
+    const cause = Array.isArray(parsed?.cause) ? parsed.cause[0] : null;
+    const message = parsed?.message ?? cause?.description ?? cause?.message;
+    if (typeof message === "string" && message.trim()) return message.trim().slice(0, 200);
+  } catch {
+    // MercadoPago no siempre responde JSON (ej: un HTML de su gateway).
+  }
+  return detail.slice(0, 200);
 }
 
 serve(async (req) => {
@@ -162,8 +191,18 @@ serve(async (req) => {
         );
         if (!restore.ok) {
           console.error("MercadoPago restore amount error:", restore.detail);
+          await logMpFailure(
+            supabase,
+            "preapproval_restore_failed",
+            user.id,
+            existingSub.mercadopago_sub_id,
+            restore.detail ?? "",
+          );
           return new Response(
-            JSON.stringify({ error: "No se pudo restaurar el monto en MercadoPago." }),
+            JSON.stringify({
+              error: "No se pudo restaurar el monto en MercadoPago.",
+              detail: mpErrorMessage(restore.detail),
+            }),
             { status: 502, headers: jsonHeaders }
           );
         }
@@ -220,6 +259,7 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({
               error: "No se pudo cancelar el cobro automático en MercadoPago. Intentá de nuevo en unos minutos.",
+              detail: mpErrorMessage(cancelled.detail),
             }),
             { status: 502, headers: jsonHeaders }
           );
@@ -309,8 +349,18 @@ serve(async (req) => {
       );
       if (!update.ok) {
         console.error("MercadoPago downgrade error:", update.detail);
+        await logMpFailure(
+          supabase,
+          "preapproval_downgrade_failed",
+          user.id,
+          existingSub!.mercadopago_sub_id!,
+          update.detail ?? "",
+        );
         return new Response(
-          JSON.stringify({ error: "No se pudo programar el cambio de plan en MercadoPago." }),
+          JSON.stringify({
+            error: "No se pudo programar el cambio de plan en MercadoPago.",
+            detail: mpErrorMessage(update.detail),
+          }),
           { status: 502, headers: jsonHeaders }
         );
       }
@@ -341,6 +391,13 @@ serve(async (req) => {
           console.error(
             "CRITICAL: monto bajado en MercadoPago sin registro en DB y rollback fallido.",
             { preapproval: existingSub!.mercadopago_sub_id, detail: rollback.detail },
+          );
+          await logMpFailure(
+            supabase,
+            "preapproval_amount_rollback_failed",
+            user.id,
+            existingSub!.mercadopago_sub_id!,
+            rollback.detail ?? "",
           );
         }
         return new Response(
@@ -392,8 +449,13 @@ serve(async (req) => {
     if (!mpRes.ok) {
       const mpError = await mpRes.text();
       console.error("MercadoPago error:", mpError);
+      // Todavia no hay preapproval, asi que no hay mp_resource_id que registrar.
+      await logMpFailure(supabase, "preapproval_create_failed", user.id, null, mpError);
       return new Response(
-        JSON.stringify({ error: "No se pudo crear la suscripción en MercadoPago." }),
+        JSON.stringify({
+          error: "No se pudo crear la suscripción en MercadoPago.",
+          detail: mpErrorMessage(mpError),
+        }),
         { status: 502, headers: jsonHeaders }
       );
     }
