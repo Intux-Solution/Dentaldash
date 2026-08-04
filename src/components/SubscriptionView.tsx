@@ -4,6 +4,7 @@ import { CheckCircle, Clock, XCircle, AlertTriangle, CreditCard, ArrowUpCircle, 
 import { useNavigate } from 'react-router-dom';
 import { cancelMySubscription, cancelScheduledPlanChange } from '../services/SubscriptionService';
 import toast from 'react-hot-toast';
+import ConfirmDialog from './ConfirmDialog';
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -21,6 +22,7 @@ export default function SubscriptionView() {
   const navigate = useNavigate();
   const [cancelling, setCancelling] = useState(false);
   const [revertingChange, setRevertingChange] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   if (isLoading) {
     return (
@@ -51,7 +53,6 @@ export default function SubscriptionView() {
   const canCancel = subscription.status === 'active' || subscription.status === 'trial' || subscription.status === 'past_due';
 
   const handleCancel = async () => {
-    if (!confirm('¿Estás seguro de que querés cancelar tu suscripción? Perderás acceso cuando venza el período actual.')) return;
     setCancelling(true);
     try {
       await cancelMySubscription();
@@ -61,6 +62,7 @@ export default function SubscriptionView() {
       toast.error(err.message ?? 'Error al cancelar la suscripción');
     } finally {
       setCancelling(false);
+      setShowCancelConfirm(false);
     }
   };
 
@@ -167,7 +169,7 @@ export default function SubscriptionView() {
 
         {canCancel && (
           <button
-            onClick={handleCancel}
+            onClick={() => setShowCancelConfirm(true)}
             disabled={cancelling}
             className="flex items-center gap-2 bg-white border border-red-200 hover:bg-red-50 text-red-600 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
@@ -176,6 +178,25 @@ export default function SubscriptionView() {
           </button>
         )}
       </div>
+
+      {showCancelConfirm && (
+        <ConfirmDialog
+          title="Cancelar suscripción"
+          confirmLabel="Sí, cancelar"
+          cancelLabel="Volver"
+          tone="danger"
+          loading={cancelling}
+          onConfirm={handleCancel}
+          onCancel={() => setShowCancelConfirm(false)}
+        >
+          <p>¿Estás seguro de que querés cancelar tu suscripción?</p>
+          <p className="text-gray-600">
+            {subscription.current_period_end && subscription.status === 'active'
+              ? `Vas a conservar el acceso hasta el ${formatDate(subscription.current_period_end)}; desde esa fecha perdés las funciones de tu plan.`
+              : 'Perderás acceso cuando venza el período actual.'}
+          </p>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

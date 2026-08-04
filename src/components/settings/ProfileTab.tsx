@@ -39,7 +39,7 @@ export default function ProfileTab({ profile, handleProfileChange, handleAutoSav
                         {avatarPreview ? "Personalizada" : googleAvatar ? "De Google" : "Sin foto"}
                     </p>
                 </div>
-                <div className="flex-1 max-w-lg space-y-6">
+                <div className="flex-1 min-w-0 space-y-6">
                     <div className="flex justify-between items-center">
                         <label className="block text-sm font-semibold text-gray-700">Nombre Profesional</label>
                         <span className="text-[10px] text-gray-400 font-bold bg-gray-50 px-2 py-1 rounded-md">VERSION 2.0</span>

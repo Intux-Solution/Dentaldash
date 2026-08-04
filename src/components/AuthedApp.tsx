@@ -15,10 +15,12 @@ import { useNormalizedPatients } from '../hooks/useNormalizedPatients';
 import { useAuth } from '../context/AuthContext';
 import SubscriptionBanner from './SubscriptionBanner';
 import OnboardingWizard from './OnboardingWizard';
+import WelcomeTour from './WelcomeTour';
 
 const titleByPath = (pathname: string) => {
   if (pathname.startsWith('/pacientes')) return 'Pacientes';
   if (pathname.startsWith('/turnos')) return 'Turnos';
+  if (pathname.startsWith('/ayuda')) return 'Ayuda';
   return 'Dashboard';
 };
 
@@ -30,7 +32,14 @@ export default function AuthedApp({ onLogout }: AuthedAppProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { session, profile, isLoading: authLoading } = useAuth();
-  const showOnboarding = !authLoading && profile !== null && !profile.business_name;
+
+  // Dos etapas encadenadas: el wizard es bloqueante y pide lo mínimo para operar;
+  // recién cuando `business_name` existe (tras su reloadProfile) aparece el tour,
+  // que es descartable y explica qué configurar. Sin estado extra: el propio
+  // perfil marca en qué etapa está el usuario.
+  const needsProfile = !authLoading && profile !== null && !profile.business_name;
+  const showTour =
+    !authLoading && profile !== null && !!profile.business_name && !profile.onboarding_completed_at;
 
   // ─── Datos ────────────────────────────────────────────────────────────────
   const { patients, error, addPatient, updatePatient, refreshPatients } = usePatients(session);
@@ -83,7 +92,8 @@ export default function AuthedApp({ onLogout }: AuthedAppProps) {
       </AppointmentModalsProvider>
     </PatientModalsProvider>
 
-    {showOnboarding && <OnboardingWizard />}
+    {needsProfile && <OnboardingWizard />}
+    {!needsProfile && showTour && <WelcomeTour />}
     </>
   );
 }

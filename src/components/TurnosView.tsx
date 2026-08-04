@@ -164,7 +164,7 @@ export default function TurnosView() {
                             </div>
                             {canUse('export_data') && events.length > 0 && (
                                 <button onClick={() => ExportService.exportAppointmentsCSV(events)} className="h-10 inline-flex items-center justify-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors font-medium border border-gray-200">
-                                    Exportar CSV
+                                    Exportar Turnos
                                 </button>
                             )}
                         </div>

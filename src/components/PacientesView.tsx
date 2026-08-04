@@ -96,7 +96,7 @@ export default function PacientesView() {
                                 disabled={loading || sortedPacientes.length === 0}
                                 className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed border border-gray-200"
                             >
-                                Exportar CSV
+                                Exportar Pacientes
                             </button>
                         )}
                         <button

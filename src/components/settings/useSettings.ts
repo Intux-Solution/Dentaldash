@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import { message } from 'antd';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -61,9 +61,26 @@ export function useSettings(session: any = null) {
     const [qrCodeData, setQrCodeData] = useState<string | null>(null);
     const [instanceStatus, setInstanceStatus] = useState<string>('disconnected');
     const [pollingActive, setPollingActive] = useState(false);
-    const [pollErrorCount, setPollErrorCount] = useState(0);
+    // Contadores del polling en refs: si vivieran en el state, `checkConnectionStatus`
+    // se recrearía en cada tick y el `setInterval` se reiniciaría a mitad de ciclo.
+    const pollErrorCountRef = useRef(0);
+    const pollTicksRef = useRef(0);
 
     const userId = session?.user?.id;
+
+    /**
+     * `supabase.functions.invoke` envuelve cualquier respuesta no-2xx en un
+     * FunctionsHttpError cuyo `message` es el genérico "Edge Function returned a
+     * non-2xx status code"; el cuerpo real está en `err.context`.
+     */
+    const edgeErrorMessage = async (err: any, fallback: string): Promise<string> => {
+        try {
+            const body = await err?.context?.json?.();
+            return body?.error || body?.message || err?.message || fallback;
+        } catch {
+            return err?.message || fallback;
+        }
+    };
 
     // --- QUERY: FETCH SETTINGS ---
     const {
@@ -111,7 +128,11 @@ export function useSettings(session: any = null) {
                 };
                 setInstanceStatus(mergedProfile.whatsapp_status);
 
-                if (mergedProfile.whatsapp_status === 'connecting') {
+                // Sólo reanudar el polling si además quedó una instancia: un
+                // `connecting` sin instancia es basura de un intento fallido.
+                if (mergedProfile.whatsapp_status === 'connecting' && mergedProfile.whatsapp_instance) {
+                    pollErrorCountRef.current = 0;
+                    pollTicksRef.current = 0;
                     setPollingActive(true);
                 }
 
@@ -226,7 +247,20 @@ export function useSettings(session: any = null) {
         }
     });
 
+    /** Escribe `whatsapp_instance` en la caché para que el polling no quede sin nombre. */
+    const patchCachedInstance = useCallback((instanceName: string | null) => {
+        queryClient.setQueryData(queryKeys.settings.detail(userId ?? ''), (oldData: any) => {
+            if (!oldData) return oldData;
+            return {
+                ...oldData,
+                profile: { ...oldData.profile, whatsapp_instance: instanceName }
+            };
+        });
+    }, [queryClient, userId]);
+
     // 3. Connect WhatsApp Mutation
+    // La Edge Function devuelve siempre { status, instanceName, qr, message? }:
+    // `status: 'error'` viaja con HTTP 200 para que el motivo real llegue al usuario.
     const connectWhatsAppMutation = useMutation({
         mutationFn: async () => {
             if (!userId) throw new Error("No user ID");
@@ -234,32 +268,38 @@ export function useSettings(session: any = null) {
                 body: { action: 'create', tenant_id: userId }
             });
             if (error) throw error;
+            if (data?.status === 'error') throw new Error(data.message || 'Evolution API rechazó la conexión.');
             return data;
         },
         onSuccess: (data) => {
-            setPollingActive(true);
-            setInstanceStatus('connecting');
-            if (data?.instance?.instanceName) {
-                queryClient.setQueryData(queryKeys.settings.detail(userId ?? ''), (oldData: any) => {
-                    if (!oldData) return oldData;
-                    return {
-                        ...oldData,
-                        profile: {
-                            ...oldData.profile,
-                            whatsapp_instance: data.instance.instanceName
-                        }
-                    };
-                });
+            pollErrorCountRef.current = 0;
+            pollTicksRef.current = 0;
+            setQrCodeData(data?.qr ?? null);
+            if (data?.instanceName) patchCachedInstance(data.instanceName);
+
+            if (data?.status === 'connected') {
+                setInstanceStatus('connected');
+                setPollingActive(false);
+                setQrCodeData(null);
+                message.success('WhatsApp ya estaba conectado.');
+            } else {
+                setInstanceStatus('connecting');
+                setPollingActive(true);
+                message.success('Escaneá el código QR con WhatsApp.');
             }
-            message.success('Iniciando conexión con WhatsApp...');
+            queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
         },
-        onError: (err: any) => {
+        onError: async (err: any) => {
             console.error('Connect WhatsApp error:', err);
-            message.error('Error al conectar WhatsApp: ' + err.message);
+            // Revertir: sin esto el botón queda deshabilitado en "Esperando conexión...".
+            setPollingActive(false);
+            setInstanceStatus('disconnected');
+            setQrCodeData(null);
+            message.error('Error al conectar WhatsApp: ' + await edgeErrorMessage(err, 'error desconocido'));
         }
     });
 
-    // 4. Disconnect WhatsApp Mutation
+    // 4. Disconnect WhatsApp Mutation (también es el "Cancelar" del QR)
     const disconnectWhatsAppMutation = useMutation({
         mutationFn: async () => {
             if (!userId) throw new Error("No user ID");
@@ -269,25 +309,23 @@ export function useSettings(session: any = null) {
             if (error) throw error;
             return true;
         },
-        onSuccess: () => {
+        // La limpieza va en onSettled: aunque el logout falle, el usuario tiene que
+        // poder salir del estado "conectando" y volver a intentar.
+        onSettled: () => {
             setInstanceStatus('disconnected');
             setPollingActive(false);
             setQrCodeData(null);
-            queryClient.setQueryData(queryKeys.settings.detail(userId ?? ''), (oldData: any) => {
-                if (!oldData) return oldData;
-                return {
-                    ...oldData,
-                    profile: {
-                        ...oldData.profile,
-                        whatsapp_instance: null
-                    }
-                };
-            });
+            pollErrorCountRef.current = 0;
+            pollTicksRef.current = 0;
+            patchCachedInstance(null);
+            queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
+        },
+        onSuccess: () => {
             message.success('WhatsApp desconectado correctamente.');
         },
-        onError: (err: any) => {
+        onError: async (err: any) => {
             console.error('Disconnect WhatsApp error:', err);
-            message.error('Error al desconectar: ' + err.message);
+            message.error('Error al desconectar: ' + await edgeErrorMessage(err, 'error desconocido'));
         }
     });
 
@@ -399,8 +437,40 @@ export function useSettings(session: any = null) {
     });
 
     // --- WHATSAPP CONNECTION POLLING ---
+    /** ~3 min a 5 s por tick: si nadie escanea el QR, el polling se apaga solo. */
+    const MAX_POLL_TICKS = 36;
+
+    /** Deja el perfil en `disconnected` para que un reload no reviva el `connecting`. */
+    const markProfileDisconnected = useCallback(async () => {
+        if (!userId) return;
+        await supabase.from('profiles').update({ whatsapp_status: 'disconnected' }).eq('id', userId);
+        queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId) });
+    }, [userId, queryClient]);
+
+    const stopPolling = useCallback((status: string) => {
+        setPollingActive(false);
+        setInstanceStatus(status);
+        setQrCodeData(null);
+        pollErrorCountRef.current = 0;
+        pollTicksRef.current = 0;
+    }, []);
+
     const checkConnectionStatus = useCallback(async () => {
-        if (!profile.whatsapp_instance || !userId) return;
+        if (!userId) return;
+        // Sin instancia en caché no hay nada que esperar: apagar el polling en vez de
+        // dejarlo girando en vacío con el botón "Conectar" bloqueado para siempre.
+        if (!profile.whatsapp_instance) {
+            setPollingActive(false);
+            return;
+        }
+
+        pollTicksRef.current += 1;
+        if (pollTicksRef.current > MAX_POLL_TICKS) {
+            stopPolling('disconnected');
+            await markProfileDisconnected();
+            message.info('Se agotó el tiempo para escanear el QR. Volvé a intentar.');
+            return;
+        }
 
         try {
             const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
@@ -408,35 +478,39 @@ export function useSettings(session: any = null) {
             });
 
             if (error) {
-                const nextCount = pollErrorCount + 1;
-                setPollErrorCount(nextCount);
-                if (nextCount >= 3) {
-                    setPollingActive(false);
-                    setInstanceStatus('disconnected');
-                    setPollErrorCount(0);
+                pollErrorCountRef.current += 1;
+                if (pollErrorCountRef.current >= 3) {
+                    stopPolling('disconnected');
+                    await markProfileDisconnected();
                 }
                 return;
             }
-            setPollErrorCount(0);
+            pollErrorCountRef.current = 0;
 
-            if (data.qrcode || data.base64 || data.code) {
-                setQrCodeData(data.qrcode?.base64 || data.qrcode?.code || data.base64 || data.code);
+            // La instancia ya no existe en Evolution: la Edge Function ya limpió el perfil.
+            if (data?.status === 'disconnected') {
+                stopPolling('disconnected');
+                queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId) });
+                return;
             }
 
-            if (data.instance?.status === 'open' || data.instance?.state === 'open' || data.instance?.connectionStatus === 'open' || data.status === 'connected') {
-                setInstanceStatus('connected');
-                setPollingActive(false);
-                setQrCodeData(null);
+            // `data.qr` es la forma normalizada; el resto son las variantes crudas de
+            // Evolution, por si el front se despliega antes que la Edge Function.
+            const qr = data?.qr || data?.qrcode?.base64 || data?.qrcode?.code || data?.base64 || data?.code;
+            if (qr) setQrCodeData(qr);
+
+            if (data?.status === 'connected' || data?.instance?.status === 'open' || data?.instance?.state === 'open' || data?.instance?.connectionStatus === 'open') {
+                stopPolling('connected');
 
                 // Update profile in DB to reflect connected status
                 await supabase.from('profiles').update({ whatsapp_status: 'connected' }).eq('id', userId);
-                queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId ?? '') });
+                queryClient.invalidateQueries({ queryKey: queryKeys.settings.detail(userId) });
             }
         } catch (errUnknown: unknown) {
             const err = errUnknown instanceof Error ? errUnknown : new Error(String(errUnknown) || "Ocurrió un error inesperado.");
             console.error('Connection check error:', err);
         }
-    }, [profile.whatsapp_instance, userId, queryClient, pollErrorCount]);
+    }, [profile.whatsapp_instance, userId, queryClient, stopPolling, markProfileDisconnected]);
 
     useEffect(() => {
         let interval: any;

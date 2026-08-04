@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { CreditCard, X } from 'lucide-react';
 
 export default function InsurancesTab({ profile, handleProfileChange, handleAutoSaveProfile }: { [key: string]: any }) {
+    // Input controlado en vez de `document.getElementById`: el id es global y
+    // colisiona si el tab llega a montarse dos veces (mismo criterio que ServicesTab).
+    const [newInsurance, setNewInsurance] = useState('');
+
     const handleAdd = async () => {
-        const el = document.getElementById('ins-input') as HTMLInputElement;
-        if (el?.value.trim()) {
-            const newInsurances = [...(profile.accepted_insurances || []), el.value.trim()];
-            handleProfileChange('accepted_insurances', newInsurances);
-            el.value = '';
-            await handleAutoSaveProfile({ accepted_insurances: newInsurances });
-        }
+        const value = newInsurance.trim();
+        if (!value) return;
+        const newInsurances = [...(profile.accepted_insurances || []), value];
+        handleProfileChange('accepted_insurances', newInsurances);
+        setNewInsurance('');
+        await handleAutoSaveProfile({ accepted_insurances: newInsurances });
     };
 
     const handleRemove = async (index: number) => {
@@ -37,13 +41,16 @@ export default function InsurancesTab({ profile, handleProfileChange, handleAuto
             <div className="flex gap-2">
                 <input
                     type="text"
-                    id="ins-input"
+                    value={newInsurance}
+                    onChange={(e) => setNewInsurance(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
                     placeholder="Agregar nueva obra social..."
                     className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition-all"
                 />
                 <button
                     onClick={handleAdd}
-                    className="px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all"
+                    disabled={!newInsurance.trim()}
+                    className="px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Agregar
                 </button>

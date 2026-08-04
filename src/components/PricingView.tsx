@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import ConfirmDialog from './ConfirmDialog';
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -24,6 +25,9 @@ export default function PricingView() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  // El downgrade se confirma en un modal propio, que es asincrono: el plan
+  // elegido queda aca hasta que el usuario acepta.
+  const [pendingDowngrade, setPendingDowngrade] = useState<SubscriptionPlan | null>(null);
   const { session } = useAuth();
   const { subscription, refresh } = useSubscription();
   const navigate = useNavigate();
@@ -48,32 +52,7 @@ export default function PricingView() {
     return Number(plan.price_monthly) < Number(currentPlan.price_monthly) ? 'downgrade' : 'upgrade';
   };
 
-  const handleContrat = async (plan: SubscriptionPlan) => {
-    if (!session) {
-      navigate('/login', { state: { redirect: '/pricing' } });
-      return;
-    }
-
-    const action = actionFor(plan);
-    if (action === 'current' || action === 'scheduled') return;
-
-    if (action === 'downgrade' && periodEnd) {
-      // Si ya habia un downgrade programado a otro plan, este lo reemplaza en silencio.
-      // Avisarlo evita que el usuario crea que quedaron los dos agendados.
-      const replacing = subscription?.pending_plan && subscription.pending_plan.id !== plan.id
-        ? `Esto reemplaza el cambio a ${subscription.pending_plan.name} que ya tenías programado.\n\n`
-        : '';
-
-      const ok = confirm(
-        replacing +
-          `Seguís con ${currentPlan!.name} y todas sus funciones hasta el ${formatDate(periodEnd)}.\n\n` +
-          `Desde esa fecha pasás a ${plan.name} y se te cobrará ` +
-          `$${plan.price_monthly.toLocaleString('es-AR')} ARS/mes.\n\n` +
-          'No se te cobra nada ahora.'
-      );
-      if (!ok) return;
-    }
-
+  const runCheckout = async (plan: SubscriptionPlan) => {
     try {
       setCheckoutLoading(plan.id);
       const result = await createCheckout(plan.id);
@@ -97,6 +76,31 @@ export default function PricingView() {
     } finally {
       setCheckoutLoading(null);
     }
+  };
+
+  const handleContrat = (plan: SubscriptionPlan) => {
+    if (!session) {
+      navigate('/login', { state: { redirect: '/pricing' } });
+      return;
+    }
+
+    const action = actionFor(plan);
+    if (action === 'current' || action === 'scheduled') return;
+
+    // El downgrade se confirma primero: no hay cobro ahora y el cambio recien
+    // se aplica al vencer el periodo pagado, asi que conviene explicarlo.
+    if (action === 'downgrade' && periodEnd) {
+      setPendingDowngrade(plan);
+      return;
+    }
+
+    runCheckout(plan);
+  };
+
+  const confirmDowngrade = async () => {
+    if (!pendingDowngrade) return;
+    await runCheckout(pendingDowngrade);
+    setPendingDowngrade(null);
   };
 
   return (
@@ -205,6 +209,35 @@ export default function PricingView() {
       <div className="text-center pb-12 text-xs text-gray-400">
         Los pagos se procesan de forma segura a través de MercadoPago. Podés cancelar en cualquier momento.
       </div>
+
+      {pendingDowngrade && periodEnd && currentPlan && (
+        <ConfirmDialog
+          title="Confirmar cambio de plan"
+          confirmLabel="Programar cambio"
+          cancelLabel="Volver"
+          loading={checkoutLoading === pendingDowngrade.id}
+          onConfirm={confirmDowngrade}
+          onCancel={() => setPendingDowngrade(null)}
+        >
+          {/* Si ya habia un downgrade programado a otro plan, este lo reemplaza en
+              silencio. Avisarlo evita que el usuario crea que quedaron los dos. */}
+          {subscription?.pending_plan && subscription.pending_plan.id !== pendingDowngrade.id && (
+            <p className="bg-amber-50 text-amber-800 rounded-lg px-3 py-2">
+              Esto reemplaza el cambio a <strong>{subscription.pending_plan.name}</strong> que ya
+              tenías programado.
+            </p>
+          )}
+          <p>
+            Seguís con <strong>{currentPlan.name}</strong> y todas sus funciones hasta el{' '}
+            <strong>{formatDate(periodEnd)}</strong>.
+          </p>
+          <p>
+            Desde esa fecha pasás a <strong>{pendingDowngrade.name}</strong> y se te cobrará $
+            {pendingDowngrade.price_monthly.toLocaleString('es-AR')} ARS/mes.
+          </p>
+          <p className="text-teal-700 font-medium">No se te cobra nada ahora.</p>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

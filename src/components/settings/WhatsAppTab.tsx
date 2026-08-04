@@ -58,9 +58,13 @@ export default function WhatsAppTab({
                                 disabled={saving || pollingActive}
                                 className="flex-1 px-6 py-2.5 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50 whitespace-nowrap"
                             >
-                                {pollingActive ? 'Esperando conexión...' : 'Conectar WhatsApp'}
+                                {pollingActive
+                                    ? 'Esperando conexión...'
+                                    : instanceStatus === 'connecting' ? 'Reintentar conexión' : 'Conectar WhatsApp'}
                             </button>
-                            {pollingActive && (
+                            {/* También con `connecting` sin polling: si no, ese estado
+                                queda sin forma de salir salvo recargando. */}
+                            {(pollingActive || instanceStatus === 'connecting') && (
                                 <button
                                     onClick={handleDisconnectWhatsApp}
                                     disabled={saving}

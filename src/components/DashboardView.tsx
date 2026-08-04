@@ -8,6 +8,7 @@ import { useTurnos } from '../hooks/useTurnos';
 import { useAuth } from '../context/AuthContext';
 import { usePatients } from '../hooks/usePatients';
 import StatsCard from './StatsCard';
+import SetupChecklist from './SetupChecklist';
 import SearchInput from './SearchInput';
 import PatientTable from './PatientTable';
 import { Link } from 'react-router-dom';
@@ -53,6 +54,8 @@ export default function DashboardView() {
 
     return (
         <div className="p-4 lg:p-8 bg-gray-50 min-h-screen">
+            <SetupChecklist />
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
                 <StatsCard
                     title="Turnos de Hoy"

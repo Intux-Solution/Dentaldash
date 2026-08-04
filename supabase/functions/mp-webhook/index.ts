@@ -138,7 +138,7 @@ serve(async (req) => {
     }
 
     const mpSub = await mpRes.json();
-    const { status: mpStatus, external_reference, payer_id } = mpSub;
+    const { status: mpStatus, external_reference, payer_id, next_payment_date } = mpSub;
 
     // external_reference tiene formato "userId|planId"
     const [userId, planId] = (external_reference ?? "|").split("|");
@@ -197,17 +197,35 @@ serve(async (req) => {
 
     const now = new Date();
 
-    // En una renovacion el periodo nuevo arranca donde terminaba el anterior (si
-    // todavia no vencio); en un alta/activacion arranca hoy.
     const previousEnd = currentSub?.current_period_end
       ? new Date(currentSub.current_period_end)
       : null;
-    const periodStart =
-      topic === "subscription_authorized_payment" && previousEnd && previousEnd > now
-        ? previousEnd
-        : now;
-    const periodEnd = new Date(periodStart);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    const hasLivePeriod = !!previousEnd && previousEnd > now;
+
+    // La proxima renovacion la define MercadoPago, no una cuenta local: un downgrade
+    // hace PUT /preapproval para bajar el monto y eso dispara un webhook
+    // 'subscription_preapproval' sin cobro alguno. Calculando now+1mes ahi, el
+    // vencimiento se corria un mes gratis en cada cambio de plan (y quedaba
+    // desincronizado de pending_plan_effective_at). next_payment_date no se mueve
+    // con el PUT y avanza solo cuando hay cobro real, asi que es la fuente de verdad.
+    const mpNextPayment = next_payment_date ? new Date(next_payment_date) : null;
+    const nextPaymentValid = !!mpNextPayment && !isNaN(mpNextPayment.getTime());
+
+    let periodStart: Date | null = null;
+    let periodEnd: Date | null = null;
+
+    if (nextPaymentValid) {
+      periodEnd = mpNextPayment!;
+      // El periodo vigente arranca donde terminaba el anterior; si no habia, hoy.
+      periodStart = hasLivePeriod && previousEnd! <= periodEnd ? previousEnd! : now;
+    } else if (topic === "subscription_authorized_payment" || !hasLivePeriod) {
+      // Fallback: MP no informo la fecha. Solo se recalcula si hubo cobro o si no
+      // hay periodo vigente que preservar (alta / reactivacion tras el vencimiento).
+      periodStart = hasLivePeriod ? previousEnd! : now;
+      periodEnd = new Date(periodStart);
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+    }
+    // Si no hay fecha de MP, no hubo cobro y el periodo sigue vigente: no se toca.
 
     const updateData: Record<string, unknown> = {
       status: internalStatus,
@@ -223,8 +241,10 @@ serve(async (req) => {
       if (!hasPendingChange) {
         updateData.plan_id = planId;                    // garantiza el plan elegido
       }
-      updateData.current_period_start = periodStart.toISOString();
-      updateData.current_period_end = periodEnd.toISOString();
+      if (periodStart && periodEnd) {
+        updateData.current_period_start = periodStart.toISOString();
+        updateData.current_period_end = periodEnd.toISOString();
+      }
       updateData.trial_ends_at = now.toISOString();     // finaliza el trial al activar el plan
       updateData.cancelled_at = null;
     } else if (internalStatus === "cancelled") {

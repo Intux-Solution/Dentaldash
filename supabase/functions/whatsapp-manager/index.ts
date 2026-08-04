@@ -50,8 +50,12 @@ serve(async (req) => {
         const { action, tenant_id } = body;
         // `sync_webhook_all` es una acción global de admin: no lleva tenant_id.
         const isBulkSync = action === 'sync_webhook_all';
-        if (!action) throw new Error('Missing action');
-        if (!isBulkSync && !tenant_id) throw new Error('Missing action or tenant_id');
+        if (!action) {
+            return new Response(JSON.stringify({ error: "Missing action" }), { status: 400, headers: corsHeaders });
+        }
+        if (!isBulkSync && !tenant_id) {
+            return new Response(JSON.stringify({ error: "Missing tenant_id" }), { status: 400, headers: corsHeaders });
+        }
 
         // Extract and validate Auth Token from Authorization header
         const authHeader = req.headers.get('Authorization');
@@ -170,6 +174,74 @@ serve(async (req) => {
             return resAlt;
         };
 
+        // ── Helpers del ciclo de vida de la instancia ─────────────────────────
+        // El nombre de instancia es determinista (`instance_<uuid>`), así que una
+        // instancia que quedó huérfana en Evolution tras un logout incompleto choca
+        // con el siguiente `create` (403 "already in use"). Estos helpers permiten
+        // consultar el estado real antes de decidir y devolver siempre la misma forma
+        // de respuesta al cliente, en vez del passthrough crudo de Evolution.
+
+        /**
+         * Sondea la instancia en Evolution. `known: false` = no se pudo determinar
+         * (red caída o 5xx): nunca hay que limpiar la BD ni borrar nada en ese caso,
+         * sólo con un 404 explícito sabemos que la instancia no existe.
+         */
+        type InstanceProbe = { known: boolean; exists: boolean; state: string | null };
+        const probeInstance = async (name: string): Promise<InstanceProbe> => {
+            try {
+                const res = await fetch(`${baseUrl}/instance/connectionState/${name}`, { headers: { 'apikey': EVOLUTION_KEY } });
+                if (res.status === 404) return { known: true, exists: false, state: null };
+                const body = await res.json().catch(() => null);
+                if (!res.ok) return { known: false, exists: false, state: null };
+                return { known: true, exists: true, state: body?.instance?.state ?? null };
+            } catch (e: any) {
+                console.error(`connectionState failed for ${name}:`, e?.message);
+                return { known: false, exists: false, state: null };
+            }
+        };
+
+        /** Evolution v2 devuelve el QR en varias formas según el endpoint. */
+        const extractQr = (d: any): string | null =>
+            d?.qrcode?.base64 ?? d?.qrcode?.code ?? d?.base64 ?? d?.code ?? null;
+
+        /**
+         * Los fallos de Evolution se devuelven con 200 + `status: 'error'`: `supabase-js`
+         * envuelve cualquier no-2xx en un error genérico sin exponer el body, así que un
+         * status HTTP crudo le impediría al cliente mostrar el motivo real.
+         */
+        const okResponse = (payload: Record<string, unknown>) =>
+            new Response(JSON.stringify(payload), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+            });
+
+        /** Aplana el `response.message` de Evolution (a veces array) a un string legible. */
+        const evolutionMessage = (d: any, fallback: string): string => {
+            const raw = d?.response?.message ?? d?.message ?? d?.error;
+            if (Array.isArray(raw)) return raw.join(' ');
+            if (typeof raw === 'string' && raw) return raw;
+            return fallback;
+        };
+
+        const updateProfile = async (patch: Record<string, unknown>) => {
+            const { error } = await supabase.from('profiles').update(patch).eq('id', tenant_id);
+            if (error) console.error(`profiles update failed for ${tenant_id}:`, error.message);
+        };
+
+        /** DELETE tolerante: un 404 significa que ya no existe, que es el objetivo. */
+        const tryDelete = async (path: string, name: string): Promise<boolean> => {
+            try {
+                const res = await fetch(`${baseUrl}/instance/${path}/${name}`, {
+                    method: 'DELETE',
+                    headers: { 'apikey': EVOLUTION_KEY }
+                });
+                return res.ok || res.status === 404;
+            } catch (e: any) {
+                console.error(`${path} failed for ${name}:`, e?.message);
+                return false;
+            }
+        };
+
         // Re-registra el webhook de TODAS las instancias existentes. Se usa después de
         // rotar CHAT_WEBHOOK_SECRET o al migrar la URL del webhook, para que ningún
         // tenant quede con una URL vieja que `chat-webhook` rechace con 401.
@@ -224,82 +296,162 @@ serve(async (req) => {
         }
 
         if (action === 'get_qr') {
-            const stateUrl = `${baseUrl}/instance/connectionState/${instanceName}`;
-            const stateResponse = await fetch(stateUrl, { headers: { 'apikey': EVOLUTION_KEY } });
-            const stateData = await stateResponse.json();
+            const probe = await probeInstance(instanceName);
 
             // IDEMPOTENCIA: Si ya está conectado, verificamos y configuramos webhook una única vez.
-            if (stateData?.instance?.state === 'open') {
-                const { data: tenant } = await supabase.from('profiles').select('whatsapp_status').eq('id', tenant_id).single();
+            if (probe.state === 'open') {
+                const { data: tenant } = await supabase
+                    .from('profiles').select('whatsapp_status').eq('id', tenant_id).maybeSingle();
 
                 // Solo disparamos sincronización si no estaba marcado como conectado previamente
                 if (tenant?.whatsapp_status !== 'connected') {
                     await setWebhook(instanceName);
-                    await supabase.from('profiles').update({ whatsapp_status: 'connected' }).eq('id', tenant_id);
+                    await updateProfile({ whatsapp_instance: instanceName, whatsapp_status: 'connected' });
                 }
 
                 await Promise.allSettled(logPromises);
-                return new Response(JSON.stringify({ ...stateData, status: 'connected' }), {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                });
+                return okResponse({ status: 'connected', instanceName, qr: null });
+            }
+
+            // La instancia desapareció de Evolution (p. ej. borrada por un logout previo):
+            // se limpia el perfil acá para que un reload no rehidrate un `connecting` zombi.
+            if (probe.known && !probe.exists) {
+                await updateProfile({ whatsapp_status: 'disconnected', whatsapp_instance: null });
+                await Promise.allSettled(logPromises);
+                return okResponse({ status: 'disconnected', instanceName, qr: null });
             }
 
             // Si no está conectado, procedemos a obtener QR/conectar
             const connectUrl = `${baseUrl}/instance/connect/${instanceName}`;
             const res = await fetch(connectUrl, { headers: { 'apikey': EVOLUTION_KEY } });
-            const data = await res.json();
+            const data = await res.json().catch(() => null);
             await Promise.allSettled(logPromises);
-            return new Response(JSON.stringify(data), {
-                status: res.status,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
+
+            if (!res.ok) {
+                return okResponse({
+                    status: 'error',
+                    instanceName,
+                    qr: null,
+                    message: evolutionMessage(data, `Evolution respondió ${res.status} al pedir el QR.`)
+                });
+            }
+
+            return okResponse({ status: 'connecting', instanceName, qr: extractQr(data) });
         }
 
+        // `create` es idempotente: el nombre de instancia es determinista, así que
+        // "Conectar" después de un "Cancelar" apunta siempre al mismo nombre. Si esa
+        // instancia sigue viva en Evolution, /instance/create devuelve 403
+        // "already in use"; por eso se sondea el estado primero y se reutiliza o se
+        // recrea, en vez de propagarle al usuario un error del que no puede salir.
         if (action === 'create') {
-            const apiUrl = `${baseUrl}/instance/create`;
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
-                body: JSON.stringify({
-                    instanceName: instanceName,
-                    token: instanceName,
-                    qrcode: true,
-                    integration: "WHATSAPP-BAILEYS"
-                })
-            });
-
-            const data = await response.json();
-            if (response.ok) {
+            const persistConnecting = async () => {
                 await setWebhook(instanceName);
-                await supabase.from('profiles').update({
-                    whatsapp_instance: instanceName,
-                    whatsapp_status: 'connecting'
-                }).eq('id', tenant_id);
+                await updateProfile({ whatsapp_instance: instanceName, whatsapp_status: 'connecting' });
+            };
+
+            /** Pide un QR nuevo sobre una instancia ya existente. null = no se pudo. */
+            const connectExisting = async (): Promise<Response | null> => {
+                const res = await fetch(`${baseUrl}/instance/connect/${instanceName}`, { headers: { 'apikey': EVOLUTION_KEY } });
+                const data = await res.json().catch(() => null);
+                if (!res.ok) return null;
+                await persistConnecting();
+                return okResponse({ status: 'connecting', instanceName, qr: extractQr(data) });
+            };
+
+            const createInstance = async () => {
+                const res = await fetch(`${baseUrl}/instance/create`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+                    body: JSON.stringify({
+                        instanceName: instanceName,
+                        token: instanceName,
+                        qrcode: true,
+                        integration: "WHATSAPP-BAILEYS"
+                    })
+                });
+                return { res, data: await res.json().catch(() => null) };
+            };
+
+            const probe = await probeInstance(instanceName);
+
+            // Ya conectado: no hay nada que crear, sólo reconciliar el perfil.
+            if (probe.state === 'open') {
+                await setWebhook(instanceName);
+                await updateProfile({ whatsapp_instance: instanceName, whatsapp_status: 'connected' });
+                await Promise.allSettled(logPromises);
+                return okResponse({ status: 'connected', instanceName, qr: null });
+            }
+
+            // Existe pero sin sesión (`connecting`/`close`): reutilizarla pidiéndole un QR.
+            if (probe.exists) {
+                const reused = await connectExisting();
+                if (reused) {
+                    await Promise.allSettled(logPromises);
+                    return reused;
+                }
+                // El connect falló: la instancia quedó inservible, se borra y se recrea.
+                await tryDelete('logout', instanceName);
+                await tryDelete('delete', instanceName);
+            }
+
+            let { res, data } = await createInstance();
+
+            // Carrera, o instancia en un estado que connectionState no reporta:
+            // borrar y un único reintento antes de darse por vencido.
+            if (!res.ok && (res.status === 403 || /already in use/i.test(evolutionMessage(data, '')))) {
+                await tryDelete('logout', instanceName);
+                await tryDelete('delete', instanceName);
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                ({ res, data } = await createInstance());
+
+                // Último recurso: si Evolution sigue reclamando el nombre, al menos
+                // pedirle el QR de la instancia que quedó.
+                if (!res.ok) {
+                    const fallback = await connectExisting();
+                    if (fallback) {
+                        await Promise.allSettled(logPromises);
+                        return fallback;
+                    }
+                }
             }
 
             await Promise.allSettled(logPromises);
-            return new Response(JSON.stringify(data), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: response.status,
-            })
+
+            if (!res.ok) {
+                return okResponse({
+                    status: 'error',
+                    instanceName,
+                    qr: null,
+                    message: evolutionMessage(data, `Evolution respondió ${res.status} al crear la instancia.`)
+                });
+            }
+
+            await persistConnecting();
+            return okResponse({ status: 'connecting', instanceName, qr: extractQr(data) });
         }
 
+        // `logout` es lo que ejecutan tanto "Desconectar" como "Cancelar". Los dos
+        // DELETE van en secuencia (Evolution v2 espera logout y DESPUÉS delete; en
+        // paralelo el delete corre con la sesión viva y deja la instancia huérfana),
+        // y el perfil se limpia siempre, incluso si Evolution no responde: quedarse
+        // con `whatsapp_instance` seteado bloquearía al usuario en `connecting`.
         if (action === 'logout') {
-            await Promise.all([
-                fetch(`${baseUrl}/instance/logout/${instanceName}`, { method: 'DELETE', headers: { 'apikey': EVOLUTION_KEY } }),
-                fetch(`${baseUrl}/instance/delete/${instanceName}`, { method: 'DELETE', headers: { 'apikey': EVOLUTION_KEY } })
-            ]);
+            await tryDelete('logout', instanceName);
+            let cleaned = await tryDelete('delete', instanceName);
 
-            await supabase.from('profiles').update({
-                whatsapp_status: 'disconnected',
-                whatsapp_instance: null
-            }).eq('id', tenant_id);
+            // Verificar que realmente desapareció; si no, un segundo intento.
+            const probe = await probeInstance(instanceName);
+            if (probe.exists) {
+                cleaned = await tryDelete('delete', instanceName);
+            } else if (probe.known) {
+                cleaned = true;
+            }
+
+            await updateProfile({ whatsapp_status: 'disconnected', whatsapp_instance: null });
 
             await Promise.allSettled(logPromises);
-            return new Response(JSON.stringify({ status: 'ok' }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-            })
+            return okResponse({ status: 'disconnected', instanceName, evolutionCleaned: cleaned });
         }
 
         if (action === 'debug_instance') {
@@ -330,7 +482,10 @@ serve(async (req) => {
             });
         }
 
-        throw new Error('Action not implemented');
+        return new Response(JSON.stringify({ error: `Action not implemented: ${action}` }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+        });
 
     } catch (error: any) {
         return new Response(JSON.stringify({ error: error.message }), {

@@ -303,7 +303,7 @@ export default function AdminView() {
                   className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-teal-700 border border-gray-200 hover:border-teal-300 bg-white px-3 py-2 rounded-lg transition-colors whitespace-nowrap"
                 >
                   <Download size={14} />
-                  Exportar CSV
+                  Exportar Usuarios
                 </button>
               </div>
             <div className="overflow-x-auto rounded-xl border border-gray-200">

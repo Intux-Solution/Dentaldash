@@ -110,6 +110,11 @@ export default function ModalsRoot() {
         onClose={closeTurnoDetails}
         onEdit={onEditTurnoFromDetails}
         onDelete={onDeleteTurnoFromDetails}
+        onOpenPatient={(patient) => {
+          // Ambos modales usan z-50: hay que cerrar el detalle antes de abrir la ficha.
+          closeTurnoDetails();
+          onViewPatient(patient);
+        }}
       />
 
       <EditTurnoModal

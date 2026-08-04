@@ -257,6 +257,10 @@ Gestiona la instancia de WhatsApp via Evolution API.
 
 Acciones: `create`, `get_qr`, `logout`, `sync_webhook`, `debug_instance`, `sync_webhook_all`.
 
+`create`, `get_qr` y `logout` devuelven siempre la misma forma normalizada — `{ status, instanceName, qr, message? }` con `status` en `connected | connecting | disconnected | error` — y **HTTP 200 incluso cuando Evolution falla** (`status: 'error'` + `message`): `supabase.functions.invoke` envuelve cualquier no-2xx en un error generico sin exponer el body, asi que un status crudo le ocultaria el motivo real al usuario. Los no-2xx quedan reservados para auth/validacion (400/401/403).
+
+`create` es **idempotente**: el nombre de instancia es determinista (`instance_<uuid>`), asi que primero sondea `connectionState` y reutiliza la instancia existente (`connect` para pedir un QR nuevo) en vez de chocar con el 403 "already in use" de `/instance/create`; ante un 403 igual hace `delete` + un reintento. `logout` (que en la UI es tanto "Desconectar" como "Cancelar") ejecuta `logout` y **despues** `delete` — en paralelo el delete corre con la sesion viva y deja la instancia huerfana — y limpia `profiles` aunque Evolution no responda.
+
 `sync_webhook_all` es una accion **global de admin** (validada contra `admin_users`, no lleva `tenant_id`): re-registra el webhook de todas las instancias con `whatsapp_instance` no nulo. Se usa al rotar `CHAT_WEBHOOK_SECRET` o al cambiar la URL del webhook, para que ningun tenant quede con una URL vieja que `chat-webhook` rechace con 401.
 
 Requiere JWT. Variables de entorno: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `CHAT_WEBHOOK_SECRET` (obligatoria: sin ella la funcion devuelve 500, porque registraria un webhook que `chat-webhook` rechazaria).

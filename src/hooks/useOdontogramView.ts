@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { message } from 'antd';
 import { PatientService } from '../services/PatientService';
 import { OdontogramService } from '../services/OdontogramService';
 import { EvolutionService } from '../services/EvolutionService';
+
+// Marcar una cara dental es un click; agrupamos la ráfaga en un solo guardado.
+const AUTOSAVE_DELAY_MS = 800;
+
+export type OdontogramSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export function useOdontogramView(id: string | undefined) {
     const [patient, setPatient] = useState<any>(null);
@@ -10,8 +15,16 @@ export function useOdontogramView(id: string | undefined) {
     const [history, setHistory] = useState<any[]>([]);
 
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<OdontogramSaveStatus>('idle');
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    // JSON del último estado persistido (o recién cargado). `null` = todavía no
+    // hay carga completa, así que nada debe autoguardarse.
+    const savedSnapshotRef = useRef<string | null>(null);
+    // Espejo del estado actual para poder flushear al desmontar sin re-suscribir efectos.
+    const latestRef = useRef<{ id: string | undefined; data: any }>({ id, data: odontogramData });
+    latestRef.current = { id, data: odontogramData };
 
     // Formulario para nueva nota
     const [newNote, setNewNote] = useState({
@@ -40,6 +53,11 @@ export function useOdontogramView(id: string | undefined) {
         try {
             setLoading(true);
             setError(null);
+            // Bloquea el autoguardado mientras se recarga: el `{}` inicial no debe
+            // pisar el odontograma real del paciente.
+            savedSnapshotRef.current = null;
+            setSaveStatus('idle');
+            setLastSavedAt(null);
 
             const [pData, oData, hData] = await Promise.all([
                 PatientService.getPatientById(patientId),
@@ -52,8 +70,11 @@ export function useOdontogramView(id: string | undefined) {
                 return;
             }
 
+            const loadedOdontogram = oData?.data || {};
+            savedSnapshotRef.current = JSON.stringify(loadedOdontogram);
+
             setPatient(pData);
-            setOdontogramData(oData?.data || {});
+            setOdontogramData(loadedOdontogram);
             setHistory(hData || []);
         } catch (err) {
             console.error('Error loading data:', err);
@@ -63,19 +84,49 @@ export function useOdontogramView(id: string | undefined) {
         }
     };
 
-    const handleSaveOdontogram = async () => {
-        if (!id) return;
+    const persist = useCallback(async (patientId: string, data: any) => {
+        const snapshot = JSON.stringify(data);
         try {
-            setSaving(true);
-            await OdontogramService.saveOdontogram(id, odontogramData);
-            message.success('Odontograma guardado correctamente');
+            setSaveStatus('saving');
+            await OdontogramService.saveOdontogram(patientId, data);
+            savedSnapshotRef.current = snapshot;
+            setSaveStatus('saved');
+            setLastSavedAt(new Date());
         } catch (err) {
-            console.error('Error saving:', err);
+            console.error('Error saving odontogram:', err);
+            setSaveStatus('error');
             message.error('Error al guardar el odontograma');
-        } finally {
-            setSaving(false);
         }
-    };
+    }, []);
+
+    // Autoguardado: cada cambio del odontograma reprograma el timer; si el usuario
+    // marca varias caras seguidas se persiste una sola vez al final de la ráfaga.
+    useEffect(() => {
+        if (!id || savedSnapshotRef.current === null) return;
+        if (JSON.stringify(odontogramData) === savedSnapshotRef.current) return;
+
+        const timer = setTimeout(() => persist(id, odontogramData), AUTOSAVE_DELAY_MS);
+        return () => clearTimeout(timer);
+    }, [odontogramData, id, persist]);
+
+    // Al desmontar (típicamente el botón "volver") puede quedar un cambio dentro
+    // de la ventana del debounce: se persiste fire-and-forget para no perderlo.
+    useEffect(() => {
+        return () => {
+            const { id: patientId, data } = latestRef.current;
+            if (!patientId || savedSnapshotRef.current === null) return;
+            if (JSON.stringify(data) === savedSnapshotRef.current) return;
+            OdontogramService.saveOdontogram(patientId, data).catch((err) =>
+                console.error('Error saving odontogram on unmount:', err)
+            );
+        };
+    }, []);
+
+    // Reintento manual desde el indicador de estado cuando el autoguardado falla.
+    const handleSaveOdontogram = useCallback(() => {
+        if (!id) return;
+        persist(id, latestRef.current.data);
+    }, [id, persist]);
 
     const handleAddHistory = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -153,7 +204,8 @@ export function useOdontogramView(id: string | undefined) {
         setOdontogramData,
         history,
         loading,
-        saving,
+        saveStatus,
+        lastSavedAt,
         error,
         newNote,
         setNewNote,

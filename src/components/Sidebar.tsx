@@ -1,6 +1,6 @@
 // src/components/Sidebar.jsx - UPDATED 2026-02-16 - FINAL VERSION
 import { NavLink } from 'react-router-dom';
-import { X, Home, Calendar, Users, Settings, LogOut, ShieldCheck, CreditCard } from 'lucide-react';
+import { X, Home, Calendar, Users, Settings, LogOut, ShieldCheck, CreditCard, HelpCircle } from 'lucide-react';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -138,6 +138,22 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, onLogout }: Sideb
                     )}
                   </div>
                   <span>Suscripción</span>
+                </NavLink>
+              </li>
+
+              <li>
+                <NavLink
+                  to="/ayuda"
+                  onClick={closeSidebar}
+                  className={({ isActive }) =>
+                    `w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left transition-all ${isActive
+                      ? 'bg-teal-50 text-teal-600 font-semibold shadow-sm'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                    }`
+                  }
+                >
+                  <HelpCircle size={20} />
+                  <span>Ayuda</span>
                 </NavLink>
               </li>
 

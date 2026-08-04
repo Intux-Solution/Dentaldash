@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Calendar, Clock, User, Phone, CreditCard, MapPin, FileText, Edit, Trash2, Loader, AlertCircle } from 'lucide-react';
+import { X, Calendar, Clock, User, Phone, CreditCard, MapPin, FileText, Edit, Trash2, Loader, AlertCircle, ExternalLink } from 'lucide-react';
 import { PatientService } from '../services/PatientService';
 
 interface TurnoDetailsModalProps {
@@ -8,9 +8,10 @@ interface TurnoDetailsModalProps {
   onClose?: () => void;
   onEdit?: (turno: any) => void;
   onDelete?: (turno: any) => void;
+  onOpenPatient?: (patient: any) => void;
 }
 
-export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDelete }: TurnoDetailsModalProps) {
+export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDelete, onOpenPatient }: TurnoDetailsModalProps) {
   // Todos los hooks van antes del early return: un `return null` previo los
   // llamaría condicionalmente y rompería el orden entre renders. Por eso los
   // accesos a `turno` de acá para abajo son opcionales (`turno?.`).
@@ -135,6 +136,10 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
     };
   }, [patient, turno, dni, nameFromDescription]);
 
+  // `turno.patientId` viene mapeado desde AppointmentService, así que el link a la
+  // ficha funciona incluso si el lookup por DNI no encontró nada.
+  const patientId = patient?.id ?? patient?._id ?? turno?.patientId ?? null;
+
   if (!open || !turno) return null;
 
   return (
@@ -195,9 +200,21 @@ export default function TurnoDetailsModal({ open, turno, onClose, onEdit, onDele
                 <div className="flex items-start gap-3">
                   <User className="text-gray-400 mt-1" size={16} />
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {display.name || 'Sin nombre'}
-                    </p>
+                    {patientId && onOpenPatient ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenPatient(patient ?? { id: patientId })}
+                        className="flex items-center gap-1.5 text-sm font-medium text-teal-600 hover:text-teal-700 hover:underline transition-colors text-left"
+                        title="Ver ficha del paciente"
+                      >
+                        {display.name || 'Sin nombre'}
+                        <ExternalLink size={14} className="shrink-0" />
+                      </button>
+                    ) : (
+                      <p className="text-sm font-medium text-gray-900">
+                        {display.name || 'Sin nombre'}
+                      </p>
+                    )}
                     <p className="text-sm text-gray-500">Paciente</p>
                   </div>
                 </div>

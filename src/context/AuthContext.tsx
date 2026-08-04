@@ -8,7 +8,14 @@ interface Profile {
     full_name: string | null;
     role: 'dentist' | 'admin';
     business_name: string | null;
+    /** Momento en que cerró el tour de bienvenida. NULL = todavía no lo vio. */
+    onboarding_completed_at: string | null;
 }
+
+// Un solo lugar para las columnas del perfil de sesión: `handleSession` y
+// `reloadProfile` tienen que traer exactamente lo mismo o el perfil cambia de
+// forma según por dónde se cargó.
+const PROFILE_COLUMNS = 'id, full_name, role, business_name, onboarding_completed_at';
 
 interface AuthContextType {
     session: Session | null;
@@ -27,43 +34,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleSession = async (currentSession: Session | null) => {
         setSession(currentSession);
 
-        if (currentSession?.user) {
-            // Cargar perfil con rol
-            const { data: profileData } = await supabase
-                .from('profiles')
-                .select('id, full_name, role, business_name')
-                .eq('id', currentSession.user.id)
-                .single();
-            setProfile(profileData ?? null);
-
-            if (currentSession.provider_refresh_token) {
-                // Await para evitar una race condition: al volver del redirect de
-                // linkIdentity, garantizamos que el token esté persistido antes de
-                // renderizar la app (y que useSettings vea googleConnected=true).
-                const { error } = await supabase
+        // Todo el cuerpo va en try/finally: si cualquiera de estas queries rechaza
+        // (típicamente un fallo de red al rehidratar la pestaña después de volver
+        // de un redirect externo), `setIsLoading(false)` nunca corría y la app
+        // quedaba colgada en el spinner para siempre, sin más salida que recargar.
+        try {
+            if (currentSession?.user) {
+                // Cargar perfil con rol
+                const { data: profileData } = await supabase
                     .from('profiles')
-                    .update({ google_refresh_token: currentSession.provider_refresh_token })
-                    .eq('id', currentSession.user.id);
-                if (error) console.error('Error saving google refresh token:', error);
+                    .select(PROFILE_COLUMNS)
+                    .eq('id', currentSession.user.id)
+                    .single();
+                setProfile(profileData ?? null);
 
-                // El token es nuevo: descartamos cualquier estado de conexión que
-                // GoogleCalendarService haya cacheado antes de este redirect.
+                if (currentSession.provider_refresh_token) {
+                    // Await para evitar una race condition: al volver del redirect de
+                    // linkIdentity, garantizamos que el token esté persistido antes de
+                    // renderizar la app (y que useSettings vea googleConnected=true).
+                    const { error } = await supabase
+                        .from('profiles')
+                        .update({ google_refresh_token: currentSession.provider_refresh_token })
+                        .eq('id', currentSession.user.id);
+                    if (error) console.error('Error saving google refresh token:', error);
+
+                    // El token es nuevo: descartamos cualquier estado de conexión que
+                    // GoogleCalendarService haya cacheado antes de este redirect.
+                    GoogleCalendarService.clearTokenCache();
+                }
+            } else {
+                setProfile(null);
+                // Cierre de sesión: el access token cacheado es del usuario anterior.
                 GoogleCalendarService.clearTokenCache();
             }
-        } else {
-            setProfile(null);
-            // Cierre de sesión: el access token cacheado es del usuario anterior.
-            GoogleCalendarService.clearTokenCache();
+        } catch (err) {
+            console.error('AuthContext handleSession error:', err);
+        } finally {
+            setIsLoading(false);
         }
-
-        setIsLoading(false);
     };
 
     useEffect(() => {
         // Obtenemos sesión inicial
-        supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-            handleSession(currentSession);
-        });
+        supabase.auth.getSession().then(
+            ({ data: { session: currentSession } }) => {
+                handleSession(currentSession);
+            },
+            (err) => {
+                // Sin este rechazo manejado, un getSession() fallido dejaba
+                // isLoading en true de forma permanente.
+                console.error('AuthContext getSession error:', err);
+                handleSession(null);
+            }
+        );
 
         // Nos suscribimos a cambios
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -86,7 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!session?.user?.id) return;
         const { data: profileData } = await supabase
             .from('profiles')
-            .select('id, full_name, role, business_name')
+            .select(PROFILE_COLUMNS)
             .eq('id', session.user.id)
             .single();
         setProfile(profileData ?? null);
