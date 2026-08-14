@@ -257,11 +257,19 @@ serve(async (req) => {
             ? (rawPushName.replace(/\p{C}/gu, ' ').replace(/"/g, "'").trim().slice(0, 40) || null)
             : null;
 
+        // Estos dos descartes eran los únicos que salían en silencio absoluto, así
+        // que en los logs un audio entrante y un mensaje propio quedaban idénticos:
+        // un `Detected v2.3...` suelto y nada más. Loguear el motivo y el
+        // `messageType` es lo que permite distinguirlos sin volver a desplegar.
         if (!instanceName || !messageText || !remoteJid) {
+            console.log(`[skip-incomplete] type=${messageObj?.messageType ?? 'desconocido'} instancia=${!!instanceName} jid=${!!remoteJid} texto=${!!messageText}`);
             return new Response('Missing essential data', { status: 200 });
         }
 
-        if (messageObj?.key?.fromMe) return new Response('Skip self', { status: 200 });
+        if (messageObj?.key?.fromMe) {
+            console.log(`[skip-self] ${remoteJid}: mensaje propio, ignorado.`);
+            return new Response('Skip self', { status: 200 });
+        }
 
         // Solo conversaciones 1:1. `participant` viene poblado únicamente en
         // mensajes de grupo, así que sirve de segunda barrera por si Evolution
@@ -382,13 +390,26 @@ serve(async (req) => {
                 // la latencia del LLM se descuenta del delay en vez de sumarse.
                 const startedAt = Date.now();
 
+                // Timeouts recortados respecto al default del helper (10s + 1 reintento,
+                // ~21s peor caso): ese margen sumado a `quietMs` +
+                // `composing` fue lo que dejó al isolate colgado a mitad de un envío el
+                // 2026-08-14 — Supabase lo mata sin correr nuestro catch, así que la fila
+                // queda con el status equivocado. Los valores acá son intencionalmente más
+                // chicos que el default del helper, no globales: `whatsapp-manager` sigue
+                // usando 10s para create/QR, donde una respuesta lenta no es tan grave.
+                const PRESENCE_TIMEOUT_MS = 5_000;
+                const SEND_TEXT_TIMEOUT_MS = 8_000;
+
                 /**
                  * Envía una respuesta imitando la cadencia de una persona:
                  * silencio (lee y piensa) -> "escribiendo..." -> mensaje.
                  *
-                 * Persiste ANTES de enviar y limpia si el envío falla. El orden
-                 * anterior era el inverso: si Evolution fallaba, el lote del usuario
-                 * ya había quedado 'processed' y la respuesta se perdía sin rastro.
+                 * La fila queda en 'sending' hasta que Evolution confirme. Antes se
+                 * insertaba directo en 'processed': si el isolate moría a mitad del envío
+                 * (timeout de red, corte de Supabase por presupuesto de ejecución), la fila
+                 * quedaba marcada como éxito para siempre sin que el mensaje hubiera salido
+                 * — el paciente veía "escribiendo..." y después nada, y no había forma de
+                 * distinguir eso de un envío real en la DB.
                  */
                 const sendWithCadence = async (text: string): Promise<boolean> => {
                     const { data: outRow } = await supabase.from('chat_history').insert({
@@ -397,7 +418,7 @@ serve(async (req) => {
                         jid: remoteJid,
                         role: 'assistant',
                         content: text,
-                        status: 'processed'
+                        status: 'sending'
                     }).select('id').single();
 
                     const budget = randInt(SEND_DELAY_MIN_MS, SEND_DELAY_MAX_MS);
@@ -408,28 +429,40 @@ serve(async (req) => {
 
                     // `delay` le dice a Evolution cuánto sostener la presencia; el
                     // sleep es nuestro, para que el indicador se vea todo ese tiempo.
-                    await sendPresence(evo, instanceName, { number: remoteJid, presence: 'composing', delay: composing })
+                    await sendPresence(evo, instanceName, { number: remoteJid, presence: 'composing', delay: composing, timeoutMs: PRESENCE_TIMEOUT_MS })
                         .catch(err => console.error("Error setting presence:", err));
                     await sleep(composing);
 
                     // delay: 0 — la cadencia la controlamos acá. El `delay: 1200` que
                     // había antes hacía que Evolution retuviera el mensaje ADEMÁS.
-                    const res = await sendText(evo, instanceName, { number: remoteJid, text, delay: 0 });
+                    // Sin reintento: uno solo que falla rápido dentro del presupuesto es
+                    // preferible a dos intentos de 10s que agotan el tiempo del isolate
+                    // antes de poder loguear el fallo o marcar la fila.
+                    const res = await sendText(evo, instanceName, { number: remoteJid, text, delay: 0, retries: 0, timeoutMs: SEND_TEXT_TIMEOUT_MS });
 
                     // Quedarse colgado en 'composing' es, otra vez, señal de bot.
-                    await sendPresence(evo, instanceName, { number: remoteJid, presence: 'paused', delay: 0 })
+                    await sendPresence(evo, instanceName, { number: remoteJid, presence: 'paused', delay: 0, timeoutMs: PRESENCE_TIMEOUT_MS })
                         .catch(() => { });
 
+                    if (outRow?.id) {
+                        await supabase.from('chat_history')
+                            .update({ status: res.ok ? 'processed' : 'failed' })
+                            .eq('id', outRow.id);
+                    }
+
                     if (!res.ok) {
-                        // Marcar 'failed' en vez de borrar: el historial filtra por
-                        // 'processed', así que el LLM no da por dicho algo que el
-                        // paciente nunca leyó, y el envío fallido queda auditable.
-                        if (outRow?.id) {
-                            await supabase.from('chat_history')
-                                .update({ status: 'failed' })
-                                .eq('id', outRow.id);
-                        }
                         console.error(`[send-failed] ${remoteJid}: ${res.status} ${res.error ?? ''} | texto: ${text.slice(0, 120)}`);
+                    } else {
+                        // Un 2xx de Evolution solo prueba que Baileys ACEPTÓ el mensaje,
+                        // no que WhatsApp lo entregó. El `status` del cuerpo distingue
+                        // ambas cosas ('PENDING' = encolado y nunca confirmado, la firma
+                        // de una sesión degradada o un número con restricciones), y sin
+                        // el `key.id` no hay forma de rastrear el mensaje del lado de
+                        // Evolution. Se loguean los dos: es la única evidencia que queda
+                        // cuando el paciente dice que no le llegó nada.
+                        const ack = (res.data as any)?.status ?? (res.data as any)?.message?.status ?? 'sin-status';
+                        const wamid = (res.data as any)?.key?.id ?? 'sin-id';
+                        console.log(`[send-ok] ${remoteJid}: HTTP ${res.status} ack=${ack} id=${wamid}`);
                     }
 
                     return res.ok;

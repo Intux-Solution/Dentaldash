@@ -131,13 +131,14 @@ export function evolutionMessage(d: any, fallback: string): string {
 export function sendText(
     cfg: EvolutionConfig,
     instance: string,
-    opts: { number: string; text: string; delay?: number; retries?: number },
+    opts: { number: string; text: string; delay?: number; retries?: number; timeoutMs?: number },
 ): Promise<EvolutionResult> {
     return evolutionFetch(cfg, `/message/sendText/${instance}`, {
         body: { number: opts.number, text: opts.text, delay: opts.delay ?? 0 },
         // Un solo reintento por default: si el primer envío llegó pero se perdió la
         // respuesta HTTP, reintentar duplica el mensaje del lado del paciente.
         retries: opts.retries ?? 1,
+        timeoutMs: opts.timeoutMs,
     });
 }
 
@@ -150,16 +151,18 @@ export function sendText(
 export async function sendPresence(
     cfg: EvolutionConfig,
     instance: string,
-    opts: { number: string; presence: PresenceState; delay?: number },
+    opts: { number: string; presence: PresenceState; delay?: number; timeoutMs?: number },
 ): Promise<EvolutionResult> {
     const path = `/chat/sendPresence/${instance}`;
     const flat = await evolutionFetch(cfg, path, {
         body: { number: opts.number, presence: opts.presence, delay: opts.delay ?? 0 },
+        timeoutMs: opts.timeoutMs,
     });
     if (flat.ok || (flat.status !== 400 && flat.status !== 404)) return flat;
 
     return evolutionFetch(cfg, path, {
         body: { number: opts.number, options: { presence: opts.presence, delay: opts.delay ?? 0 } },
+        timeoutMs: opts.timeoutMs,
     });
 }
 
