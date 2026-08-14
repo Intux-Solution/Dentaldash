@@ -297,7 +297,9 @@ Flujo:
 
 **Cadencia de envio (`sendWithCadence`).** Silencio → presencia `composing` → texto → `paused`. El delay total se sortea entre 4 y 9 s y se mide **desde el claim del lote**, asi que la latencia del LLM se descuenta del presupuesto en vez de sumarse; el indicador "escribiendo" dura entre 2 y 4 s y va al final, lo mas cerca posible del envio. Espera total percibida: ~8–16 s.
 
-La fila del asistente se persiste **antes** de enviar y se borra si el envio falla. El orden anterior era el inverso: si Evolution fallaba, el lote del usuario ya habia quedado `processed` y la respuesta se perdia sin rastro.
+La fila del asistente se persiste **antes** de enviar y queda en `status='failed'` si el envio falla. El orden anterior era el inverso: si Evolution fallaba, el lote del usuario ya habia quedado `processed` y la respuesta se perdia sin rastro. `chat_history.status` no tiene CHECK constraint (el unico es `chat_history_role_check` sobre `role`), asi que `'failed'` es un valor valido: deja el envio fallido auditable en vez de borrarlo.
+
+Todas las lecturas de historial filtran `status='processed'`, incluido el dedupe del aviso de fuera de horario — una fila `failed` es un aviso que nunca llego, y contarla dejaria al paciente sin respuesta el resto de la ventana.
 
 **Textos fijos con spintax** (`_shared/spintax.ts`): la confirmacion de turno y el aviso de fuera de horario varian entre envios. Las respuestas del LLM no se tocan — ya varian por construccion. ⚠️ `spin()` **nunca** debe aplicarse al system prompt: se comeria las llaves de `{{nombre_odontologo}}`. Por eso el aviso nocturno usa `[[consultorio]]` con corchetes.
 

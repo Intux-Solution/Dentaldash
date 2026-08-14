@@ -421,9 +421,14 @@ serve(async (req) => {
                         .catch(() => { });
 
                     if (!res.ok) {
-                        // Borrar la fila: que el LLM no dé por dicho algo que el
-                        // paciente nunca leyó (el historial filtra por 'processed').
-                        if (outRow?.id) await supabase.from('chat_history').delete().eq('id', outRow.id);
+                        // Marcar 'failed' en vez de borrar: el historial filtra por
+                        // 'processed', así que el LLM no da por dicho algo que el
+                        // paciente nunca leyó, y el envío fallido queda auditable.
+                        if (outRow?.id) {
+                            await supabase.from('chat_history')
+                                .update({ status: 'failed' })
+                                .eq('id', outRow.id);
+                        }
                         console.error(`[send-failed] ${remoteJid}: ${res.status} ${res.error ?? ''} | texto: ${text.slice(0, 120)}`);
                     }
 
@@ -439,12 +444,15 @@ serve(async (req) => {
                 if (!isWithinBotHours()) {
                     // Dentro de la ventana cerrada el bot sólo puede emitir el aviso,
                     // así que cualquier fila 'assistant' posterior prueba que ya avisó.
+                    // Filtra por 'processed': una fila 'failed' es un aviso que nunca
+                    // llegó, y contarla dejaría al paciente sin respuesta toda la noche.
                     const { data: yaAvisado } = await supabase
                         .from('chat_history')
                         .select('id')
                         .eq('jid', remoteJid)
                         .eq('whatsapp_instance', instanceName)
                         .eq('role', 'assistant')
+                        .eq('status', 'processed')
                         .gte('created_at', closedWindowStart().toISOString())
                         .limit(1);
 
