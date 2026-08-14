@@ -1,5 +1,5 @@
 import { MessageSquare } from 'lucide-react';
-import { QRCode } from 'antd';
+import { QRCode, Switch } from 'antd';
 import { ProfileData } from './useSettings';
 
 interface WhatsAppTabProps {
@@ -10,12 +10,15 @@ interface WhatsAppTabProps {
     saving: boolean;
     handleConnectWhatsApp: () => void;
     handleDisconnectWhatsApp: () => void;
+    handleProfileChange: (field: string, value: any) => void;
+    handleAutoSaveProfile: (updates: Partial<ProfileData>) => void;
 }
 
 export default function WhatsAppTab({
     profile,
     instanceStatus, pollingActive, qrCodeData, saving,
-    handleConnectWhatsApp, handleDisconnectWhatsApp
+    handleConnectWhatsApp, handleDisconnectWhatsApp,
+    handleProfileChange, handleAutoSaveProfile
 }: WhatsAppTabProps) {
     if (!profile?.user_id) {
         return (
@@ -86,6 +89,25 @@ export default function WhatsAppTab({
                         <p className="text-[10px] text-center mt-2 text-gray-400 font-bold uppercase">Escanea con WhatsApp</p>
                     </div>
                 )}
+            </div>
+
+            <div className="mt-6 bg-gray-50 p-6 rounded-2xl border border-gray-100 flex items-start gap-4">
+                <Switch
+                    checked={profile.bot_enabled !== false}
+                    disabled={saving}
+                    onChange={(value) => {
+                        handleProfileChange('bot_enabled', value);
+                        handleAutoSaveProfile({ bot_enabled: value });
+                    }}
+                />
+                <div>
+                    <p className="font-bold text-gray-700 text-sm">Respuestas automáticas</p>
+                    <p className="text-sm text-gray-500">
+                        Apagalo para atender los mensajes a mano por un rato. La sesión de
+                        WhatsApp queda conectada, así que no vas a tener que volver a
+                        escanear el QR.
+                    </p>
+                </div>
             </div>
         </div>
     );

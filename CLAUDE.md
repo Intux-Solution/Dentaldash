@@ -184,7 +184,11 @@ Estados: `pending`, `confirmed`, `completed`, `cancelled`.
 ### `public.profiles`
 Perfil del dentista (1:1 con `auth.users`). Incluye configuracion de WhatsApp, servicios, obras sociales aceptadas, sistema de FAQs y tokens de integraciones.
 
-Columnas clave: `id`, `full_name`, `avatar_url`, `accepted_insurances[]`, `services (jsonb)`, `contact_phone`, `business_name`, `whatsapp_instance`, `whatsapp_status`, `system_prompt`, `apikey_evolution`, `notification_phone`, `google_refresh_token`, `role` (dentist | admin), `booking_slug` (UNIQUE, para el link publico de reservas).
+Columnas clave: `id`, `full_name`, `avatar_url`, `accepted_insurances[]`, `services (jsonb)`, `contact_phone`, `business_name`, `whatsapp_instance`, `whatsapp_status`, `system_prompt`, `apikey_evolution`, `notification_phone`, `google_refresh_token`, `role` (dentist | admin), `booking_slug` (UNIQUE, para el link publico de reservas), `bot_enabled` (kill-switch del chatbot).
+
+`bot_enabled` (default `true`) apaga las respuestas automaticas **sin desconectar la instancia** de Evolution: desconectar destruye la sesion y obliga a re-escanear el QR. Se edita desde Configuracion → WhatsApp.
+
+Nota: `system_prompt` y `apikey_evolution` se editan en el frontend pero **ninguna Edge Function los lee**. El prompt sale de la env var global `AGENT_SYSTEM_PROMPT` y la apikey de `EVOLUTION_API_KEY`. Son codigo muerto.
 
 ### `public.schedules`
 Horarios laborales por día de la semana. Relacion `user_id` -> dentista.
@@ -255,13 +259,17 @@ Log de eventos de MercadoPago. **Sin RLS** - auditoria.
 ### `whatsapp-manager`
 Gestiona la instancia de WhatsApp via Evolution API.
 
-Acciones: `create`, `get_qr`, `logout`, `sync_webhook`, `debug_instance`, `sync_webhook_all`.
+Acciones: `create`, `get_qr`, `logout`, `sync_webhook`, `debug_instance`, `sync_webhook_all`, `sync_settings_all`.
 
 `create`, `get_qr` y `logout` devuelven siempre la misma forma normalizada — `{ status, instanceName, qr, message? }` con `status` en `connected | connecting | disconnected | error` — y **HTTP 200 incluso cuando Evolution falla** (`status: 'error'` + `message`): `supabase.functions.invoke` envuelve cualquier no-2xx en un error generico sin exponer el body, asi que un status crudo le ocultaria el motivo real al usuario. Los no-2xx quedan reservados para auth/validacion (400/401/403).
 
 `create` es **idempotente**: el nombre de instancia es determinista (`instance_<uuid>`), asi que primero sondea `connectionState` y reutiliza la instancia existente (`connect` para pedir un QR nuevo) en vez de chocar con el 403 "already in use" de `/instance/create`; ante un 403 igual hace `delete` + un reintento. `logout` (que en la UI es tanto "Desconectar" como "Cancelar") ejecuta `logout` y **despues** `delete` — en paralelo el delete corre con la sesion viva y deja la instancia huerfana — y limpia `profiles` aunque Evolution no responda.
 
 `sync_webhook_all` es una accion **global de admin** (validada contra `admin_users`, no lleva `tenant_id`): re-registra el webhook de todas las instancias con `whatsapp_instance` no nulo. Se usa al rotar `CHAT_WEBHOOK_SECRET` o al cambiar la URL del webhook, para que ningun tenant quede con una URL vieja que `chat-webhook` rechace con 401.
+
+`sync_settings_all` es la otra accion **global de admin**: aplica `HARDENED_SETTINGS` (ver `_shared/evolution.ts`) a todas las instancias existentes. Vive en un bloque **separado** de `sync_webhook_all` a proposito, porque esa accion es un paso del runbook de rotacion del secreto y tiene que seguir haciendo una sola cosa.
+
+Los settings anti-bloqueo se aplican en tres momentos por tenant (`create`, `get_qr` al conectar, `persistConnecting`) y ademas **inline en el body de `/instance/create`**: un `/settings/set` posterior llega tarde para `syncFullHistory`, que actua al conectar la sesion. Son best-effort: si Evolution los rechaza, la instancia sigue funcionando sin las mitigaciones.
 
 Requiere JWT. Variables de entorno: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `CHAT_WEBHOOK_SECRET` (obligatoria: sin ella la funcion devuelve 500, porque registraria un webhook que `chat-webhook` rechazaria).
 
@@ -270,15 +278,30 @@ Recibe mensajes de WhatsApp (no requiere JWT - endpoint publico para Evolution A
 
 **Autenticacion (fail-closed):** el unico control de acceso es el secreto `CHAT_WEBHOOK_SECRET`. Sin la env var la funcion responde `503`; con secreto incorrecto o ausente, `401`. El secreto viaja como **query param `?s=`** en la URL que `whatsapp-manager` registra en Evolution API (Evolution self-hosted v2 no soporta headers custom en el webhook); tambien se acepta el header `x-webhook-secret` para pruebas manuales.
 
+**Filtros del tramo sincrono (anti-bloqueo).** Antes de encolar nada se descarta, siempre con **HTTP 200** (un no-2xx hace que Evolution reintente el webhook y multiplique el trafico):
+
+- `fromMe` — mensajes propios.
+- **Todo lo que no sea conversacion 1:1**: `isDirectChat()` es una *allowlist* (`<numero>@s.whatsapp.net` o `@lid`, tolerando el sufijo de dispositivo `:12`), asi que grupos (`@g.us`), estados (`status@broadcast`), difusion y canales (`@newsletter`) quedan afuera por default. Responder en grupos era la principal causa del bloqueo del numero: convertia al bot en emisor masivo hacia gente que nunca lo contacto.
+- Rate limit por JID (10/min, en memoria del isolate — orientativo, no una garantia).
+- `profiles.bot_enabled === false` (kill-switch). Se evalua **antes** de `markMessageAsRead`, para que el dentista vea los no-leidos mientras atiende a mano.
+
 Flujo:
 1. Recibe payload de Evolution API
 2. Inserta mensaje como `pending` en `chat_history`
-3. Espera 3s (debounce para agrupar mensajes rapidos)
-4. Si no hay mensajes mas nuevos, procesa el lote completo
-5. Genera respuesta via OpenAI GPT-4o-mini (fallback: Gemini)
-6. Ejecuta Function Calling: `get_available_slots`, `create_appointment` (crea el turno via RPC `confirm_public_appointment_safe` con overlap-check, duracion segun `profile.services`, status `confirmed`, y sincroniza con Google Calendar)
-7. Envia respuesta por WhatsApp
-8. Persiste respuesta en `chat_history`
+3. Espera 4s (debounce para agrupar mensajes rapidos: una rafaga produce **una** respuesta, no N)
+4. Si no hay mensajes mas nuevos, procesa el lote completo y lo marca `processed`
+5. **Ventana horaria**: fuera de 08:00–22:00 AR no conversa. Envia el aviso de "fuera de horario" **una sola vez por ventana** y despues silencio; el dedupe consulta si existe alguna fila `role='assistant'` posterior a `closedWindowStart()`, sin columnas ni tablas nuevas
+6. Genera respuesta via OpenAI GPT-4o-mini (fallback: Gemini)
+7. Ejecuta Function Calling: `get_available_slots`, `create_appointment` (crea el turno via RPC `confirm_public_appointment_safe` con overlap-check, duracion segun `profile.services`, status `confirmed`, y sincroniza con Google Calendar)
+8. Envia por WhatsApp con **cadencia humana** (ver abajo) y persiste en `chat_history`
+
+**Cadencia de envio (`sendWithCadence`).** Silencio → presencia `composing` → texto → `paused`. El delay total se sortea entre 4 y 9 s y se mide **desde el claim del lote**, asi que la latencia del LLM se descuenta del presupuesto en vez de sumarse; el indicador "escribiendo" dura entre 2 y 4 s y va al final, lo mas cerca posible del envio. Espera total percibida: ~8–16 s.
+
+La fila del asistente se persiste **antes** de enviar y se borra si el envio falla. El orden anterior era el inverso: si Evolution fallaba, el lote del usuario ya habia quedado `processed` y la respuesta se perdia sin rastro.
+
+**Textos fijos con spintax** (`_shared/spintax.ts`): la confirmacion de turno y el aviso de fuera de horario varian entre envios. Las respuestas del LLM no se tocan — ya varian por construccion. ⚠️ `spin()` **nunca** debe aplicarse al system prompt: se comeria las llaves de `{{nombre_odontologo}}`. Por eso el aviso nocturno usa `[[consultorio]]` con corchetes.
+
+El bot **ya no notifica al dentista por WhatsApp** al crear un turno: era un saliente iniciado por el negocio hacia un numero que nunca escribio al bot (y que suele ser el mismo celular conectado). Lo cubren el email de `notifyAppointmentCreated` y el evento de Google Calendar.
 
 Variables de entorno: `CHAT_WEBHOOK_SECRET` (obligatoria), `OPENAI_API_KEY`, `GEMINI_API_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 
@@ -320,6 +343,8 @@ Variables de entorno: `RESEND_API_KEY`, `NOTIFY_FROM_EMAIL` (remitente verificad
 - `google-calendar.ts` — refresh de token + create/update/delete de eventos + `freeBusy`.
 - `email.ts` — cliente de Resend y layout HTML comun.
 - `appointment-notifications.ts` — `notifyAppointmentCreated(supabase, appointmentId)`, usada por `notify-appointment`, `public-booking` y `chat-webhook`.
+- `evolution.ts` — **unico** cliente de Evolution API: `sanitizeUrl`, `evolutionConfigFromEnv`, `evolutionFetch` (timeout + reintento solo ante 0/429/5xx), `sendText`, `sendPresence`, `markAsRead`, `setInstanceSettings` y `HARDENED_SETTINGS`. Ninguna Edge Function debe volver a llamar a Evolution con `fetch` inline.
+- `spintax.ts` — `spin()` / `pick()` para variar los textos fijos del bot. **No usar sobre el system prompt** (rompe los placeholders `{{...}}`).
 
 ---
 
@@ -451,6 +476,11 @@ Los `feature_keys` de cada plan se guardan en `subscription_plans.feature_keys t
 - Las obras sociales aceptadas en el perfil son `text[]`.
 - Los tipos de turno en el cliente vienen de `src/config/appointments.ts`.
 - El `chat-webhook` no verifica JWT porque Evolution API no puede enviar tokens de usuario: su unico control de acceso es `CHAT_WEBHOOK_SECRET` en la query string (`?s=`), fail-closed.
+- **El bot solo responde conversaciones 1:1.** Nunca aflojar el filtro `isDirectChat()` ni `HARDENED_SETTINGS.groupsIgnore`: responder en grupos fue lo que hizo que WhatsApp bloqueara el numero.
+- Los rechazos del `chat-webhook` devuelven **200**, no 4xx/5xx: Evolution reintenta los webhooks que no responden 2xx. Solo auth (401) y falta de config (503) son no-2xx.
+- Las llamadas a Evolution van **siempre** por `_shared/evolution.ts`, nunca con `fetch` inline.
+- La ventana horaria del bot (`BOT_OPEN_HOUR` / `BOT_CLOSE_HOUR` en `chat-webhook`) esta hardcodeada en 08:00–22:00 AR, no es configurable por tenant.
+- `/settings/set` y `/chat/sendPresence` usan **camelCase** (Evolution v2). Ambos helpers reintentan con la forma alternativa del body ante 400/404, porque el shape varia entre builds 2.x.
 - Los `feature_keys` de cada plan viven en `subscription_plans.feature_keys` (DB), NO hardcodeados en Edge Functions.
 - `PublicBookingView` no usa `useAuth()` ni `useSubscription()`. Es completamente standalone.
 - El RPC `confirm_public_appointment_safe` tiene `SECURITY DEFINER` y acepta `p_user_id` explicito (para uso sin sesion de auth).

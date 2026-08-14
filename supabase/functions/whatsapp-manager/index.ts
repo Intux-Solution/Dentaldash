@@ -2,14 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0"
 import { buildCors } from "../_shared/cors.ts"
-
-/**
- * Saneamiento de URL para evitar fallos por espacios o saltos de línea.
- */
-const sanitizeUrl = (url: string) => {
-    if (!url) return "";
-    return url.trim().replace(/\/+$/, "").replace(/\/manager$/, "");
-};
+import { HARDENED_SETTINGS, sanitizeUrl, setInstanceSettings } from "../_shared/evolution.ts"
 
 serve(async (req) => {
     // La llama el navegador autenticado: misma allowlist que el resto de la app,
@@ -48,8 +41,10 @@ serve(async (req) => {
     try {
         const body = await req.json();
         const { action, tenant_id } = body;
-        // `sync_webhook_all` es una acción global de admin: no lleva tenant_id.
-        const isBulkSync = action === 'sync_webhook_all';
+        // Acciones globales de admin: no llevan tenant_id.
+        const isBulkWebhookSync = action === 'sync_webhook_all';
+        const isBulkSettingsSync = action === 'sync_settings_all';
+        const isBulkSync = isBulkWebhookSync || isBulkSettingsSync;
         if (!action) {
             return new Response(JSON.stringify({ error: "Missing action" }), { status: 400, headers: corsHeaders });
         }
@@ -174,6 +169,17 @@ serve(async (req) => {
             return resAlt;
         };
 
+        /**
+         * Ajustes anti-bloqueo de la instancia (ver HARDENED_SETTINGS). Best-effort:
+         * si Evolution no los acepta, la instancia sigue funcionando — sólo pierde
+         * las mitigaciones, y eso no debe romper el alta ni la reconexión.
+         */
+        const applyHardening = async (name: string) => {
+            const res = await setInstanceSettings({ baseUrl, apiKey: EVOLUTION_KEY }, name);
+            if (!res.ok) console.error(`settings/set falló para ${name}: ${res.status} ${res.error ?? ''}`);
+            return res;
+        };
+
         // ── Helpers del ciclo de vida de la instancia ─────────────────────────
         // El nombre de instancia es determinista (`instance_<uuid>`), así que una
         // instancia que quedó huérfana en Evolution tras un logout incompleto choca
@@ -242,22 +248,26 @@ serve(async (req) => {
             }
         };
 
-        // Re-registra el webhook de TODAS las instancias existentes. Se usa después de
-        // rotar CHAT_WEBHOOK_SECRET o al migrar la URL del webhook, para que ningún
-        // tenant quede con una URL vieja que `chat-webhook` rechace con 401.
-        if (isBulkSync) {
+        /** Las dos acciones bulk recorren el mismo universo de instancias. */
+        const listInstances = async (): Promise<string[]> => {
             const { data: profiles, error: profilesError } = await supabase
                 .from('profiles')
                 .select('id, whatsapp_instance')
                 .not('whatsapp_instance', 'is', null);
 
             if (profilesError) throw profilesError;
+            return (profiles ?? []).map((row: any) => row.whatsapp_instance as string);
+        };
 
+        // Re-registra el webhook de TODAS las instancias existentes. Se usa después de
+        // rotar CHAT_WEBHOOK_SECRET o al migrar la URL del webhook, para que ningún
+        // tenant quede con una URL vieja que `chat-webhook` rechace con 401.
+        if (isBulkWebhookSync) {
+            const instances = await listInstances();
             const failed: { instance: string; status: number }[] = [];
             let ok = 0;
 
-            for (const row of profiles ?? []) {
-                const name = row.whatsapp_instance as string;
+            for (const name of instances) {
                 try {
                     const res = await setWebhook(name);
                     if (res.ok) ok++;
@@ -270,10 +280,37 @@ serve(async (req) => {
 
             await Promise.allSettled(logPromises);
             return new Response(JSON.stringify({
-                total: profiles?.length ?? 0,
+                total: instances.length,
                 ok,
                 failed,
                 webhookUrl: webhookUrlMasked
+            }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+            });
+        }
+
+        // Aplica los ajustes anti-bloqueo a TODAS las instancias existentes. Va en un
+        // bloque aparte de `sync_webhook_all` a propósito: esa acción es un paso del
+        // runbook de rotación de CHAT_WEBHOOK_SECRET y tiene que seguir haciendo
+        // exactamente una cosa.
+        if (isBulkSettingsSync) {
+            const instances = await listInstances();
+            const failed: { instance: string; status: number }[] = [];
+            let ok = 0;
+
+            for (const name of instances) {
+                const res = await applyHardening(name);
+                if (res.ok) ok++;
+                else failed.push({ instance: name, status: res.status });
+            }
+
+            await Promise.allSettled(logPromises);
+            return new Response(JSON.stringify({
+                total: instances.length,
+                ok,
+                failed,
+                settings: HARDENED_SETTINGS
             }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 200,
@@ -306,6 +343,7 @@ serve(async (req) => {
                 // Solo disparamos sincronización si no estaba marcado como conectado previamente
                 if (tenant?.whatsapp_status !== 'connected') {
                     await setWebhook(instanceName);
+                    await applyHardening(instanceName);
                     await updateProfile({ whatsapp_instance: instanceName, whatsapp_status: 'connected' });
                 }
 
@@ -347,6 +385,7 @@ serve(async (req) => {
         if (action === 'create') {
             const persistConnecting = async () => {
                 await setWebhook(instanceName);
+                await applyHardening(instanceName);
                 await updateProfile({ whatsapp_instance: instanceName, whatsapp_status: 'connecting' });
             };
 
@@ -367,7 +406,10 @@ serve(async (req) => {
                         instanceName: instanceName,
                         token: instanceName,
                         qrcode: true,
-                        integration: "WHATSAPP-BAILEYS"
+                        integration: "WHATSAPP-BAILEYS",
+                        // En el alta, no después: un /settings/set posterior llega
+                        // tarde para `syncFullHistory`, que actúa al conectar.
+                        ...HARDENED_SETTINGS
                     })
                 });
                 return { res, data: await res.json().catch(() => null) };
@@ -378,6 +420,7 @@ serve(async (req) => {
             // Ya conectado: no hay nada que crear, sólo reconciliar el perfil.
             if (probe.state === 'open') {
                 await setWebhook(instanceName);
+                await applyHardening(instanceName);
                 await updateProfile({ whatsapp_instance: instanceName, whatsapp_status: 'connected' });
                 await Promise.allSettled(logPromises);
                 return okResponse({ status: 'connected', instanceName, qr: null });

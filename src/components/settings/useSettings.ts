@@ -32,6 +32,8 @@ export interface ProfileData {
     apikey_evolution: string;
     notification_phone: string;
     booking_slug: string | null;
+    /** Kill-switch del chatbot: apaga las respuestas automáticas sin desconectar. */
+    bot_enabled: boolean;
     [key: string]: any;
 }
 
@@ -125,6 +127,10 @@ export function useSettings(session: any = null) {
                     apikey_evolution: profileData.apikey_evolution || '',
                     notification_phone: profileData.notification_phone || '',
                     booking_slug: profileData.booking_slug || null,
+                    // `!== false`, no `?? true`: si el frontend se despliega antes de
+                    // la migración la columna llega undefined y el toggle queda en ON,
+                    // que es como lo interpreta el backend (`bot_enabled === false`).
+                    bot_enabled: profileData.bot_enabled !== false,
                 };
                 setInstanceStatus(mergedProfile.whatsapp_status);
 
@@ -152,6 +158,7 @@ export function useSettings(session: any = null) {
                     apikey_evolution: '',
                     notification_phone: '',
                     booking_slug: null,
+                    bot_enabled: true,
                 };
             }
 

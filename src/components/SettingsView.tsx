@@ -166,7 +166,7 @@ export default function SettingsView() {
 
                 {activeTab === 'whatsapp' && (
                     canUse('whatsapp_bot')
-                        ? <WhatsAppTab profile={profile} instanceStatus={instanceStatus} pollingActive={pollingActive} qrCodeData={qrCodeData} saving={saving} handleConnectWhatsApp={handleConnectWhatsApp} handleDisconnectWhatsApp={handleDisconnectWhatsApp} />
+                        ? <WhatsAppTab profile={profile} instanceStatus={instanceStatus} pollingActive={pollingActive} qrCodeData={qrCodeData} saving={saving} handleConnectWhatsApp={handleConnectWhatsApp} handleDisconnectWhatsApp={handleDisconnectWhatsApp} handleProfileChange={handleProfileChange} handleAutoSaveProfile={handleAutoSaveProfile} />
                         : <UpgradePrompt feature="Bot de WhatsApp" />
                 )}
             </div>
