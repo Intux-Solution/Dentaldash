@@ -198,7 +198,12 @@ serve(async (req) => {
                 const res = await fetch(`${baseUrl}/instance/connectionState/${name}`, { headers: { 'apikey': EVOLUTION_KEY } });
                 if (res.status === 404) return { known: true, exists: false, state: null };
                 const body = await res.json().catch(() => null);
-                if (!res.ok) return { known: false, exists: false, state: null };
+                if (!res.ok) {
+                    // Antes esto era silencioso: un 401 (apikey inválida) o una URL mal
+                    // configurada quedaban indistinguibles de "no sé" sin rastro en los logs.
+                    console.error(`connectionState no-ok para ${name}: ${res.status} ${evolutionMessage(body, '')}`);
+                    return { known: false, exists: false, state: null };
+                }
                 return { known: true, exists: true, state: body?.instance?.state ?? null };
             } catch (e: any) {
                 console.error(`connectionState failed for ${name}:`, e?.message);
@@ -366,6 +371,9 @@ serve(async (req) => {
             await Promise.allSettled(logPromises);
 
             if (!res.ok) {
+                // Ver nota en probeInstance: sin esto, el motivo real del error sólo
+                // llegaba al toast del usuario, nunca a los logs del servidor.
+                console.error(`get_qr: /instance/connect no-ok para ${instanceName}: ${res.status} ${evolutionMessage(data, '')}`);
                 return okResponse({
                     status: 'error',
                     instanceName,
@@ -462,6 +470,9 @@ serve(async (req) => {
             await Promise.allSettled(logPromises);
 
             if (!res.ok) {
+                // Ver nota en probeInstance: sin esto, el motivo real del error sólo
+                // llegaba al toast del usuario, nunca a los logs del servidor.
+                console.error(`create: /instance/create no-ok para ${instanceName}: ${res.status} ${evolutionMessage(data, '')} | baseUrl=${baseUrl}`);
                 return okResponse({
                     status: 'error',
                     instanceName,
