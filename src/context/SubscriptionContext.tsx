@@ -6,6 +6,7 @@ import {
   Subscription,
   FeaturePermission,
 } from '../services/SubscriptionService';
+import { evaluateExpiry } from '../utils/subscriptionStatus';
 
 interface SubscriptionContextType {
   subscription: Subscription | null;
@@ -18,6 +19,10 @@ interface SubscriptionContextType {
   isFree: boolean;
   isExpired: boolean;
   daysLeft: number | null;
+  /** El período pagado venció pero todavía corre la gracia. */
+  inGracePeriod: boolean;
+  /** Días hasta el corte. Solo durante la gracia; fuera de ella, `null`. */
+  daysUntilCutoff: number | null;
   canUse: (featureKey: string) => boolean;
   isAdmin: boolean;
   refresh: () => void;
@@ -47,6 +52,8 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   isFree: false,
   isExpired: false,
   daysLeft: null,
+  inGracePeriod: false,
+  daysUntilCutoff: null,
   canUse: () => false,
   isAdmin: false,
   refresh: () => {},
@@ -124,13 +131,18 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const isFree = status === 'free';
   const isTrial = status === 'trial';
 
-  const daysLeft: number | null = (() => {
-    if (!isTrial || !subscription?.trial_ends_at) return null;
-    const diff = new Date(subscription.trial_ends_at).getTime() - Date.now();
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-  })();
-
-  const isExpired = isTrial && daysLeft !== null && daysLeft <= 0;
+  // Las reglas viven en src/utils/subscriptionStatus.ts para poder testearlas
+  // sin montar React. Cubren dos vencimientos: el trial agotado y el período
+  // pagado vencido (con GRACE_DAYS de tolerancia), que antes no se evaluaba.
+  const { isExpired, daysLeft, inGracePeriod, daysUntilCutoff } = useMemo(
+    () =>
+      evaluateExpiry({
+        status,
+        trialEndsAt: subscription?.trial_ends_at ?? null,
+        currentPeriodEnd: subscription?.current_period_end ?? null,
+      }),
+    [status, subscription?.trial_ends_at, subscription?.current_period_end]
+  );
 
   const canUse = useCallback(
     (featureKey: string): boolean => {
@@ -153,6 +165,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       isFree,
       isExpired,
       daysLeft,
+      inGracePeriod,
+      daysUntilCutoff,
       canUse,
       isAdmin,
       refresh,
@@ -168,6 +182,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       isFree,
       isExpired,
       daysLeft,
+      inGracePeriod,
+      daysUntilCutoff,
       canUse,
       isAdmin,
       refresh,

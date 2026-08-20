@@ -11,6 +11,11 @@ import {
     sendText,
 } from "../_shared/evolution.ts"
 import { spin } from "../_shared/spintax.ts"
+// Comparación en tiempo constante: evita filtrar el secreto carácter a carácter
+// mediante medición de latencia. Compartida con mp-webhook, que antes comparaba
+// la firma de MercadoPago con `===`.
+import { timingSafeEqual } from "../_shared/crypto.ts"
+import { hasFeature } from "../_shared/features.ts"
 
 // Server-to-server: la llama Evolution API, no un navegador. No hay Origin ni
 // preflight, así que los headers de CORS no aportan nada — y un `*` solo restaba
@@ -106,15 +111,6 @@ const COMPOSING_MAX_MS = 4_000;
 const randInt = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // ─────────────────────────────────────────────────────────────────────────────
-
-// Comparación en tiempo constante: evita filtrar el secreto carácter a carácter
-// mediante medición de latencia.
-function timingSafeEqual(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    return diff === 0;
-}
 
 // ─── Rate Limiting ───────────────────────────────────────────────────────────
 // Map<jid, { count, windowStart }>  (module-level, persiste dentro del mismo isolate)
@@ -305,6 +301,18 @@ serve(async (req) => {
         if (tenant.bot_enabled === false) {
             console.log(`[bot-disabled] tenant ${tenant.id}: mensaje ignorado.`);
             return new Response('Bot disabled', { status: 200 });
+        }
+
+        // El plan tiene que seguir incluyendo el bot. Al bajar de plan la instancia
+        // de Evolution queda conectada —nadie la desconecta solo— y sin este control
+        // el bot seguía respondiendo y gastando tokens de OpenAI indefinidamente.
+        // Va antes de markMessageAsRead por la misma razón que el kill-switch: si el
+        // bot no va a contestar, el dentista necesita ver el mensaje como no leído.
+        if (!(await hasFeature(supabase, tenant.id, 'whatsapp_bot'))) {
+            console.log(`[feature-off] tenant ${tenant.id}: whatsapp_bot no incluido en el plan.`);
+            // 200, no 403: Evolution reintenta cualquier no-2xx y acá no hay nada
+            // que reintentar. Mismo criterio que el resto de los descartes.
+            return new Response('Feature not in plan', { status: 200 });
         }
 
         // --- Mark Message as Read (Blue Ticks) ---
