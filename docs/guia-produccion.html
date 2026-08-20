@@ -1,0 +1,546 @@
+<title>Puesta en Producción DentalDash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+/* Mismos tokens que el Manual DentalDash: los dos documentos son un par. */
+:root {
+  --ground:#FAFBFB; --surface:#FFFFFF; --surface-2:#F1F5F4; --surface-3:#E7EEEC;
+  --ink:#131E1D; --ink-mid:#3D4E4C; --ink-muted:#5E6E6C;
+  --line:#DCE5E3; --line-strong:#C3D0CD;
+  --accent:#0D8478; --accent-deep:#0A5D55; --accent-wash:#E4F3F1;
+  --critical:#A93327; --critical-wash:#FBEAE7;
+  --warn:#8A5804; --warn-wash:#FBF0DC;
+  --ok:#146844; --ok-wash:#E2F2EA;
+  --code-bg:#F4F7F6; --code-ink:#132220;
+  --shadow: 0 1px 2px rgba(16,34,32,.05), 0 8px 24px -12px rgba(16,34,32,.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0D1514; --surface:#16201F; --surface-2:#1D2A28; --surface-3:#253431;
+    --ink:#E7EFED; --ink-mid:#B7C6C3; --ink-muted:#8B9C99;
+    --line:#2A3835; --line-strong:#3A4B48;
+    --accent:#2FC6B4; --accent-deep:#6EE7D6; --accent-wash:#12312D;
+    --critical:#F0897B; --critical-wash:#351915;
+    --warn:#E0AC4E; --warn-wash:#322512;
+    --ok:#4FD498; --ok-wash:#10301F;
+    --code-bg:#111A19; --code-ink:#D8E4E1;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0D1514; --surface:#16201F; --surface-2:#1D2A28; --surface-3:#253431;
+  --ink:#E7EFED; --ink-mid:#B7C6C3; --ink-muted:#8B9C99;
+  --line:#2A3835; --line-strong:#3A4B48;
+  --accent:#2FC6B4; --accent-deep:#6EE7D6; --accent-wash:#12312D;
+  --critical:#F0897B; --critical-wash:#351915;
+  --warn:#E0AC4E; --warn-wash:#322512;
+  --ok:#4FD498; --ok-wash:#10301F;
+  --code-bg:#111A19; --code-ink:#D8E4E1;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+
+* { box-sizing:border-box; }
+body {
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  font-size:16.5px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4 { font-family:Archivo, ui-sans-serif, system-ui, sans-serif; color:var(--ink); text-wrap:balance; margin:0; letter-spacing:-.018em; }
+code,pre,.mono { font-family:"JetBrains Mono", ui-monospace, Menlo, monospace; font-variant-ligatures:none; }
+a { color:var(--accent); text-underline-offset:2px; }
+a:hover { color:var(--accent-deep); }
+:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:3px; }
+
+.wrap { max-width:860px; margin:0 auto; padding:0 24px 120px; }
+
+/* ── Portada ── */
+.masthead { padding:64px 0 32px; border-bottom:2px solid var(--ink); margin-bottom:8px; }
+.eyebrow { font-family:Archivo,sans-serif; font-size:11.5px; font-weight:600; letter-spacing:.13em; text-transform:uppercase; color:var(--accent); margin-bottom:14px; }
+.masthead h1 { font-size:clamp(34px,5.8vw,54px); font-weight:700; line-height:1.03; letter-spacing:-.035em; margin-bottom:16px; }
+.masthead .lede { font-size:18.5px; color:var(--ink-mid); max-width:60ch; margin:0; }
+
+.facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px 26px; margin-top:28px; padding-top:20px; border-top:1px solid var(--line); font-size:13.5px; }
+.facts b { font-family:Archivo,sans-serif; font-weight:600; color:var(--ink-muted); display:block; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:2px; }
+.facts span { color:var(--ink); font-family:"JetBrains Mono",monospace; font-size:12.5px; word-break:break-all; }
+
+/* ── Regla global destacada ── */
+.golden {
+  margin:28px 0 0; padding:18px 22px; border-radius:12px;
+  background:var(--critical-wash); border:1px solid color-mix(in srgb, var(--critical) 28%, transparent);
+  border-left:4px solid var(--critical);
+}
+.golden h3 { font-size:16px; color:var(--critical); margin-bottom:6px; }
+.golden p { margin:0; color:var(--ink-mid); font-size:15px; }
+.golden p + p { margin-top:8px; }
+
+/* ── Pasos ── */
+.step { margin-top:52px; scroll-margin-top:16px; }
+.step-head { display:grid; grid-template-columns:44px minmax(0,1fr); gap:16px; align-items:start; padding-bottom:14px; border-bottom:1px solid var(--line-strong); margin-bottom:20px; }
+.step-num {
+  width:44px; height:44px; border-radius:11px; display:flex; align-items:center; justify-content:center;
+  background:var(--accent); color:#fff; font-family:Archivo,sans-serif; font-weight:700; font-size:19px;
+  font-variant-numeric:tabular-nums;
+}
+:root[data-theme="dark"] .step-num { color:#08201D; }
+@media (prefers-color-scheme:dark) { :root:not([data-theme="light"]) .step-num { color:#08201D; } }
+.step-head h2 { font-size:25px; font-weight:700; letter-spacing:-.026em; line-height:1.2; }
+.step-head .why { font-size:14.5px; color:var(--ink-muted); margin-top:5px; }
+
+h3 { font-size:17px; font-weight:600; margin:28px 0 10px; }
+h3:first-child { margin-top:0; }
+p { margin:0 0 14px; max-width:72ch; }
+ul,ol { margin:0 0 16px; padding-left:22px; max-width:72ch; }
+li { margin-bottom:7px; }
+strong { font-weight:600; color:var(--ink); }
+
+p code, li code, td code {
+  background:var(--surface-2); border:1px solid var(--line); border-radius:4px;
+  padding:.08em .36em; font-size:.855em; color:var(--ink); white-space:nowrap;
+}
+
+pre {
+  background:var(--code-bg); color:var(--code-ink); border:1px solid var(--line);
+  border-radius:10px; padding:16px 18px; overflow-x:auto; font-size:13px;
+  line-height:1.65; margin:0 0 18px;
+}
+pre code { background:none; border:none; padding:0; font-size:inherit; white-space:pre; color:inherit; }
+.cmt { color:var(--ink-muted); }
+
+/* ── Callouts ── */
+.box { border-radius:0 10px 10px 0; padding:14px 18px; margin:0 0 18px; font-size:15px; max-width:72ch; border-left:3px solid; }
+.box > :last-child { margin-bottom:0; }
+.box p { max-width:none; }
+.box-label { display:block; font-family:Archivo,sans-serif; font-size:10.5px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; margin-bottom:5px; }
+.b-see  { background:var(--ok-wash);       border-left-color:var(--ok);       color:var(--ink-mid); }
+.b-see .box-label { color:var(--ok); }
+.b-warn { background:var(--warn-wash);     border-left-color:var(--warn);     color:var(--ink-mid); }
+.b-warn .box-label { color:var(--warn); }
+.b-stop { background:var(--critical-wash); border-left-color:var(--critical); color:var(--ink-mid); }
+.b-stop .box-label { color:var(--critical); }
+.b-info { background:var(--accent-wash);   border-left-color:var(--accent);   color:var(--ink-mid); }
+.b-info .box-label { color:var(--accent-deep); }
+
+.rollback { background:var(--surface-2); border:1px solid var(--line); border-radius:9px; padding:12px 16px; font-size:14px; color:var(--ink-mid); max-width:72ch; }
+.rollback b { font-family:Archivo,sans-serif; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-muted); display:block; margin-bottom:3px; }
+.rollback > :last-child { margin-bottom:0; }
+
+/* ── Tablas ── */
+.scroll-x { overflow-x:auto; margin:0 0 18px; border-radius:9px; border:1px solid var(--line); }
+table { border-collapse:collapse; width:100%; font-size:14.5px; background:var(--surface); min-width:460px; }
+thead th { background:var(--surface-2); font-family:Archivo,sans-serif; font-weight:600; font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-mid); text-align:left; padding:10px 14px; border-bottom:1px solid var(--line-strong); }
+tbody td { padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top; color:var(--ink-mid); }
+tbody tr:last-child td { border-bottom:none; }
+tbody td:first-child { color:var(--ink); font-weight:600; white-space:nowrap; }
+
+/* ── Checklist ── */
+.check { list-style:none; padding:0; margin:0 0 18px; max-width:72ch; }
+.check li { display:grid; grid-template-columns:24px minmax(0,1fr); gap:11px; align-items:start; padding:11px 0; border-bottom:1px solid var(--line); margin:0; }
+.check li:last-child { border-bottom:none; }
+.check .sq { width:17px; height:17px; margin-top:4px; border:2px solid var(--line-strong); border-radius:4px; }
+
+footer { margin-top:72px; padding-top:24px; border-top:2px solid var(--ink); font-size:13.5px; color:var(--ink-muted); }
+@media (prefers-reduced-motion:reduce) { * { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
+html { scroll-behavior:smooth; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Guía operativa · Intux Solutions</div>
+  <h1>Puesta en producción</h1>
+  <p class="lede">Ocho pasos, en orden. Cada uno dice qué hace, por qué va en ese lugar, el comando exacto, qué tenés que ver y cómo volver atrás.</p>
+  <div class="facts">
+    <div><b>Pull request</b><span><a href="https://github.com/Intux-Solution/Dentaldash/pull/7">Dentaldash #7</a></span></div>
+    <div><b>Supabase ref</b><span>dzpvvfhrcadmhppnyqcp</span></div>
+    <div><b>Dominio</b><span>dashboard.dentaldash.cloud</span></div>
+    <div><b>Duración</b><span>~1 h + pruebas</span></div>
+  </div>
+
+  <div class="golden">
+    <h3>Antes de empezar: no corras <code style="background:none;border:none;padding:0;color:inherit">supabase db push</code></h3>
+    <p>El repo tiene 25 archivos de migración y tu base tiene 62 migraciones aplicadas, con números de versión que no coinciden entre sí. Un <code style="background:none;border:none;padding:0;color:inherit">push</code> intentaría reaplicar historia que la base ya tiene.</p>
+    <p>El paso 2 arregla exactamente eso. Hasta entonces, todo el SQL va a mano por el editor del panel de Supabase.</p>
+  </div>
+</header>
+
+<!-- ══════════ 1 ══════════ -->
+<section class="step">
+  <div class="step-head">
+    <div class="step-num">1</div>
+    <div>
+      <h2>Mergear el Pull Request</h2>
+      <div class="why">Lleva los 3 commits a <code>main</code>. Va primero porque nada se despliega desde una rama.</div>
+    </div>
+  </div>
+
+  <ol>
+    <li>Abrí <a href="https://github.com/Intux-Solution/Dentaldash/pull/7">el PR #7</a>.</li>
+    <li>Pestaña <strong>Files changed</strong>: 22 archivos. Vale la pena mirar <code>supabase/functions/mp-webhook/index.ts</code>, que es donde estaban los dos bugs de cobro.</li>
+    <li>Botón <strong>Merge pull request</strong> → <strong>Confirm merge</strong>.</li>
+  </ol>
+
+  <div class="box b-see">
+    <span class="box-label">Qué tenés que ver</span>
+    <p>El PR queda en morado con el cartel <em>Merged</em>, y los 3 commits aparecen en el historial de <code>main</code>.</p>
+  </div>
+
+  <div class="rollback"><b>Rollback</b>El botón <strong>Revert</strong> que GitHub deja en el PR ya mergeado, o <code>git revert -m 1 &lt;sha-del-merge&gt;</code>.</div>
+</section>
+
+<!-- ══════════ 2 ══════════ -->
+<section class="step">
+  <div class="step-head">
+    <div class="step-num">2</div>
+    <div>
+      <h2>Baseline del esquema</h2>
+      <div class="why">Exporta la estructura completa de tu base al repo. Es <strong>solo lectura</strong> sobre producción, así que no puede romper nada — y te deja un punto de recuperación antes de tocar cualquier otra cosa.</div>
+    </div>
+  </div>
+
+  <h3>El problema que resuelve</h3>
+  <p>Hoy, si tu base de datos desaparece, el repo no alcanza para reconstruirla. Las migraciones versionadas cubren facturación y permisos, pero las tablas más viejas y más sensibles — <code>patients</code>, <code>appointments</code>, <code>profiles</code>, <code>odontograms</code> — nunca entraron al repo. Sus políticas de RLS, que son lo único que impide que un dentista vea las historias clínicas de otro, tampoco.</p>
+  <p>Están bien configuradas: lo verifiqué, 15 tablas con políticas correctas. Pero viven solo dentro de Supabase.</p>
+
+  <h3>Comandos</h3>
+<pre><code>cd /ruta/a/Dentaldash
+git checkout main &amp;&amp; git pull
+
+supabase login                                  <span class="cmt"># si no lo hiciste antes</span>
+supabase link --project-ref dzpvvfhrcadmhppnyqcp</code></pre>
+
+  <p><code>link</code> te va a pedir la contraseña de la base. Está en el panel: <strong>Project Settings → Database → Connection string</strong>.</p>
+
+<pre><code><span class="cmt"># Estructura del schema public: tablas, RLS, funciones, triggers</span>
+supabase db dump --schema public -f supabase/migrations/00000000000000_baseline.sql
+
+<span class="cmt"># Storage aparte: los buckets y sus policies viven en otro schema</span>
+supabase db dump --schema storage -f supabase/migrations/00000000000001_storage.sql</code></pre>
+
+  <p>Confirmá que el dump se trajo lo importante:</p>
+
+<pre><code>grep -c "CREATE TABLE"  supabase/migrations/00000000000000_baseline.sql   <span class="cmt"># ~17</span>
+grep -c "CREATE POLICY" supabase/migrations/00000000000000_baseline.sql   <span class="cmt"># ~16</span></code></pre>
+
+  <p>Ahora archivá los 25 archivos viejos: ya están reflejados dentro del baseline y sus versiones no coinciden con las aplicadas, así que solo generan confusión.</p>
+
+  <div class="box b-warn">
+    <span class="box-label">Cuidado con el patrón</span>
+    <p>Un <code>git mv supabase/migrations/2026*.sql</code> se llevaría también la migración nueva del paso 4, que todavía no aplicaste. El comando de abajo la excluye explícitamente.</p>
+  </div>
+
+<pre><code>mkdir -p supabase/migrations/_archive
+
+find supabase/migrations -maxdepth 1 -name '2026*.sql' \
+  ! -name '20260820120000_prune_unenforced_feature_keys.sql' \
+  -exec git mv {} supabase/migrations/_archive/ \;</code></pre>
+
+  <p>Y decile a Supabase que el baseline ya está aplicado, para que no intente ejecutarlo la próxima vez:</p>
+
+<pre><code>supabase migration repair --status applied 00000000000000
+supabase migration repair --status applied 00000000000001</code></pre>
+
+  <div class="box b-see">
+    <span class="box-label">Qué tenés que ver</span>
+    <p><code>supabase db diff --schema public</code> <strong>no debe imprimir nada</strong>. Si no imprime nada, el repo y tu base coinciden: a partir de acá el repo es la fuente de verdad y podés volver a usar <code>db push</code> con normalidad.</p>
+  </div>
+
+<pre><code>git add supabase/migrations
+git commit -m "chore: baseline del esquema de produccion"
+git push</code></pre>
+
+  <div class="box b-stop">
+    <span class="box-label">Si el diff muestra diferencias</span>
+    <p>No las apliques todavía — significa que el dump se comió algo. Guardá la salida y revisala. Ningún paso posterior depende de esto, así que podés continuar con el 3 y volver acá después.</p>
+  </div>
+
+  <div class="rollback"><b>Rollback</b>No hay nada que revertir: todo el paso escribe archivos en tu repo, nunca en la base. <code>migration repair</code> solo toca una tabla de bookkeeping interna de Supabase.</div>
+</section>
+
+<!-- ══════════ 3 ══════════ -->
+<section class="step">
+  <div class="step-head">
+    <div class="step-num">3</div>
+    <div>
+      <h2>Desplegar las Edge Functions</h2>
+      <div class="why">Publica el código nuevo de las 5 funciones que corren en Supabase. Acá viven los arreglos de cobro.</div>
+    </div>
+  </div>
+
+  <h3>El orden importa</h3>
+
+<pre><code>supabase functions deploy create-checkout</code></pre>
+
+  <p><strong>Esperá a que termine antes de seguir.</strong> <code>create-checkout</code> es quien guarda el identificador de la suscripción de MercadoPago en la base, y la versión nueva lo guarda mucho antes que la vieja. El webhook nuevo, por su parte, exige que ese identificador ya exista y pide reintento si no lo encuentra.</p>
+  <p>Si desplegás el webhook primero, durante esos minutos vas a ver errores 500 en los logs. <strong>No rompe nada</strong> — MercadoPago reintenta y el segundo intento entra bien — pero es ruido evitable.</p>
+
+<pre><code>supabase functions deploy mp-webhook      --no-verify-jwt
+supabase functions deploy public-booking  --no-verify-jwt
+supabase functions deploy chat-webhook    --no-verify-jwt
+supabase functions deploy whatsapp-manager</code></pre>
+
+  <div class="box b-stop">
+    <span class="box-label">No te olvides del --no-verify-jwt</span>
+    <p>Esas tres funciones las llaman servicios externos — MercadoPago, Evolution API, y pacientes sin cuenta — que no pueden mandar un token de sesión. Tienen su propia autenticación: firma HMAC en el caso de MercadoPago, un secreto en la URL en el de Evolution.</p>
+    <p><strong>Si olvidás el flag, esas funciones dejan de responder</strong> y se te cae el bot de WhatsApp y el link público de reservas.</p>
+  </div>
+
+  <div class="box b-see">
+    <span class="box-label">Qué tenés que ver</span>
+    <p>En el panel → <strong>Edge Functions</strong>, las 5 con fecha de despliegue de hoy. Después mirá los logs un rato con <code>supabase functions logs mp-webhook</code>.</p>
+  </div>
+
+  <div class="rollback"><b>Rollback</b><code>git checkout &lt;sha-anterior&gt; -- supabase/functions/mp-webhook</code> y volver a desplegar. Los cambios de esta tanda <strong>no modifican ningún esquema de base</strong>: solo cambian qué se escribe y cuándo, así que volver atrás es seguro en cualquier momento.</div>
+</section>
+
+<!-- ══════════ 4 ══════════ -->
+<section class="step">
+  <div class="step-head">
+    <div class="step-num">4</div>
+    <div>
+      <h2>Limpiar las feature keys</h2>
+      <div class="why">Borra de la base las 6 claves de funcionalidad que no controlaban nada. No es bloqueante: podés hacerlo cuando quieras.</div>
+    </div>
+  </div>
+
+  <p>Si el código nuevo corre con la base vieja, las filas sobrantes simplemente no las consulta nadie. No existe un estado intermedio roto.</p>
+
+  <h3>Por qué hay que borrarlas y no solo ignorarlas</h3>
+  <p>La función que aplica los cambios de plan reconstruye la lista de claves a partir de lo que encuentra en la base. Si dejás las filas viejas, las revive en cada cambio de plan y vuelven para siempre.</p>
+
+  <h3>Cómo</h3>
+  <p>Panel de Supabase → <strong>SQL Editor</strong> → pegá el contenido de <code>supabase/migrations/20260820120000_prune_unenforced_feature_keys.sql</code> → <strong>Run</strong>.</p>
+
+  <div class="box b-see">
+    <span class="box-label">Qué tenés que ver</span>
+<pre style="margin:8px 0 10px"><code>select distinct feature_key from public.feature_permissions order by 1;</code></pre>
+    <p>Exactamente 5 filas: <code>export_data</code>, <code>faqs_config</code>, <code>insurance_management</code>, <code>services_config</code>, <code>whatsapp_bot</code>. Y ningún plan debe conservar <code>appointments</code>, <code>odontogram</code>, <code>clinical_records</code>, <code>consent_forms</code>, <code>patients_unlimited</code> ni <code>google_calendar</code>.</p>
+  </div>
+
+  <div class="rollback"><b>Rollback</b>El script borra filas, así que revertirlo es reconstruirlas: volvé a agregar las claves a <code>subscription_plans.feature_keys</code> y ejecutá <code>select public.apply_pending_plan_changes();</code>, que regenera los permisos a partir de los planes.</div>
+</section>
+
+<!-- ══════════ 5 ══════════ -->
+<section class="step">
+  <div class="step-head">
+    <div class="step-num">5</div>
+    <div>
+      <h2>Reparar la suscripción trabada</h2>
+      <div class="why">Devuelve el acceso a un usuario que pagó y quedó bloqueado por el bug C1.</div>
+    </div>
+  </div>
+
+  <p>Hay una fila con <code>status='trial'</code> y fecha de trial vencida, pero con período pagado hasta el 5 de septiembre y un identificador de MercadoPago cargado. Es exactamente la huella del bug: pagó, se activó, y después un webhook de tipo <code>pending</code> le pisó el estado y lo mandó a un trial que ya había vencido.</p>
+
+  <h3>Primero: identificar la fila</h3>
+<pre><code>select user_id, mercadopago_sub_id, status, trial_ends_at, current_period_end
+from   public.subscriptions
+where  status = 'trial'
+  and  mercadopago_sub_id is not null
+  and  current_period_end &gt; now();</code></pre>
+
+  <h3>Segundo: preguntarle a MercadoPago cuál es la verdad</h3>
+
+  <div class="box b-stop">
+    <span class="box-label">Este paso no es opcional</span>
+    <p>Un <em>preapproval</em> es la suscripción recurrente del lado de MercadoPago: es quien decide si al usuario se le sigue cobrando o no. Nuestra base es solo un reflejo.</p>
+    <p>Si escribís <code>active</code> en una fila cuyo preapproval está cancelado, le estás dando acceso gratis a alguien a quien nadie le cobra.</p>
+  </div>
+
+<pre><code>export MP_ACCESS_TOKEN='&lt;tu token de produccion&gt;'   <span class="cmt"># el mismo de los secrets de Supabase</span>
+
+curl -s -H "Authorization: Bearer $MP_ACCESS_TOKEN" \
+  https://api.mercadopago.com/preapproval/&lt;mercadopago_sub_id&gt; \
+  | jq '{status, next_payment_date, reason}'</code></pre>
+
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>Respuesta de MercadoPago</th><th>Qué hacer</th></tr></thead>
+    <tbody>
+      <tr><td><code>authorized</code></td><td>Sigue cobrando. Reparar.</td></tr>
+      <tr><td><code>cancelled</code></td><td>Ya no cobra. <strong>No reparar</strong> — el usuario tiene que contratar de nuevo.</td></tr>
+      <tr><td><code>pending</code></td><td>Nunca llegó a autorizarse. No reparar.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Tercero: reparar, solo si dijo <code>authorized</code></h3>
+<pre><code>update public.subscriptions
+set    status = 'active', updated_at = now()
+where  mercadopago_sub_id = '&lt;mercadopago_sub_id&gt;'
+  and  status = 'trial'
+  and  current_period_end &gt; now();</code></pre>
+
+  <div class="box b-see">
+    <span class="box-label">Qué tenés que ver</span>
+    <p><strong>Success. 1 row.</strong> Si dice 0 filas, revisá que copiaste bien el identificador.</p>
+  </div>
+
+  <h3>Cuarto: el preapproval huérfano</h3>
+  <p>Hay una entrada <code>preapproval_cancel_failed</code> en la bitácora. Significa que en algún momento no se pudo cancelar una suscripción vieja de MercadoPago, y podría seguir cobrándole a alguien.</p>
+
+<pre><code>select created_at, mp_resource_id, payload-&gt;&gt;'detail' as detalle
+from   public.payment_events
+where  event_type = 'preapproval_cancel_failed';</code></pre>
+
+  <p>Consultá ese <code>mp_resource_id</code> con el mismo <code>curl</code> de arriba. Si vuelve <code>authorized</code>, cancelalo desde el panel de MercadoPago (<strong>Tus suscripciones</strong>) o:</p>
+
+<pre><code>curl -s -X PUT -H "Authorization: Bearer $MP_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"cancelled"}' \
+  https://api.mercadopago.com/preapproval/&lt;mp_resource_id&gt; | jq '.status'</code></pre>
+</section>
+
+<!-- ══════════ 6 ══════════ -->
+<section class="step">
+  <div class="step-head">
+    <div class="step-num">6</div>
+    <div>
+      <h2>Redesplegar el frontend en Easypanel</h2>
+      <div class="why">Publica la interfaz nueva: corte por vencimiento con gracia, aviso en el banner, feature keys reducidas.</div>
+    </div>
+  </div>
+
+  <h3>Por qué hay que reconstruir y no solo reiniciar</h3>
+  <p>Vite mete las variables <code>VITE_*</code> <strong>dentro del código compilado</strong> durante el build. No se leen en tiempo de ejecución. Reiniciar el contenedor no cambia nada: hay que rehacer la imagen.</p>
+
+  <h3>Cómo</h3>
+  <ol>
+    <li>Entrá a Easypanel → tu proyecto → el servicio del frontend.</li>
+    <li>Si tenés <strong>auto-deploy desde GitHub</strong> activado, el merge del paso 1 ya disparó el build. Mirá <strong>Deployments</strong> y confirmá que hay uno de hoy, en verde.</li>
+    <li>Si no, botón <strong>Deploy</strong> — o <strong>Force rebuild</strong> si querés forzar el build sin caché.</li>
+  </ol>
+
+  <div class="box b-warn">
+    <span class="box-label">La trampa a revisar</span>
+    <p><code>VITE_SUPABASE_URL</code> y <code>VITE_SUPABASE_ANON_KEY</code> tienen que llegar <strong>al momento del build</strong>, no al del arranque. En el <code>Dockerfile</code> del repo están declaradas como <code>ARG</code>.</p>
+    <p>Si en Easypanel están cargadas solo como variables de entorno de runtime, la imagen compila igual pero la app arranca sin credenciales y no carga nada. Es un error silencioso: el build sale verde y la web se ve rota.</p>
+  </div>
+
+  <h3>Cómo verificarlo sin adivinar</h3>
+  <p>Comprobá que la URL de Supabase realmente quedó adentro del JavaScript publicado. Primero sacá el nombre del bundle:</p>
+
+<pre><code>curl -s https://dashboard.dentaldash.cloud/ \
+  | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' | head -1</code></pre>
+
+  <p>Después, con ese nombre:</p>
+
+<pre><code>curl -s https://dashboard.dentaldash.cloud/assets/index-XXXX.js \
+  | grep -c "dzpvvfhrcadmhppnyqcp"</code></pre>
+
+  <div class="box b-see">
+    <span class="box-label">Qué tenés que ver</span>
+    <p><strong>1 o más</strong> → las variables entraron bien. <strong>0</strong> → están configuradas como runtime y hay que pasarlas a build args en la configuración del servicio.</p>
+    <p>Después abrí el sitio, iniciá sesión y entrá a <strong>Configuración</strong>. Con <code>Ctrl+Shift+R</code> forzás recarga sin caché.</p>
+  </div>
+
+  <div class="rollback"><b>Rollback</b>Easypanel guarda los despliegues anteriores: <strong>Deployments</strong> → elegí el previo → <strong>Redeploy</strong>.</div>
+</section>
+
+<!-- ══════════ 7 ══════════ -->
+<section class="step">
+  <div class="step-head">
+    <div class="step-num">7</div>
+    <div>
+      <h2>Probar el ciclo de cobro completo</h2>
+      <div class="why">Verifica que los arreglos funcionan de verdad, con dinero de prueba. Es la única prueba que cubre C1 y C2 de punta a punta.</div>
+    </div>
+  </div>
+
+  <p>Los tests automáticos cubren la lógica en aislamiento, pero estos bugs solo aparecen cuando MercadoPago manda webhooks reales en orden real.</p>
+
+  <div class="box b-info">
+    <span class="box-label">Preparación</span>
+    <p>Credenciales de <strong>prueba</strong> (empiezan con <code>TEST-</code>) y una cuenta de comprador de prueba de MercadoPago. Con tu email real el preapproval falla: MercadoPago no te deja suscribirte a vos mismo.</p>
+  </div>
+
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>#</th><th>Qué hacer</th><th>Qué tiene que pasar</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Alta desde <code>/pricing</code>, pagar</td><td><code>status='active'</code>, <code>current_period_end</code> con la fecha que informó MP</td></tr>
+      <tr><td>2</td><td><strong>Abrir un upgrade y cerrar la pestaña sin pagar</strong></td><td>El usuario <strong>sigue en <code>active</code> con su plan y con acceso a la app</strong></td></tr>
+      <tr><td>3</td><td>Completar el upgrade</td><td>Plan y permisos nuevos</td></tr>
+      <tr><td>4</td><td>Bajar de plan</td><td><code>pending_plan_id</code> cargado, el acceso no cambia</td></tr>
+      <tr><td>5</td><td><code>select public.apply_pending_plan_changes();</code></td><td>Plan bajado, permisos revocados</td></tr>
+      <tr><td>6</td><td>Cancelar</td><td><code>cancelled_at</code> cargado y preapproval cancelado en MP</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="box b-info">
+    <span class="box-label">El paso 2 es el importante</span>
+    <p>Es exactamente el que hoy deja al usuario afuera. Antes del arreglo, cerrar esa pestaña lo mandaba a <code>/suscripcion</code> sin poder volver a entrar. Si después del arreglo seguís teniendo acceso normal, <strong>C1 está cerrado</strong>.</p>
+  </div>
+
+  <h3>Después de cada paso</h3>
+<pre><code>select created_at, event_type, mp_status, processed
+from   public.payment_events
+order  by created_at desc
+limit  10;</code></pre>
+
+  <div class="box b-see">
+    <span class="box-label">Qué tenés que ver</span>
+    <p>Todos con <code>processed = true</code> y ninguno con <code>mp_status</code> en <code>null</code>. Un <code>null</code> o un <code>false</code> que no se resuelve solo en un minuto significa que un evento quedó colgado — copiá esa fila y avisame.</p>
+  </div>
+</section>
+
+<!-- ══════════ 8 ══════════ -->
+<section class="step">
+  <div class="step-head">
+    <div class="step-num">8</div>
+    <div>
+      <h2>Antes de abrir el registro</h2>
+      <div class="why">No son bugs; son cosas que todavía están en valores de prueba.</div>
+    </div>
+  </div>
+
+  <ul class="check">
+    <li><span class="sq"></span><div><strong>Precios reales.</strong> Los planes están en <strong>15 y 16 pesos</strong>. Panel de admin → <strong>Planes</strong>, o directo en <code>subscription_plans.price_monthly</code>.</div></li>
+    <li><span class="sq"></span><div><strong>Días de prueba.</strong> Hoy Básico da 7 días y Asistente IA 1. Definí el valor final en <code>trial_days</code>.<br><em>Ojo:</em> el trigger de alta elige el plan del usuario nuevo tomando <em>el primer plan activo con <code>trial_days</code> cargado, ordenado por <code>sort_order</code></em>. Si reordenás los planes, los registros nuevos cambian de plan sin avisar.</div></li>
+    <li><span class="sq"></span><div><strong>Leaked Password Protection.</strong> Supabase → <strong>Authentication → Policies</strong>. Está desactivado; es un interruptor. Bloquea contraseñas que aparecieron en filtraciones conocidas.</div></li>
+    <li><span class="sq"></span><div><strong>Dependencias.</strong> <code>npm audit fix</code> — 12 vulnerabilidades, todas en herramientas de build. No viajan al navegador del usuario, pero sí afectan a la máquina que compila.</div></li>
+    <li><span class="sq"></span><div><strong>Confirmar la cadena de IPs.</strong> El rate limit del link público ahora lee el último elemento de <code>x-forwarded-for</code>. Loguealo una vez desde <code>public-booking</code> y confirmá que ese último valor es la IP real del visitante y no una interna de Supabase.</div></li>
+  </ul>
+</section>
+
+<!-- ══════════ Resumen ══════════ -->
+<section class="step">
+  <div class="step-head">
+    <div class="step-num">✓</div>
+    <div>
+      <h2>Resumen para tener a mano</h2>
+      <div class="why">Los comandos, sin la explicación.</div>
+    </div>
+  </div>
+
+<pre><code><span class="cmt"># Paso 2 — baseline (solo lectura sobre produccion)</span>
+supabase link --project-ref dzpvvfhrcadmhppnyqcp
+supabase db dump --schema public  -f supabase/migrations/00000000000000_baseline.sql
+supabase db dump --schema storage -f supabase/migrations/00000000000001_storage.sql
+supabase migration repair --status applied 00000000000000
+supabase migration repair --status applied 00000000000001
+supabase db diff --schema public          <span class="cmt"># no debe imprimir nada</span>
+
+<span class="cmt"># Paso 3 — edge functions (create-checkout PRIMERO)</span>
+supabase functions deploy create-checkout
+supabase functions deploy mp-webhook      --no-verify-jwt
+supabase functions deploy public-booking  --no-verify-jwt
+supabase functions deploy chat-webhook    --no-verify-jwt
+supabase functions deploy whatsapp-manager</code></pre>
+
+  <div class="box b-stop">
+    <span class="box-label">Los tres que no se negocian</span>
+    <p><strong>1.</strong> No corras <code>db push</code> antes del paso 2. <strong>2.</strong> No te olvides de <code>--no-verify-jwt</code> en las tres funciones públicas. <strong>3.</strong> No repares la suscripción del paso 5 sin preguntarle antes a MercadoPago.</p>
+  </div>
+
+  <p>Si algo no coincide con lo que dice esta guía, pará y avisame antes de seguir.</p>
+</section>
+
+<footer>
+  <p><strong>Puesta en producción · DentalDash</strong> · Intux Solutions · 20 de agosto de 2026, sobre el PR <a href="https://github.com/Intux-Solution/Dentaldash/pull/7">#7</a>.</p>
+  <p>La documentación completa del sistema, con el detalle de la integración con MercadoPago, está en el <em>Manual DentalDash</em>.</p>
+</footer>
+
+</div>
