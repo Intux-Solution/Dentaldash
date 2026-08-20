@@ -395,6 +395,11 @@ tbody td code { white-space: nowrap; }
 .chip-critical { color: var(--critical); background: var(--critical-wash); border-color: color-mix(in srgb, var(--critical) 30%, transparent); }
 .chip-ok       { color: var(--ok);       background: var(--ok-wash);       border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
 .chip-neutral  { color: var(--ink-muted); background: var(--surface-2);    border-color: var(--line-strong); }
+.chip-fixed    { color: var(--ok);       background: var(--ok-wash);       border-color: color-mix(in srgb, var(--ok) 34%, transparent); }
+
+/* Un hallazgo ya corregido baja de intensidad: sigue documentado, deja de gritar. */
+.finding.is-fixed { border-left-color: var(--ok); }
+.finding.is-fixed .finding-head h4 { color: var(--ink-mid); }
 
 /* ── Callouts ── */
 .note {
@@ -1367,24 +1372,32 @@ supabase secrets set NOTIFY_FROM_EMAIL="DentalDash &lt;turnos@dominio&gt;"</code
 <section id="auditoria">
 <h2><span class="num">09</span><span>Auditoría de código</span></h2>
 
-<p>Revisión de la rama <code>claude/code-review-mercadopago-docs-8elgrp</code> sobre el commit <code>010318e</code>. Lo mecánico está limpio: <code>tsc --noEmit</code> pasa, 50 tests en 5 archivos pasan, ESLint da 0 errores y 223 warnings (todos <code>no-explicit-any</code>). Lo que sigue salió de leer la lógica.</p>
+<p>Revisión de la rama <code>claude/code-review-mercadopago-docs-8elgrp</code> sobre el commit <code>010318e</code>. Lo mecánico estaba limpio de entrada: <code>tsc --noEmit</code> pasaba, 50 tests en 5 archivos pasaban, ESLint daba 0 errores y 223 warnings (todos <code>no-explicit-any</code>). Lo que sigue salió de leer la lógica.</p>
+
+<div class="note">
+<span class="note-label">Estado — 20 de agosto de 2026</span>
+<p><strong>Todos los hallazgos de código están corregidos</strong> en el commit <code>282339e</code>. La suite pasó de 50 a 80 tests. Queda pendiente solo <strong>C3</strong> (el baseline del esquema, que se ejecuta con el CLI de Supabase) y los ítems de negocio. El orden de deploy, la reparación de datos y el ciclo de verificación están en <code>docs/DEPLOY-LANZAMIENTO.md</code>.</p>
+<p>Cada hallazgo conserva abajo su descripción original — sirve para entender por qué el código quedó como quedó — con una nota de cómo se resolvió.</p>
+</div>
 
 <h3>Bloqueantes</h3>
 
-<div class="finding sev-1">
-<div class="finding-head"><h4>C1 · Un estado no mapeado de MercadoPago tira al usuario a <code>trial</code></h4><span class="chip chip-critical">Bloqueante</span></div>
+<div class="finding sev-1 is-fixed">
+<div class="finding-head"><h4>C1 · Un estado no mapeado de MercadoPago tira al usuario a <code>trial</code></h4><span class="chip chip-fixed">Resuelto</span><span class="chip chip-critical">Bloqueante</span></div>
 <span class="where">supabase/functions/mp-webhook/index.ts:184-185, 231</span>
 <p>El <code>switch</code> de estados tiene <code>default: internalStatus = "trial"</code>. <code>create-checkout</code> crea el preapproval con <code>status: "pending"</code>, y MercadoPago emite un <code>subscription_preapproval</code> para esa creación. Ese webhook cae en el <code>default</code> y escribe <code>status = 'trial'</code> sobre la fila.</p>
 <p>Para un cliente que ya paga y entra a hacer un upgrade, el efecto es inmediato: su <code>trial_ends_at</code> quedó fijado en <code>now()</code> cuando activó el plan, o sea en el pasado. <code>SubscriptionContext</code> calcula <code>isExpired = isTrial &amp;&amp; daysLeft &lt;= 0</code> → verdadero → <code>ProtectedRoute</code> lo expulsa a <code>/suscripcion</code>. Si completa el pago se recupera; <strong>si abandona el checkout queda encerrado fuera de una cuenta paga</strong> hasta que pague de nuevo.</p>
 <div class="fix"><b>Arreglo</b>Nunca degradar por un estado desconocido. Mapear <code>pending</code> explícitamente a "no tocar el status", y que el <code>default</code> deje el estado como está en vez de escribir <code>trial</code>. <code>trial</code> debería asignarlo solo el trigger de alta.</div>
+<div class="fix"><b>Resuelto en 282339e</b>El mapeo vive ahora en <code>_shared/mp-status.ts</code> y devuelve <code>null</code> para todo lo que no sabe interpretar; <code>status</code> solo se escribe cuando hay un mapeo definido. Cubierto por 9 tests, incluido uno que verifica que la función <em>nunca</em> devuelva <code>trial</code>.</div>
 </div>
 
-<div class="finding sev-1">
-<div class="finding-head"><h4>C2 · La clave de idempotencia se quema antes de aplicar el cambio</h4><span class="chip chip-critical">Bloqueante</span></div>
+<div class="finding sev-1 is-fixed">
+<div class="finding-head"><h4>C2 · La clave de idempotencia se quema antes de aplicar el cambio</h4><span class="chip chip-fixed">Resuelto</span><span class="chip chip-critical">Bloqueante</span></div>
 <span class="where">supabase/functions/mp-webhook/index.ts:158-168 vs. 254-261</span>
 <p>El insert en <code>processed_mp_events</code> ocurre en el paso 6; el <code>UPDATE</code> de <code>subscriptions</code>, en el paso 8. Si el update falla, el código lo loguea y <strong>sigue</strong>, devolviendo 200. MercadoPago no reintenta un 200, y un reenvío manual choca contra la clave ya insertada y sale por "already processed". El pago se cobró y la suscripción nunca se activa, sin forma de reprocesar.</p>
 <p>Hay un segundo camino al mismo resultado, y es una carrera real: el <code>UPDATE</code> filtra por <code>mercadopago_sub_id = preapprovalId</code>, pero <code>create-checkout</code> recién guarda ese id <em>después</em> de cancelar el preapproval anterior — otro round-trip de hasta 15 s. Si el webhook llega en esa ventana, el update no encuentra ninguna fila. PostgREST no considera eso un error: <code>updateError</code> es <code>null</code>, la función devuelve 200 satisfecha, y la clave ya está quemada.</p>
 <div class="fix"><b>Arreglo</b>Insertar la clave de idempotencia <em>después</em> de que el UPDATE haya confirmado filas afectadas, o borrarla cuando el update falla. Y verificar el conteo de filas: un update de 0 filas tiene que devolver 5xx para que MercadoPago reintente.</div>
+<div class="fix"><b>Resuelto en 282339e</b>El <code>UPDATE</code> usa <code>.select("id")</code> para detectar 0 filas; ante fallo libera la clave y devuelve 5xx para que MercadoPago reintente. Se aplicó el mismo criterio a las consultas a la API de MP — solo el 404 es definitivo — y <code>create-checkout</code> guarda <code>mercadopago_sub_id</code> antes de cancelar el preapproval viejo.</div>
 </div>
 
 <div class="finding sev-1">
@@ -1397,49 +1410,55 @@ supabase secrets set NOTIFY_FROM_EMAIL="DentalDash &lt;turnos@dominio&gt;"</code
 
 <h3>Importantes</h3>
 
-<div class="finding sev-2">
-<div class="finding-head"><h4>M1 · Seis de los once feature keys no bloquean nada</h4><span class="chip chip-neutral">Monetización</span></div>
+<div class="finding sev-2 is-fixed">
+<div class="finding-head"><h4>M1 · Seis de los once feature keys no bloquean nada</h4><span class="chip chip-fixed">Resuelto</span><span class="chip chip-neutral">Monetización</span></div>
 <span class="where">src/components/SettingsView.tsx:19-27 · búsqueda de canUse() en todo src/</span>
 <p><code>canUse()</code> se invoca para <code>insurance_management</code>, <code>services_config</code>, <code>faqs_config</code>, <code>whatsapp_bot</code> y <code>export_data</code>. Nada más. <code>google_calendar</code>, <code>patients_unlimited</code>, <code>appointments</code>, <code>odontogram</code>, <code>clinical_records</code> y <code>consent_forms</code> están declarados en los tres lugares, se escriben en la DB en cada cambio de plan y no se consultan nunca.</p>
 <p>El caso más caro es Google Calendar: en <code>TAB_FEATURE_MAP</code> la entrada <code>googlecalendar</code> es <code>null</code>, así que el tab está siempre abierto. Cualquier usuario del plan Básico conecta Calendar y usa una función del plan superior. <code>patients_unlimited</code> es igual de directo: los planes anuncian "hasta 20 pacientes" y no hay un solo chequeo de ese límite en el frontend, en RLS ni en una Edge Function.</p>
 <div class="fix"><b>Arreglo</b>Decidir qué claves son reales. Las que lo sean, aplicarlas; las que no, sacarlas de <code>featureKeys.ts</code> y de los planes, para que la lista deje de prometer lo que no cumple.</div>
+<div class="fix"><b>Resuelto en 282339e</b>Reducido a las cinco claves que sí bloquean algo. Migración <code>20260820120000</code> limpia los planes y las filas huérfanas de <code>feature_permissions</code>, que si no <code>apply_pending_plan_changes()</code> revive por el <code>UNION</code>.</div>
 </div>
 
-<div class="finding sev-2">
-<div class="finding-head"><h4>M2 · El feature gating existe solo en React</h4><span class="chip chip-neutral">Monetización</span></div>
+<div class="finding sev-2 is-fixed">
+<div class="finding-head"><h4>M2 · El feature gating existe solo en React</h4><span class="chip chip-fixed">Resuelto</span><span class="chip chip-neutral">Monetización</span></div>
 <span class="where">supabase/functions/whatsapp-manager/index.ts:62-70 · calendar-sync</span>
 <p>Ninguna Edge Function consulta <code>feature_permissions</code>. <code>whatsapp-manager</code> valida el JWT y que <code>tenant_id === user.id</code>, pero no si el usuario tiene <code>whatsapp_bot</code>. Un usuario del plan barato que llame a la función directamente crea su instancia, escanea el QR y usa el bot: el <code>chat-webhook</code> tampoco chequea el plan. Lo mismo vale para <code>calendar-sync</code> y para exportar datos.</p>
 <p>El aislamiento de <em>datos</em> es sólido — RLS por <code>user_id</code> en todas las tablas, RPCs revocadas correctamente. Lo que no está protegido es el acceso a <em>funciones pagas</em>.</p>
 <div class="fix"><b>Arreglo</b>Un helper compartido <code>assertFeature(supabase, userId, key)</code> al inicio de las funciones que sirven features pagas.</div>
+<div class="fix"><b>Resuelto en 282339e</b>Nuevo <code>_shared/features.ts</code>. <code>whatsapp-manager</code> exige el plan en <code>create</code>/<code>get_qr</code>/<code>sync_webhook</code>/<code>debug_instance</code> — nunca en <code>logout</code> — y <code>chat-webhook</code> lo chequea antes de gastar tokens de OpenAI.</div>
 </div>
 
-<div class="finding sev-2">
-<div class="finding-head"><h4>M3 · El rate limit del link público se saltea con un header</h4><span class="chip chip-critical">Seguridad</span></div>
+<div class="finding sev-2 is-fixed">
+<div class="finding-head"><h4>M3 · El rate limit del link público se saltea con un header</h4><span class="chip chip-fixed">Resuelto</span><span class="chip chip-critical">Seguridad</span></div>
 <span class="where">supabase/functions/public-booking/index.ts:359-360</span>
 <p><code>const ip = fwd.split(",")[0].trim()</code> toma el valor <strong>más a la izquierda</strong> de <code>x-forwarded-for</code>, que es exactamente la parte que el cliente controla. Mandando un <code>X-Forwarded-For</code> distinto en cada request, los límites de 5/hora y 8/día no aplican nunca.</p>
 <p>Peor: el paciente se crea en la línea 404, <em>antes</em> del chequeo de turnos pendientes de la línea 428. Cada intento deja una fila en <code>patients</code> aunque la reserva se rechace después. Combinado con el bypass, alguien puede llenar la lista de pacientes de un dentista con basura conociendo solo su slug público, que es un dato que se comparte a propósito.</p>
 <div class="fix"><b>Arreglo</b>Tomar la IP del extremo derecho de la cadena (el hop que agrega el proxy de Supabase), y mover la creación del paciente después de todos los chequeos de límite.</div>
+<div class="fix"><b>Resuelto en 282339e</b>La IP sale de <code>_shared/client-ip.ts</code>, que toma el hop agregado por el proxy. Ninguna escritura ocurre hasta que pasan todas las validaciones. 7 tests, uno de ellos verifica que dos requests con <code>X-Forwarded-For</code> falsificado distinto resuelvan a la misma IP.</div>
 </div>
 
-<div class="finding sev-2">
-<div class="finding-head"><h4>M4 · <code>past_due</code> conserva el acceso completo, para siempre</h4><span class="chip chip-neutral">Ingresos</span></div>
+<div class="finding sev-2 is-fixed">
+<div class="finding-head"><h4>M4 · <code>past_due</code> conserva el acceso completo, para siempre</h4><span class="chip chip-fixed">Resuelto</span><span class="chip chip-neutral">Ingresos</span></div>
 <span class="where">src/context/SubscriptionContext.tsx:135 · src/router/ProtectedRoute.tsx:88-92</span>
 <p><code>isExpired</code> se calcula solo para <code>trial</code>. Un usuario en <code>past_due</code> — tarjeta rechazada — no está expirado, no está cancelado y tiene fila, así que <code>ProtectedRoute</code> lo deja pasar. Solo ve un banner. Tampoco hay ningún chequeo de <code>current_period_end</code> para usuarios <code>active</code>: si MercadoPago deja de cobrar y no llega un webhook de cancelación, el acceso sigue indefinidamente.</p>
 <div class="fix"><b>Arreglo</b>Definir una política explícita de gracia — por ejemplo, <code>past_due</code> con más de N días bloquea — y evaluar <code>current_period_end</code> además del status.</div>
+<div class="fix"><b>Resuelto en 282339e</b><code>evaluateExpiry()</code> en <code>src/utils/subscriptionStatus.ts</code>, con 3 días de gracia y 14 tests. El banner avisa los días restantes antes de cortar.</div>
 </div>
 
 <h3>Menores</h3>
 
-<div class="finding sev-3">
-<div class="finding-head"><h4>m1 · La firma de MP se compara con <code>===</code> y sin normalizar el <code>data.id</code></h4></div>
+<div class="finding sev-3 is-fixed">
+<div class="finding-head"><h4>m1 · La firma de MP se compara con <code>===</code> y sin normalizar el <code>data.id</code></h4><span class="chip chip-fixed">Resuelto</span></div>
 <span class="where">supabase/functions/mp-webhook/index.ts:24, 44</span>
 <p>Dos cosas. <code>hashHex === v1</code> no es comparación en tiempo constante — <code>chat-webhook</code> sí implementa <code>timingSafeEqual</code>, así que es una inconsistencia dentro del mismo repo. Y la documentación de MercadoPago pide que un <code>data.id</code> alfanumérico se pase a minúsculas antes de armar el manifest; acá se usa tal cual. Hoy los ids de preapproval ya vienen en minúscula, pero si eso cambia <strong>todos</strong> los webhooks empiezan a devolver 401 y ninguna suscripción se activa.</p>
+<div class="fix"><b>Resuelto en 282339e</b><code>timingSafeEqual</code> se movió a <code>_shared/crypto.ts</code> y lo usan las dos funciones. <code>data.id</code> pasa a minúsculas.</div>
 </div>
 
-<div class="finding sev-3">
-<div class="finding-head"><h4>m2 · El email del formulario público no se valida</h4></div>
+<div class="finding sev-3 is-fixed">
+<div class="finding-head"><h4>m2 · El email del formulario público no se valida</h4><span class="chip chip-fixed">Resuelto</span></div>
 <span class="where">supabase/functions/public-booking/index.ts:14</span>
 <p><code>email: z.string().max(150)</code> sin <code>.email()</code>. Cualquier texto se guarda en <code>patients.email</code> y se manda como <code>attendee</code> a Google Calendar, que rechaza el evento entero por un attendee inválido: la sincronización del turno muere en silencio. El envío de mail está a salvo porque <code>sendEmail</code> valida el destinatario por su cuenta.</p>
+<div class="fix"><b>Resuelto en 282339e</b>Schema Zod alineado con el del frontend: acepta <code>""</code> o un email válido.</div>
 </div>
 
 <div class="finding sev-3">
@@ -1454,10 +1473,11 @@ supabase secrets set NOTIFY_FROM_EMAIL="DentalDash &lt;turnos@dominio&gt;"</code
 <p>Toma el primer plan activo con <code>trial_days IS NOT NULL</code> ordenado por <code>sort_order</code>. Si un admin le pone <code>trial_days</code> al plan caro desde <code>PlanFormModal</code>, todos los registros nuevos arrancan ahí. Si nadie tiene <code>trial_days</code>, la suscripción se crea con <code>plan_id = NULL</code> y las 11 permissions en <code>false</code>: el usuario se registra y no puede usar nada.</p>
 </div>
 
-<div class="finding sev-3">
-<div class="finding-head"><h4>m5 · El cierre de <code>payment_events</code> marca de más</h4></div>
+<div class="finding sev-3 is-fixed">
+<div class="finding-head"><h4>m5 · El cierre de <code>payment_events</code> marca de más</h4><span class="chip chip-fixed">Resuelto</span></div>
 <span class="where">supabase/functions/mp-webhook/index.ts:294-297</span>
 <p>El <code>UPDATE</code> final filtra por <code>mp_resource_id</code> y <code>processed = false</code>, sin acotar a la fila que insertó este mismo request. Las filas de fallo que escribe <code>create-checkout</code> con el mismo <code>mp_resource_id</code> quedan marcadas como procesadas y con un <code>mp_status</code> que no les corresponde. Ensucia la bitácora justo donde uno va a mirar cuando algo salió mal.</p>
+<div class="fix"><b>Resuelto en 282339e</b>Se captura el id en el insert de auditoría y se cierra por ese id.</div>
 </div>
 
 <div class="finding sev-3">
@@ -1478,48 +1498,56 @@ supabase secrets set NOTIFY_FROM_EMAIL="DentalDash &lt;turnos@dominio&gt;"</code
 <h2><span class="num">10</span><span>¿Salimos al mercado?</span></h2>
 
 <div class="verdict">
-<h3>Todavía no. Faltan unos días, no unos meses.</h3>
-<p>El producto está mucho mejor construido que el promedio de un SaaS en pre-lanzamiento: RLS en todas las tablas, secretos exclusivamente server-side, race conditions de agenda resueltas con advisory locks, fail-closed en los tres endpoints públicos, rollback de MercadoPago cuando la DB falla y comentarios que explican <em>por qué</em> cada decisión defensiva está donde está. Eso no se improvisa.</p>
-<p>Lo que frena el lanzamiento no es la calidad general sino tres cosas puntuales: dos caminos por los que un cliente <strong>paga y no obtiene acceso</strong>, y un repo del que <strong>no se puede reconstruir la base de datos</strong>. Ninguno se ve en un test ni en un happy path — aparecen cuando hay dinero de verdad y clientes de verdad.</p>
+<h3>Sí, una vez que apliques el baseline y cierres el ciclo en sandbox.</h3>
+<p>Los tres bloqueantes de código están corregidos y verificados. Quedaba, además de lo que la auditoría había encontrado, un hallazgo que solo apareció al mirar producción: <strong>C1 no era hipotético</strong>. Había una suscripción paga, con período vigente hasta el 5 de septiembre, sentada en <code>status='trial'</code> vencido — es decir, un cliente que pagó y estaba afuera de su propia cuenta. Esa fila se repara con el runbook.</p>
+<p>Lo que falta ya no es programar: es ejecutar el dump del esquema, correr un ciclo de cobro completo en sandbox y poner precios de verdad.</p>
 
 <div class="gauge">
   <div class="gauge-row"><span class="label">Aislamiento de datos (RLS)</span><span class="gauge-track"><span class="gauge-fill" style="width:95%"></span></span><span class="val">Sólido</span></div>
-  <div class="gauge-row"><span class="label">Seguridad de endpoints</span><span class="gauge-track"><span class="gauge-fill" style="width:82%"></span></span><span class="val">Bueno</span></div>
-  <div class="gauge-row"><span class="label">Calidad del código</span><span class="gauge-track"><span class="gauge-fill" style="width:88%"></span></span><span class="val">Bueno</span></div>
-  <div class="gauge-row"><span class="label">Flujo de cobro</span><span class="gauge-track"><span class="gauge-fill warn" style="width:58%"></span></span><span class="val">Riesgo</span></div>
-  <div class="gauge-row"><span class="label">Feature gating</span><span class="gauge-track"><span class="gauge-fill warn" style="width:38%"></span></span><span class="val">Incompleto</span></div>
-  <div class="gauge-row"><span class="label">Reproducibilidad del esquema</span><span class="gauge-track"><span class="gauge-fill critical" style="width:32%"></span></span><span class="val">Crítico</span></div>
-  <div class="gauge-row"><span class="label">Cobertura de tests</span><span class="gauge-track"><span class="gauge-fill warn" style="width:35%"></span></span><span class="val">Fina</span></div>
+  <div class="gauge-row"><span class="label">Seguridad de endpoints</span><span class="gauge-track"><span class="gauge-fill" style="width:93%"></span></span><span class="val">Sólido</span></div>
+  <div class="gauge-row"><span class="label">Calidad del código</span><span class="gauge-track"><span class="gauge-fill" style="width:90%"></span></span><span class="val">Bueno</span></div>
+  <div class="gauge-row"><span class="label">Flujo de cobro</span><span class="gauge-track"><span class="gauge-fill" style="width:88%"></span></span><span class="val">Corregido</span></div>
+  <div class="gauge-row"><span class="label">Feature gating</span><span class="gauge-track"><span class="gauge-fill" style="width:90%"></span></span><span class="val">Server-side</span></div>
+  <div class="gauge-row"><span class="label">Reproducibilidad del esquema</span><span class="gauge-track"><span class="gauge-fill critical" style="width:32%"></span></span><span class="val">Pendiente</span></div>
+  <div class="gauge-row"><span class="label">Cobertura de tests</span><span class="gauge-track"><span class="gauge-fill warn" style="width:58%"></span></span><span class="val">80 tests</span></div>
 </div>
 </div>
 
-<h3>Antes del primer cliente que paga</h3>
+<h3>Lo que ya está hecho</h3>
+
+<div class="scroll-x">
+<table>
+<thead><tr><th>Corrección</th><th>Qué cambió</th></tr></thead>
+<tbody>
+<tr><td>C1</td><td>Un estado de MercadoPago sin mapeo definido ya no toca <code>status</code>. <code>trial</code> lo asigna solo el trigger de alta.</td></tr>
+<tr><td>C2</td><td>Un evento que no se pudo aplicar libera su clave de idempotencia y devuelve 5xx para que MercadoPago reintente. Se cerró además la ventana de carrera en <code>create-checkout</code>.</td></tr>
+<tr><td>M3</td><td>La IP sale del hop que agrega el proxy, no del que manda el cliente. Ninguna escritura ocurre antes de pasar todas las validaciones.</td></tr>
+<tr><td>M4</td><td>Corte por vencimiento con 3 días de gracia, y aviso en el banner antes de cortar.</td></tr>
+<tr><td>M1 · M2</td><td>Cinco feature keys reales, validadas también en las Edge Functions.</td></tr>
+<tr><td>m1 · m2 · m5</td><td>Firma de MP endurecida, email del formulario público validado, bitácora de pagos sin filas cruzadas.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Lo que falta antes de abrir el registro</h3>
 
 <ol>
-<li><strong>C1</strong> — sacar el <code>default: "trial"</code> del webhook. Un cliente que paga no puede quedar afuera por abrir el checkout.</li>
-<li><strong>C2</strong> — mover la clave de idempotencia después del update y fallar con 5xx si no afectó filas.</li>
-<li><strong>C3</strong> — dumpear el esquema de producción a una migración base.</li>
-<li><strong>M3</strong> — arreglar la lectura de IP y mover la creación del paciente después de los límites.</li>
-<li>Cerrar un ciclo completo en sandbox: alta → cobro → upgrade → downgrade → renovación → cancelación, verificando <code>payment_events</code> en cada paso.</li>
+<li><strong>Baseline del esquema (C3).</strong> Producción tiene 62 migraciones aplicadas y el repo 25 archivos, con versiones que ni siquiera coinciden. El esquema en sí está sano — 15 tablas con RLS correcto — pero hoy no se puede levantar un staging ni recuperar la base desde el repo. Comandos exactos en el runbook.</li>
+<li><strong>Ciclo completo en sandbox de MercadoPago.</strong> Alta, upgrade abandonado, upgrade completo, downgrade, renovación y cancelación, revisando <code>payment_events</code> en cada paso. El paso del upgrade abandonado es el que valida C1.</li>
+<li><strong>Reparar la fila trabada</strong> y revisar el <code>preapproval_cancel_failed</code> que quedó en la bitácora: puede ser un preapproval todavía cobrando.</li>
+<li><strong>Precios reales.</strong> Los planes están en 15 y 16 pesos. Y definir el <code>trial_days</code> definitivo (hoy Básico 7, Asistente IA 1).</li>
+<li><strong>Leaked Password Protection</strong> en Supabase Auth — está desactivado y es un toggle.</li>
 </ol>
 
-<h3>En las dos semanas siguientes</h3>
+<h3>Deuda que puede esperar</h3>
 
-<ol start="6">
-<li><strong>M1 y M2</strong> — decidir qué feature keys son reales y aplicarlos también server-side. Hoy el plan Básico incluye de hecho Google Calendar y pacientes ilimitados.</li>
-<li><strong>M4</strong> — política explícita de gracia para <code>past_due</code>.</li>
-<li><strong>m1</strong> — comparación en tiempo constante y <code>data.id</code> en minúsculas en la firma de MP.</li>
-<li><code>npm audit fix</code> y tests de integración del webhook: firma inválida, evento duplicado, cuota mensual, cancelación.</li>
-</ol>
-
-<h3>Lo que no es urgente</h3>
-
-<p>Los 223 warnings de <code>any</code>, la deuda de nombres (<code>EvolutionService</code>), el código muerto de <code>system_prompt</code> y <code>apikey_evolution</code>, y la duplicación de <code>m3</code>. Nada de eso cuesta plata ni rompe un cliente. Se ordena después del lanzamiento.</p>
+<p>Los cuatro menores que quedaron abiertos (<strong>m3</strong> duplicación del sync de Calendar, <strong>m4</strong> elección frágil del plan de alta, <strong>m6</strong> estados de cancelación inconsistentes, <strong>m7</strong> vulnerabilidades de build), los 223 warnings de <code>any</code>, el nombre confuso de <code>EvolutionService</code> y el código muerto de <code>system_prompt</code> / <code>apikey_evolution</code>. Nada de eso cuesta plata ni rompe un cliente.</p>
 
 <div class="note">
-<span class="note-label">Una observación sobre el proceso</span>
-<p>La calidad del código sugiere que la base de datos también evolucionó con cuidado — pero esa evolución ocurrió en el panel de Supabase, no en el repo. Las 25 migraciones versionadas cubren lo que se construyó pensando en producción; las tablas más viejas y más sensibles, las que guardan historias clínicas, nunca entraron. Cerrar esa brecha es lo que convierte al repo en la fuente de verdad del sistema.</p>
+<span class="note-label">Lo que enseñó revisar contra producción</span>
+<p>La auditoría por lectura de código encontró los cuatro bloqueantes correctos, pero se equivocó en la prioridad de uno: estimé que no gatear <code>google_calendar</code> era una fuga de ingresos, y resultó que ambos planes ya la otorgan. En cambio, el bug que parecía más teórico — un <code>default</code> mal elegido en un <code>switch</code> — ya había dejado a un cliente afuera. Los datos de producción reordenaron la lista.</p>
 </div>
+
 </section>
 
 <footer>
