@@ -48,6 +48,15 @@ supabase/seed_admin.sql
 /.supabase
 
 # Documentos internos (no publicos)
+#
+# Viven solo en la carpeta local: describen la infraestructura de produccion
+# (ref del proyecto Supabase, dominios, runbooks de pago, auditorias) y no
+# tienen por que estar versionados junto al codigo.
+#
+# Varios de estos ya figuraban aca pero seguian rastreados, porque se habian
+# commiteado antes de que existiera la regla: .gitignore no afecta a un archivo
+# que git ya venia siguiendo. Se corrigio sacandolos del indice con
+# `git rm --cached`, que los borra del repo y los conserva en el disco.
 Dentaldash.md
 Supabase.md
 MEJORA.md
@@ -57,4 +66,9 @@ PLAN.md
 deploy.json
 DESIGN_SYSTEM.md
 CLAUDE.md
+Mejoras.md
+soluciones.md
+
+# Documentacion generada del sistema (manual, auditoria, runbooks de deploy)
+/docs/
 
