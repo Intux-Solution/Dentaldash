@@ -5,12 +5,28 @@
 Checklist accionable. La versión narrada, con contexto y diagramas, está en
 [`docs/manual-dentaldash.html`](./manual-dentaldash.html) §09.
 
+> **Estado — 2026-08-20.** Todos los hallazgos de código están corregidos en esta
+> rama. Queda pendiente **C3** (baseline del esquema, se ejecuta con el CLI de
+> Supabase) y los ítems de negocio (precios reales, `trial_days`). Los pasos de
+> deploy, reparación de datos y verificación están en
+> [`docs/DEPLOY-LANZAMIENTO.md`](./DEPLOY-LANZAMIENTO.md).
+>
+> Se encontró además, al verificar contra producción, que **C1 ya había ocurrido
+> con datos reales**: una suscripción paga quedó en `status='trial'` vencido con
+> el período vigente hasta 2026-09-05, es decir bloqueada. La reparación de esa
+> fila está en el runbook.
+>
+> Corrección a M1: ambos planes de producción otorgan `google_calendar` y
+> `patients_unlimited`, así que no gatearlas no producía fuga de ingresos. Lo
+> único que diferencia los planes es `whatsapp_bot` y `faqs_config`, y eso es lo
+> que ahora se valida server-side.
+
 ## Estado mecánico
 
 | Chequeo | Resultado |
 |---|---|
 | `npm run typecheck` | ✅ limpio |
-| `npx vitest run` | ✅ 50 tests / 5 archivos |
+| `npx vitest run` | ✅ 80 tests / 8 archivos (eran 50/5 antes de esta tanda) |
 | `npm run lint` | ✅ 0 errores · ⚠️ 223 warnings (todos `no-explicit-any`) |
 | `npm audit` | ⚠️ 12 vulnerabilidades, todas en `devDependencies` |
 | Secretos commiteados | ✅ ninguno |

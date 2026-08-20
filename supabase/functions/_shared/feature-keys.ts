@@ -10,18 +10,18 @@
  *   - `src/config/featureKeys.ts` (frontend, incluye los labels de la UI)
  *   - `apply_pending_plan_changes()` (SQL), que ahora las deriva de
  *     `subscription_plans.feature_keys` en vez de tener su propia copia.
+ *
+ * Eran once. Seis no bloqueaban nada — se escribian en la base en cada cambio de
+ * plan y no las leia nadie — asi que se retiraron: `appointments`, `odontogram`,
+ * `clinical_records` y `consent_forms` (son el producto base, no un extra),
+ * `patients_unlimited` (nunca hubo limite implementado) y `google_calendar`
+ * (ambos planes vigentes ya lo otorgan). Ver src/config/featureKeys.ts.
  */
 export const ALL_FEATURES = [
-  "appointments",
-  "odontogram",
-  "clinical_records",
-  "consent_forms",
-  "patients_unlimited",
   "insurance_management",
   "services_config",
   "export_data",
   "whatsapp_bot",
-  "google_calendar",
   "faqs_config",
 ] as const;
 

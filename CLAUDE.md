@@ -242,9 +242,11 @@ Suscripcion activa por usuario (1:1 con `auth.users`). RLS: usuario ve solo su f
 Columnas: `id`, `user_id` (UNIQUE), `plan_id`, `status` (trial | active | past_due | cancelled | free), `mercadopago_sub_id`, `mercadopago_payer_id`, `trial_ends_at`, `current_period_start`, `current_period_end`, `cancelled_at`.
 
 ### `public.feature_permissions`
-Permisos de funcionalidades por usuario (11 feature keys posibles). RLS: usuario ve solo sus filas. UNIQUE en (user_id, feature_key).
+Permisos de funcionalidades por usuario (5 feature keys posibles). RLS: usuario ve solo sus filas. UNIQUE en (user_id, feature_key).
 
-Feature keys: `appointments`, `odontogram`, `clinical_records`, `consent_forms`, `patients_unlimited`, `insurance_management`, `services_config`, `export_data`, `whatsapp_bot`, `google_calendar`, `faqs_config`.
+Feature keys: `insurance_management`, `services_config`, `export_data`, `whatsapp_bot`, `faqs_config`.
+
+Eran 11. Se retiraron las 6 que no aplicaban ningun control (`appointments`, `odontogram`, `clinical_records`, `consent_forms` son el producto base; `patients_unlimited` nunca tuvo limite implementado; `google_calendar` lo otorgan ambos planes). Ver `src/config/featureKeys.ts`.
 
 ### `public.admin_users`
 Tabla de usuarios admin. **Sin RLS** (solo service role). Un registro por admin.
@@ -417,9 +419,10 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 ## Sistema de Suscripciones y Feature Gating
 
 ### Flujo de acceso
-1. Al registrarse, el trigger `handle_new_user_subscription` crea una `subscriptions` row (status=trial) usando el primer plan activo con `trial_days` configurado (fallback: 14 dias), y 11 `feature_permissions` rows segun los `feature_keys` de ese plan.
+1. Al registrarse, el trigger `handle_new_user_subscription` crea una `subscriptions` row (status=trial) usando el primer plan activo con `trial_days` configurado (fallback: 14 dias), y las `feature_permissions` rows segun los `feature_keys` de ese plan.
 2. `SubscriptionContext.tsx` carga la suscripcion y permisos al iniciar sesion. Expone `canUse(featureKey)`.
 3. `ProtectedRoute.tsx` bloquea todas las rutas privadas si la suscripcion esta vencida/cancelada (redirige a `/suscripcion`). Admins y usuarios `free` siempre pasan.
+   Las reglas de vencimiento viven en `src/utils/subscriptionStatus.ts` (`evaluateExpiry`), fuera de React para poder testearlas: cubren el trial agotado **y** el periodo pagado vencido con `GRACE_DAYS` (3) de tolerancia. Sin esa segunda regla, `past_due` conservaba acceso completo para siempre.
 4. `canUse()` retorna `true` si: es admin, es `free`, o tiene la `feature_permission` con `enabled=true`.
 
 ### Feature gating en Settings
@@ -486,4 +489,8 @@ Los `feature_keys` de cada plan se guardan en `subscription_plans.feature_keys t
 - Los `feature_keys` de cada plan viven en `subscription_plans.feature_keys` (DB), NO hardcodeados en Edge Functions.
 - `PublicBookingView` no usa `useAuth()` ni `useSubscription()`. Es completamente standalone.
 - El RPC `confirm_public_appointment_safe` tiene `SECURITY DEFINER` y acepta `p_user_id` explicito (para uso sin sesion de auth).
-- `src/config/featureKeys.ts` es la fuente de verdad para los 11 feature keys en el frontend.
+- `src/config/featureKeys.ts` es la fuente de verdad para los 5 feature keys en el frontend; `supabase/functions/_shared/feature-keys.ts` es su espejo en las Edge Functions. Del lado SQL no hay copia: `apply_pending_plan_changes()` las deriva de `subscription_plans.feature_keys UNION feature_permissions`.
+- El feature gating de las funciones pagas se valida **tambien server-side** con `_shared/features.ts` (`checkFeature`/`hasFeature`): `whatsapp-manager` lo exige para `create`/`get_qr`/`sync_webhook`/`debug_instance` (nunca para `logout`) y `chat-webhook` lo chequea junto al kill-switch `bot_enabled`. Antes el control existia solo en React.
+- `mp-webhook` **nunca** debe escribir `status='trial'`: ese estado lo asigna solo el trigger de alta. Un estado de MercadoPago sin mapeo definido (`pending`, o cualquiera nuevo) significa "no tocar el status" — ver `_shared/mp-status.ts`.
+- Un evento de MercadoPago que no se pudo aplicar debe devolver **5xx** y liberar su clave de idempotencia, para que MercadoPago lo reintente. Devolver 200 ahi perdia el pago sin dejar forma de reprocesarlo.
+- La IP del cliente en endpoints publicos sale de `_shared/client-ip.ts`: es el **ultimo** elemento de `x-forwarded-for`, no el primero. El primero lo controla el cliente.

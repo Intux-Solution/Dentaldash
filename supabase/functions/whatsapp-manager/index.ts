@@ -3,6 +3,16 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.11.0"
 import { buildCors } from "../_shared/cors.ts"
 import { HARDENED_SETTINGS, sanitizeUrl, setInstanceSettings } from "../_shared/evolution.ts"
+import { checkFeature } from "../_shared/features.ts"
+
+// Acciones que ponen en marcha (o mantienen viva) la integración de WhatsApp.
+// Son las que consumen una instancia de Evolution y habilitan al bot a gastar
+// tokens de OpenAI, así que son las que exigen tener `whatsapp_bot` en el plan.
+//
+// `logout` queda deliberadamente afuera: alguien que bajó de plan tiene que
+// poder desconectar su instancia. Bloquearle la salida sería dejarlo atado a un
+// servicio que ya no le corresponde.
+const WHATSAPP_PAID_ACTIONS = new Set(['create', 'get_qr', 'sync_webhook', 'debug_instance']);
 
 serve(async (req) => {
     // La llama el navegador autenticado: misma allowlist que el resto de la app,
@@ -81,6 +91,26 @@ serve(async (req) => {
 
             if (!adminRow) {
                 return new Response(JSON.stringify({ error: "Forbidden: admin only." }), { status: 403, headers: corsHeaders });
+            }
+        }
+
+        // El plan tiene que incluir el bot. Hasta ahora este control existía sólo
+        // en `SettingsView` (tab bloqueado con UpgradePrompt), así que invocar esta
+        // función directamente con un JWT válido alcanzaba para levantar la
+        // instancia sin pagarla. Las acciones globales ya validaron contra
+        // `admin_users` arriba y no pasan por acá.
+        if (!isBulkSync && WHATSAPP_PAID_ACTIONS.has(action)) {
+            const check = await checkFeature(supabase, user.id, 'whatsapp_bot');
+            if (!check.allowed) {
+                return new Response(
+                    JSON.stringify({
+                        status: 'error',
+                        instanceName: null,
+                        qr: null,
+                        message: 'El bot de WhatsApp no está incluido en tu plan actual.',
+                    }),
+                    { status: 403, headers: corsHeaders },
+                );
             }
         }
 

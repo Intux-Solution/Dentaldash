@@ -3,10 +3,13 @@ import { useSubscription } from '../context/SubscriptionContext';
 import { useNavigate } from 'react-router-dom';
 
 export default function SubscriptionBanner() {
-  const { subscription, isTrial, isExpired, daysLeft } = useSubscription();
+  const { subscription, isTrial, isExpired, daysLeft, inGracePeriod, daysUntilCutoff } =
+    useSubscription();
   const navigate = useNavigate();
 
   if (!subscription) return null;
+
+  const plural = (n: number) => (n === 1 ? 'día' : 'días');
 
   if (isTrial && !isExpired && daysLeft !== null) {
     return (
@@ -28,12 +31,29 @@ export default function SubscriptionBanner() {
     );
   }
 
-  if (subscription.status === 'past_due') {
+  // El pago falló, o la renovación no entró y ya venció el período. En ambos
+  // casos el acceso sigue mientras corre la gracia: avisar cuántos días quedan
+  // es lo que evita que el bloqueo llegue de sorpresa.
+  if (subscription.status === 'past_due' || (inGracePeriod && !isExpired)) {
+    const failedPayment = subscription.status === 'past_due';
     return (
       <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between gap-4 text-sm">
         <div className="flex items-center gap-2 text-amber-700">
           <AlertTriangle size={15} />
-          <span>Tu pago falló. Actualiza tu método de pago para continuar usando el sistema.</span>
+          <span>
+            {failedPayment
+              ? 'Tu pago falló. Actualizá tu método de pago para seguir usando el sistema.'
+              : 'No pudimos confirmar la renovación de tu plan.'}
+            {daysUntilCutoff !== null && (
+              <>
+                {' '}
+                <strong>
+                  Te {daysUntilCutoff === 1 ? 'queda' : 'quedan'} {daysUntilCutoff}{' '}
+                  {plural(daysUntilCutoff)} de acceso.
+                </strong>
+              </>
+            )}
+          </span>
         </div>
         <button
           onClick={() => navigate('/suscripcion')}
@@ -51,10 +71,15 @@ export default function SubscriptionBanner() {
         <div className="flex items-center gap-2 text-red-700">
           <XCircle size={15} />
           <span>
-            {isExpired
-              ? 'Tu período de prueba venció.'
-              : 'Tu suscripción fue cancelada.'}{' '}
-            Activa un plan para continuar.
+            {/* `isExpired` ya no significa solo "se acabó el trial": también
+                cubre el período pagado vencido, así que el texto tiene que
+                distinguirlos o le miente al usuario que sí pagó. */}
+            {subscription.status === 'cancelled'
+              ? 'Tu suscripción fue cancelada.'
+              : isTrial
+                ? 'Tu período de prueba venció.'
+                : 'Tu suscripción venció por falta de pago.'}{' '}
+            Activá un plan para continuar.
           </span>
         </div>
         <button

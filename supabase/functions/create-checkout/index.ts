@@ -683,35 +683,18 @@ serve(async (req) => {
       );
     }
 
-    // Recien ahora cancelamos la preapproval anterior: si el POST de arriba
-    // hubiera fallado, el usuario conserva la suscripcion que ya tenia.
-    // Si ya sabemos que esta cancelada, el PUT seria un 400 seguro y ensuciaria
-    // payment_events con un huerfano inexistente.
-    if (
-      existingSub?.mercadopago_sub_id &&
-      existingSub.mercadopago_sub_id !== mpSubId &&
-      !deadPreapproval
-    ) {
-      const cancelRes = await cancelPreapproval(
-        MP_ACCESS_TOKEN,
-        existingSub.mercadopago_sub_id,
-      );
-      if (!cancelRes.ok) {
-        const detail = cancelRes.detail ?? "";
-        console.warn("MercadoPago cancel warning (non-fatal):", detail);
-        // No es fatal (el preapproval nuevo ya existe). Solo se registra si el viejo
-        // pudo haber quedado cobrando: si el rechazo es "ya esta cancelado", no hay
-        // doble cobro que auditar.
-        if (!isCancelledPreapprovalError(detail)) {
-          await logOrphanPreapproval(supabase, user.id, existingSub.mercadopago_sub_id, detail);
-        }
-      }
-    }
-
-    // Guardar el preapproval nuevo. Si ya habia suscripcion, NO se toca plan_id
-    // ni status: el plan recien cambia cuando mp-webhook recibe 'authorized'.
-    // Asi, abandonar el checkout deja al usuario como estaba.
-    // Un upgrade tambien anula cualquier downgrade que estuviera programado.
+    // Guardar el preapproval nuevo ANTES de cualquier otra llamada a MercadoPago.
+    //
+    // mp-webhook busca la suscripcion por `mercadopago_sub_id`, y MercadoPago
+    // emite el webhook de creacion en segundos. Mientras este id no este
+    // persistido, el webhook no encuentra a nadie a quien aplicarle el evento.
+    // La cancelacion del preapproval viejo (abajo) es otro round-trip de hasta
+    // 15 s: hacerla primero abria exactamente esa ventana de carrera.
+    //
+    // Si ya habia suscripcion, NO se toca plan_id ni status: el plan recien
+    // cambia cuando mp-webhook recibe 'authorized'. Asi, abandonar el checkout
+    // deja al usuario como estaba. Un upgrade tambien anula cualquier downgrade
+    // que estuviera programado.
     const nowIso = new Date().toISOString();
     const { error: upsertError } = existingSub
       ? await supabase
@@ -739,6 +722,31 @@ serve(async (req) => {
         JSON.stringify({ error: "Failed to save subscription record." }),
         { status: 500, headers: jsonHeaders }
       );
+    }
+
+    // Recien ahora cancelamos la preapproval anterior: si el POST de arriba
+    // hubiera fallado, el usuario conserva la suscripcion que ya tenia.
+    // Si ya sabemos que esta cancelada, el PUT seria un 400 seguro y ensuciaria
+    // payment_events con un huerfano inexistente.
+    if (
+      existingSub?.mercadopago_sub_id &&
+      existingSub.mercadopago_sub_id !== mpSubId &&
+      !deadPreapproval
+    ) {
+      const cancelRes = await cancelPreapproval(
+        MP_ACCESS_TOKEN,
+        existingSub.mercadopago_sub_id,
+      );
+      if (!cancelRes.ok) {
+        const detail = cancelRes.detail ?? "";
+        console.warn("MercadoPago cancel warning (non-fatal):", detail);
+        // No es fatal (el preapproval nuevo ya existe). Solo se registra si el viejo
+        // pudo haber quedado cobrando: si el rechazo es "ya esta cancelado", no hay
+        // doble cobro que auditar.
+        if (!isCancelledPreapprovalError(detail)) {
+          await logOrphanPreapproval(supabase, user.id, existingSub.mercadopago_sub_id, detail);
+        }
+      }
     }
 
     return new Response(

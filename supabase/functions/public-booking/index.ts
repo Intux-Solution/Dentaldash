@@ -4,6 +4,7 @@ import { z } from "https://esm.sh/zod@3.23.8";
 import { notifyAppointmentCreated } from "../_shared/appointment-notifications.ts";
 import { getAccessTokenForUser, getBusyIntervals } from "../_shared/google-calendar.ts";
 import { buildCors } from "../_shared/cors.ts";
+import { clientIp } from "../_shared/client-ip.ts";
 
 // Validacion server-side de la reserva publica (no confiar solo en el front).
 const CreateAppointmentSchema = z.object({
@@ -11,7 +12,11 @@ const CreateAppointmentSchema = z.object({
   nombre: z.string().trim().min(2).max(120),
   dni: z.string().trim().min(7).max(15),
   telefono: z.string().trim().min(6).max(30),
-  email: z.string().max(150).optional().nullable(),
+  // Espeja src/schemas/publicBooking.schema.ts, que acepta "" como "sin email".
+  // Sin el `.email()`, cualquier texto entraba a `patients.email` y despues
+  // viajaba como `attendee` a Google Calendar, que rechaza el evento ENTERO por
+  // un invitado invalido: el turno quedaba sin sincronizar y en silencio.
+  email: z.union([z.literal(""), z.string().email().max(150)]).optional().nullable(),
   obra_social: z.string().max(120).optional().nullable(),
   appointment_type: z.string().trim().min(1).max(120),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -29,6 +34,7 @@ async function sha256Hex(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
 
 const SLOT_INTERVAL_MINUTES = 30;
 // Argentina is UTC-3
@@ -356,9 +362,7 @@ serve(async (req) => {
       const dniClean = String(dni).replace(/[.\-\s]/g, "");
 
       // ── Rate limiting por IP (basado en DB, resiste multiples isolates) ──
-      const fwd = req.headers.get("x-forwarded-for") ?? "";
-      const ip = fwd.split(",")[0].trim() || "unknown";
-      const ipHash = await sha256Hex(ip);
+      const ipHash = await sha256Hex(clientIp(req.headers));
       const nowMs = Date.now();
       const oneHourAgo = new Date(nowMs - 60 * 60 * 1000).toISOString();
       const oneDayAgo = new Date(nowMs - 24 * 60 * 60 * 1000).toISOString();
@@ -381,13 +385,11 @@ serve(async (req) => {
         return jsonErr("Alcanzaste el límite de reservas por hoy.", 429);
       }
 
-      // Registrar el intento (cuenta para el rate limit aunque la reserva luego falle)
-      await supabase.from("public_booking_attempts").insert({
-        ip_hash: ipHash, user_id, dni: dniClean,
-      });
-
-      // Find or create patient
-      let patientId: string;
+      // ── Paciente: solo SE BUSCA, todavia no se crea ─────────────────────
+      // Crearlo antes de terminar de validar dejaba una fila en `patients` por
+      // cada intento, incluso los que despues se rechazaban: con el rate limit
+      // por IP salteable, era una via directa para llenarle la lista de
+      // pacientes a un dentista con basura.
       const { data: existingPatient } = await supabase
         .from("patients")
         .select("id")
@@ -396,37 +398,20 @@ serve(async (req) => {
         .is("deleted_at", null)
         .maybeSingle();
 
+      // Limite de turnos pendientes futuros por paciente (anti-spam).
+      // Un paciente que todavia no existe no puede tener turnos, asi que el
+      // chequeo solo aplica a los ya conocidos.
       if (existingPatient) {
-        patientId = existingPatient.id;
-      } else {
-        const { data: newPatient, error: patErr } = await supabase
-          .from("patients")
-          .insert({
-            user_id,
-            nombre,
-            dni: dniClean,
-            telefono,
-            email: email || null,
-            obra_social: obra_social || null,
-            estado: "Activo",
-          })
-          .select("id")
-          .single();
-
-        if (patErr) throw patErr;
-        patientId = newPatient.id;
-      }
-
-      // Limite de turnos pendientes futuros por paciente (anti-spam)
-      const { count: pendingCount } = await supabase
-        .from("appointments")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user_id)
-        .eq("patient_id", patientId)
-        .eq("status", "pending")
-        .gte("start_time", new Date().toISOString());
-      if ((pendingCount ?? 0) >= RL_MAX_PENDING_PER_PATIENT) {
-        return jsonErr("Ya tenés turnos pendientes con este consultorio. Contactalos para gestionarlos.", 429);
+        const { count: pendingCount } = await supabase
+          .from("appointments")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user_id)
+          .eq("patient_id", existingPatient.id)
+          .eq("status", "pending")
+          .gte("start_time", new Date().toISOString());
+        if ((pendingCount ?? 0) >= RL_MAX_PENDING_PER_PATIENT) {
+          return jsonErr("Ya tenés turnos pendientes con este consultorio. Contactalos para gestionarlos.", 429);
+        }
       }
 
       // Build start/end times from date + time strings (Argentina local)
@@ -463,6 +448,36 @@ serve(async (req) => {
 
       if (!fitsSchedule) {
         return jsonErr("El horario solicitado está fuera del horario de atención.", 400);
+      }
+
+      // ── A partir de acá sí se escribe ────────────────────────────────────
+      // Todas las validaciones pasaron. Registrar el intento (cuenta para el
+      // rate limit aunque el RPC después rechace por solapamiento) y recién
+      // ahora crear el paciente si no existía.
+      await supabase.from("public_booking_attempts").insert({
+        ip_hash: ipHash, user_id, dni: dniClean,
+      });
+
+      let patientId: string;
+      if (existingPatient) {
+        patientId = existingPatient.id;
+      } else {
+        const { data: newPatient, error: patErr } = await supabase
+          .from("patients")
+          .insert({
+            user_id,
+            nombre,
+            dni: dniClean,
+            telefono,
+            email: email || null,
+            obra_social: obra_social || null,
+            estado: "Activo",
+          })
+          .select("id")
+          .single();
+
+        if (patErr) throw patErr;
+        patientId = newPatient.id;
       }
 
       // Call the public RPC
